@@ -76,7 +76,13 @@ class _StubSerialTransport:
     def current_queue_depth(self) -> int:
         return self._queue_depth
 
+    def transport_queue_depth(self) -> int:
+        return self._queue_depth
+
     def last_queue_cleared_observation(self) -> bool:
+        return self._last_queue_cleared
+
+    def transport_last_queue_cleared(self) -> bool:
         return self._last_queue_cleared
 
     def close(self) -> None:
@@ -338,3 +344,32 @@ def test_serial_transport_queue_depth_is_reflected_in_runtime_telemetry(
     controller._emit_runtime_state()
 
     assert queue_states[-1].depth == 2
+
+
+def test_serial_transport_response_updates_latest_queue_observations(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serial_runtime = replace(runtime_config, transport=replace(runtime_config.transport, kind="serial"))
+    monkeypatch.setattr("gui.bench_app.controller.SerialMcuTransport", _StubSerialTransport)
+    controller = BenchAppController(qapp, serial_runtime)
+
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.1,
+            trigger_generation_s=0.1,
+            lane=1,
+            decision="accept",
+            rejection_reason=None,
+            protocol_round_trip_ms=4.2,
+            ack_code=AckCode.ACK,
+            queue_depth=5,
+            scheduler_state="ACTIVE",
+            mode="AUTO",
+            queue_cleared=True,
+        )
+    )
+
+    assert controller._latest_transport_queue_depth == 5
+    assert controller._latest_transport_queue_cleared is True
+    assert controller._transport_queue_depth() == 5
+    assert controller._transport_last_queue_cleared() is True

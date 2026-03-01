@@ -86,7 +86,13 @@ class SerialMcuTransport:
     def current_queue_depth(self) -> int:
         return self._last_queue_depth
 
+    def transport_queue_depth(self) -> int:
+        return self._last_queue_depth
+
     def last_queue_cleared_observation(self) -> bool:
+        return self._last_queue_cleared
+
+    def transport_last_queue_cleared(self) -> bool:
         return self._last_queue_cleared
 
     def send(self, command: ScheduledCommand) -> TransportResponse:

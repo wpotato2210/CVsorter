@@ -43,7 +43,13 @@ class _StubSerialTransport:
     def current_queue_depth(self) -> int:
         return self._queue_depth
 
+    def transport_queue_depth(self) -> int:
+        return self._queue_depth
+
     def last_queue_cleared_observation(self) -> bool:
+        return self._last_queue_cleared
+
+    def transport_last_queue_cleared(self) -> bool:
         return self._last_queue_cleared
 
 
@@ -148,6 +154,38 @@ def test_transport_response_signal_refreshes_queue_widgets_for_mock_path(
     assert controller.window.queue_depth_label.text() == "Depth: 4/8"
     assert controller.window.scheduler_state_label.text() == "Scheduler: ACTIVE"
     assert controller.window.mode_label.text() == "Mode: MANUAL"
+
+
+def test_serial_transport_response_signal_emits_real_queue_state_values(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serial_runtime = replace(runtime_config, transport=replace(runtime_config.transport, kind="serial"))
+    monkeypatch.setattr("gui.bench_app.controller.SerialMcuTransport", _StubSerialTransport)
+    controller = BenchAppController(qapp, serial_runtime)
+
+    emitted_states: list[QueueState] = []
+    controller.queue_state_requested.connect(lambda state: emitted_states.append(state))
+
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.3,
+            trigger_generation_s=0.3,
+            lane=3,
+            decision="accept",
+            rejection_reason=None,
+            protocol_round_trip_ms=5.1,
+            ack_code=AckCode.ACK,
+            queue_depth=6,
+            scheduler_state="ACTIVE",
+            mode="AUTO",
+            queue_cleared=True,
+        )
+    )
+
+    assert emitted_states[-1].depth == 6
+    assert controller._latest_transport_queue_depth == 6
+    assert controller._latest_transport_queue_cleared is True
+    assert controller.window.queue_depth_label.text() == "Depth: 6/8"
 
 
 def test_queue_depth_falls_back_to_latest_transport_response_when_transport_has_no_depth_api(
