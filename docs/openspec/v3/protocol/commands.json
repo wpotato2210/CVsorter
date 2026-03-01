@@ -1,0 +1,30 @@
+{
+  "commands": [
+    {
+      "name": "SET_MODE",
+      "args": [
+        "mode"
+      ]
+    },
+    {
+      "name": "SCHED",
+      "args": [
+        "lane",
+        "trigger_mm"
+      ]
+    },
+    {
+      "name": "GET_STATE",
+      "args": []
+    },
+    {
+      "name": "RESET_QUEUE",
+      "args": []
+    }
+  ],
+  "ack_policy": {
+    "ack": "ACK",
+    "nack": "NACK",
+    "timeout_ms": 100
+  }
+}
