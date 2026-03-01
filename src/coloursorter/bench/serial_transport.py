@@ -5,6 +5,15 @@ from dataclasses import dataclass
 from typing import Callable
 
 from coloursorter.scheduler import ScheduledCommand
+from coloursorter.protocol.nack_codes import (
+    DETAIL_SAFE,
+    DETAIL_WATCHDOG,
+    NACK_BUSY,
+    NACK_INVALID_MODE_TRANSITION,
+    NACK_QUEUE_FULL,
+    is_canonical_nack,
+)
+
 from coloursorter.serial_interface import (
     FrameFormatError,
     PacketValidationError,
@@ -138,15 +147,15 @@ def _map_ack_to_bench_state(status: str, nack_code: int | None, detail: str | No
         return AckCode.ACK, FaultState.NORMAL
 
     normalized_detail = (detail or "").strip().upper()
-    if nack_code == 6 and normalized_detail == "QUEUE_FULL":
+    if is_canonical_nack(nack_code, normalized_detail) and nack_code == NACK_QUEUE_FULL:
         return AckCode.NACK_QUEUE_FULL, FaultState.NORMAL
-    if nack_code == 5 and normalized_detail == "INVALID_MODE_TRANSITION":
+    if is_canonical_nack(nack_code, normalized_detail) and nack_code == NACK_INVALID_MODE_TRANSITION:
         return AckCode.NACK_SAFE, FaultState.SAFE
-    if nack_code == 5 and normalized_detail == "SAFE":
+    if nack_code == NACK_INVALID_MODE_TRANSITION and normalized_detail == DETAIL_SAFE:
         return AckCode.NACK_SAFE, FaultState.SAFE
-    if nack_code == 7 and normalized_detail == "BUSY":
+    if is_canonical_nack(nack_code, normalized_detail) and nack_code == NACK_BUSY:
         return AckCode.NACK_BUSY, FaultState.NORMAL
-    if nack_code is None and normalized_detail == "WATCHDOG":
+    if nack_code is None and normalized_detail == DETAIL_WATCHDOG:
         return AckCode.NACK_WATCHDOG, FaultState.WATCHDOG
     return AckCode.NACK_SAFE, FaultState.SAFE
 
