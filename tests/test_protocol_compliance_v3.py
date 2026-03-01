@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from coloursorter.protocol import OpenSpecV3Host
+from coloursorter.protocol import MODE_TRANSITIONS, OpenSpecV3Host, is_mode_transition_allowed
 from coloursorter.serial_interface import parse_ack_tokens, parse_frame
 
 
@@ -97,3 +97,24 @@ def test_scheduler_and_host_trigger_bounds_match() -> None:
     assert _response_tokens(host.handle_frame("<SCHED|2|0.0>"))[:1] == ["ACK"]
     assert _response_tokens(host.handle_frame("<SCHED|2|2000.0>"))[:1] == ["ACK"]
     assert _response_tokens(host.handle_frame("<SCHED|2|2000.001>"))[:2] == ["NACK", "3"]
+
+
+def test_mode_transition_policy_matrix_is_canonical_for_gui_and_host() -> None:
+    assert MODE_TRANSITIONS["SAFE"] == frozenset({"SAFE", "MANUAL"})
+    assert is_mode_transition_allowed("SAFE", "MANUAL") is True
+    assert is_mode_transition_allowed("SAFE", "AUTO") is False
+    assert is_mode_transition_allowed("MANUAL", "AUTO") is True
+
+
+def test_host_enforces_shared_mode_transition_policy() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2)
+
+    parse_ack_tokens(_response_tokens(host.handle_frame("<SET_MODE|SAFE>")))
+    safe_to_auto = parse_ack_tokens(_response_tokens(host.handle_frame("<SET_MODE|AUTO>")))
+    safe_to_manual = parse_ack_tokens(_response_tokens(host.handle_frame("<SET_MODE|MANUAL>")))
+    manual_to_auto = parse_ack_tokens(_response_tokens(host.handle_frame("<SET_MODE|AUTO>")))
+
+    assert safe_to_auto.status == "NACK"
+    assert safe_to_auto.nack_code == 5
+    assert safe_to_manual.status == "ACK"
+    assert manual_to_auto.status == "ACK"

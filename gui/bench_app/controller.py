@@ -33,6 +33,8 @@ from coloursorter.bench.serial_transport import (
 )
 from coloursorter.config import RuntimeConfig
 from coloursorter.deploy import OpenCvDetectionProvider, PipelineRunner
+from coloursorter.protocol import OpenSpecV3Host, is_mode_transition_allowed
+from coloursorter.serial_interface import parse_ack_tokens, parse_frame, serialize_packet
 
 from .app import BenchMainWindow, QueueState
 
@@ -163,6 +165,7 @@ class BenchAppController(QObject):
             )
         )
         self.bench_runner = BenchRunner(self.pipeline, self.transport, self.encoder)
+        self._protocol_host = OpenSpecV3Host(max_queue_depth=self.transport_config.max_queue_depth)
         self._detector = OpenCvDetectionProvider()
         self._selected_scenarios = tuple(s for s in scenarios_from_thresholds(runtime_config.scenario_thresholds) if s.name == "nominal")
         self._session_logs: list[BenchLogEntry] = []
@@ -289,6 +292,7 @@ class BenchAppController(QObject):
         self.runtime_state.fault_state = self.transport.current_fault_state()
 
         if self.runtime_state.fault_state == FaultState.SAFE:
+            self._protocol_set_mode("SAFE")
             self.runtime_state.operator_mode = OperatorMode.SAFE
             self._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
             return
@@ -366,9 +370,14 @@ class BenchAppController(QObject):
     def recover_safe_to_manual(self) -> bool:
         if self.runtime_state.controller_state != ControllerState.SAFE:
             return False
+        if not is_mode_transition_allowed(self.runtime_state.operator_mode.value, "MANUAL"):
+            return False
+        ack = self._protocol_set_mode("MANUAL")
+        if ack is None:
+            return False
         self.runtime_state.fault_state = FaultState.NORMAL
         self.runtime_state.operator_mode = OperatorMode.MANUAL
-        self._transport_clear_queue()
+        self._apply_protocol_queue_side_effects(ack.queue_cleared)
         self._transition_to(ControllerState.IDLE, overlay_text="SAFE cleared; MANUAL mode")
         self.log_entry_requested.emit(
             BenchLogEntry(
@@ -384,13 +393,15 @@ class BenchAppController(QObject):
         return True
 
     def recover_to_auto(self) -> bool:
-        if self.runtime_state.operator_mode not in {OperatorMode.MANUAL, OperatorMode.SAFE}:
+        if not is_mode_transition_allowed(self.runtime_state.operator_mode.value, "AUTO"):
             return False
-        if self.runtime_state.controller_state == ControllerState.SAFE:
-            self.runtime_state.fault_state = FaultState.NORMAL
-            self._transport_clear_queue()
-            self._transition_to(ControllerState.IDLE, overlay_text="SAFE cleared; AUTO mode")
+        ack = self._protocol_set_mode("AUTO")
+        if ack is None:
+            return False
+        self._apply_protocol_queue_side_effects(ack.queue_cleared)
         self.runtime_state.operator_mode = OperatorMode.AUTO
+        self.runtime_state.fault_state = FaultState.NORMAL
+        self._transition_to(ControllerState.IDLE, overlay_text="AUTO mode active")
         self.log_entry_requested.emit(
             BenchLogEntry(
                 frame_timestamp_s=self.runtime_state.previous_timestamp_s,
@@ -412,6 +423,18 @@ class BenchAppController(QObject):
     def _transport_clear_queue(self) -> None:
         if isinstance(self.transport, MockMcuTransport):
             self.transport.queue.clear()
+
+    def _apply_protocol_queue_side_effects(self, queue_cleared: bool) -> None:
+        if queue_cleared:
+            self._transport_clear_queue()
+
+    def _protocol_set_mode(self, mode: str):
+        response_frame = self._protocol_host.handle_frame(serialize_packet("SET_MODE", (mode,)))
+        parsed_response = parse_frame(response_frame)
+        ack = parse_ack_tokens((parsed_response.command, *parsed_response.args))
+        if ack.status != "ACK":
+            return None
+        return ack
 
     @Slot()
     def on_replay_clicked(self) -> None:
@@ -436,7 +459,7 @@ class BenchAppController(QObject):
     @Slot()
     def on_home_clicked(self) -> None:
         if self.runtime_state.controller_state == ControllerState.SAFE:
-            self.recover_to_auto()
+            self.recover_safe_to_manual()
             return
         if self.runtime_state.controller_state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
             self._publish_session_evaluation()

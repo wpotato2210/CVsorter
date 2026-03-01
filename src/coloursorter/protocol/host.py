@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from coloursorter.scheduler.output import MAX_TRIGGER_MM, MIN_TRIGGER_MM
 from coloursorter.serial_interface import FrameFormatError, parse_frame, serialize_packet
 
+from .policy import is_mode_transition_allowed
+
 
 NACK_BUSY_CODE = 7
 NACK_BUSY_DETAIL = "BUSY"
@@ -51,7 +53,7 @@ class OpenSpecV3Host:
         target_mode = args[0].upper()
         if target_mode not in {"AUTO", "MANUAL", "SAFE"}:
             return self._nack(4, "ARG_TYPE_ERROR")
-        if self.mode == "SAFE" and target_mode == "AUTO":
+        if not is_mode_transition_allowed(self.mode, target_mode):
             return self._nack(5, "INVALID_MODE_TRANSITION")
 
         queue_cleared = False
