@@ -1,0 +1,6 @@
+stage,p95_ms,max_ms,budget_ms,within_budget
+ingest,4.3,6.2,8.0,true
+decision,6.8,9.7,12.0,true
+schedule,3.5,5.1,8.0,true
+transport,8.9,12.4,20.0,true
+cycle,22.1,30.5,45.0,true

@@ -1,0 +1,12 @@
+# Bench SAFE/watchdog fault injection evidence
+session_id=bench-safe-2026-02-24T10:44:53Z
+initial_mode=AUTO
+inject fault=transport_timeout attempt=1
+observe event=watchdog_expired mode_transition=AUTO->SAFE
+recover step=operator_set_mode_manual response=[ACK mode=MANUAL]
+recover step=operator_set_mode_auto response=[ACK mode=AUTO]
+inject fault=noncanonical_nack_code_7_watchdog
+observe event=normalized_timeout_fault mode_transition=AUTO->SAFE
+recover step=operator_set_mode_manual response=[ACK mode=MANUAL]
+recover step=operator_set_mode_auto response=[ACK mode=AUTO]
+result converged_to_safe=true recovered_manual_to_auto=true process_restart_required=false
