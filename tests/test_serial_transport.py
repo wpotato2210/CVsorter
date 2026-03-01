@@ -8,6 +8,8 @@ from coloursorter.bench.serial_transport import (
     SerialTransportError,
 )
 from coloursorter.bench.types import AckCode, FaultState
+from coloursorter.protocol import OpenSpecV3Host
+from coloursorter.protocol.nack_codes import DETAIL_BUSY, DETAIL_WATCHDOG, NACK_BUSY
 from coloursorter.scheduler import ScheduledCommand
 
 
@@ -67,7 +69,7 @@ def test_serial_transport_persists_latest_queue_state_from_ack() -> None:
 
 
 def test_serial_transport_maps_nack_busy() -> None:
-    fake = _FakeSerial(b"<NACK|7|BUSY>\n")
+    fake = _FakeSerial(f"<NACK|{NACK_BUSY}|{DETAIL_BUSY}>\n".encode())
     transport = SerialMcuTransport(
         config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
         serial_factory=lambda **_: fake,
@@ -77,12 +79,12 @@ def test_serial_transport_maps_nack_busy() -> None:
 
     assert response.ack_code == AckCode.NACK_BUSY
     assert response.fault_state == FaultState.NORMAL
-    assert response.nack_code == 7
-    assert response.nack_detail == "BUSY"
+    assert response.nack_code == NACK_BUSY
+    assert response.nack_detail == DETAIL_BUSY
 
 
 def test_serial_transport_treats_noncanonical_nack_code_7_watchdog_as_safe() -> None:
-    fake = _FakeSerial(b"<NACK|7|WATCHDOG>\n")
+    fake = _FakeSerial(f"<NACK|{NACK_BUSY}|{DETAIL_WATCHDOG}>\n".encode())
     transport = SerialMcuTransport(
         config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
         serial_factory=lambda **_: fake,
@@ -92,8 +94,8 @@ def test_serial_transport_treats_noncanonical_nack_code_7_watchdog_as_safe() -> 
 
     assert response.ack_code == AckCode.NACK_SAFE
     assert response.fault_state == FaultState.SAFE
-    assert response.nack_code == 7
-    assert response.nack_detail == "WATCHDOG"
+    assert response.nack_code == NACK_BUSY
+    assert response.nack_detail == DETAIL_WATCHDOG
 
 @pytest.mark.parametrize(
     ("raw_response", "expected_ack", "expected_fault"),
@@ -101,7 +103,7 @@ def test_serial_transport_treats_noncanonical_nack_code_7_watchdog_as_safe() -> 
         (b"<ACK>\n", AckCode.ACK, FaultState.NORMAL),
         (b"<NACK|6|QUEUE_FULL>\n", AckCode.NACK_QUEUE_FULL, FaultState.NORMAL),
         (b"<NACK|5|SAFE>\n", AckCode.NACK_SAFE, FaultState.SAFE),
-        (b"<NACK|7|BUSY>\n", AckCode.NACK_BUSY, FaultState.NORMAL),
+        (f"<NACK|{NACK_BUSY}|{DETAIL_BUSY}>\n".encode(), AckCode.NACK_BUSY, FaultState.NORMAL),
     ],
 )
 def test_serial_transport_contract_ack_nack_mapping(
@@ -124,7 +126,7 @@ def test_serial_transport_contract_ack_nack_mapping(
 def test_serial_transport_maps_canonical_watchdog_without_nack_code() -> None:
     from coloursorter.bench.serial_transport import _map_ack_to_bench_state
 
-    ack_code, fault_state = _map_ack_to_bench_state("NACK", None, "WATCHDOG")
+    ack_code, fault_state = _map_ack_to_bench_state("NACK", None, DETAIL_WATCHDOG)
 
     assert ack_code == AckCode.NACK_WATCHDOG
     assert fault_state == FaultState.WATCHDOG
@@ -217,3 +219,20 @@ def test_serial_transport_preserves_raw_nack_detail() -> None:
     assert response.ack_code == AckCode.NACK_QUEUE_FULL
     assert response.nack_code == 6
     assert response.nack_detail == "QUEUE_FULL"
+
+
+def test_serial_transport_end_to_end_busy_nack_from_host_maps_to_busy_state() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2, busy=True)
+    fake = _FakeSerial(host.handle_frame("<GET_STATE>").encode() + b"\n")
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: fake,
+    )
+
+    response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
+
+    assert response.ack_code == AckCode.NACK_BUSY
+    assert response.fault_state == FaultState.NORMAL
+    assert response.nack_code == NACK_BUSY
+    assert response.nack_detail == DETAIL_BUSY
+    assert transport.current_fault_state() == FaultState.NORMAL
