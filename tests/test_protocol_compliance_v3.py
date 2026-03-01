@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from coloursorter.protocol import MODE_TRANSITIONS, OpenSpecV3Host, is_mode_transition_allowed
-from coloursorter.protocol.nack_codes import DETAIL_BUSY, NACK_BUSY
+from coloursorter.protocol.nack_codes import CANONICAL_NACK_7, DETAIL_BUSY, NACK_BUSY
 from coloursorter.serial_interface import parse_ack_tokens, parse_frame
 
 
@@ -59,6 +59,7 @@ def test_nack_code_7_is_canonical_busy_only() -> None:
     assert ack.status == "NACK"
     assert ack.nack_code == NACK_BUSY
     assert ack.detail == DETAIL_BUSY
+    assert (ack.nack_code, ack.detail) == CANONICAL_NACK_7
 
 def test_ack_metadata_parsing_mode_queue_scheduler_and_queue_cleared() -> None:
     host = OpenSpecV3Host(max_queue_depth=4)
