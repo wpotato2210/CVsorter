@@ -35,11 +35,17 @@ NACK_CODE_TO_DETAIL: Final[dict[int, str]] = {
     NACK_MALFORMED_FRAME: DETAIL_MALFORMED_FRAME,
 }
 
+CANONICAL_NACK_7: Final[tuple[int, str]] = (NACK_BUSY, DETAIL_BUSY)
+
+
+def canonical_detail_for_code(code: int) -> str | None:
+    return NACK_CODE_TO_DETAIL.get(code)
+
 
 def is_canonical_nack(code: int | None, detail: str | None) -> bool:
     if code is None:
         return False
-    expected = NACK_CODE_TO_DETAIL.get(code)
+    expected = canonical_detail_for_code(code)
     if expected is None:
         return False
     return (detail or "").strip().upper() == expected

@@ -22,10 +22,10 @@ from .constants import (
     TRIGGER_MM_MIN,
 )
 from .nack_codes import (
+    CANONICAL_NACK_7,
     DETAIL_ARG_COUNT_MISMATCH,
     DETAIL_ARG_RANGE_ERROR,
     DETAIL_ARG_TYPE_ERROR,
-    DETAIL_BUSY,
     DETAIL_INVALID_MODE_TRANSITION,
     DETAIL_MALFORMED_FRAME,
     DETAIL_QUEUE_FULL,
@@ -33,7 +33,6 @@ from .nack_codes import (
     NACK_ARG_COUNT_MISMATCH,
     NACK_ARG_RANGE_ERROR,
     NACK_ARG_TYPE_ERROR,
-    NACK_BUSY,
     NACK_INVALID_MODE_TRANSITION,
     NACK_MALFORMED_FRAME,
     NACK_QUEUE_FULL,
@@ -59,7 +58,7 @@ class OpenSpecV3Host:
         cmd = packet.command
         args = packet.args
         if self.busy:
-            return self._nack(NACK_BUSY, DETAIL_BUSY)
+            return self._nack(*CANONICAL_NACK_7)
         if cmd == CMD_SET_MODE:
             return self._set_mode(args)
         if cmd == CMD_SCHED:

@@ -9,6 +9,7 @@ This ICD defines host-to-MCU wire interfaces and runtime telemetry interfaces us
 - ACK payload: `ACK|mode|queue_depth|scheduler_state|queue_cleared`.
 - NACK payload: `NACK|nack_code|detail`.
 - Canonical NACK code `7` means `BUSY` only (`NACK|7|BUSY`).
+- Non-canonical `NACK|7|WATCHDOG` is interpreted as SAFE by bench transport to prevent misclassifying malformed busy replies.
 - WATCHDOG is represented as a transport timeout fault state, not as a NACK code alias.
 
 ### Source of truth

@@ -26,6 +26,7 @@ from coloursorter.protocol.constants import (
     TRIGGER_MM_MAX,
     TRIGGER_MM_MIN,
 )
+from coloursorter.protocol.nack_codes import CANONICAL_NACK_7, canonical_detail_for_code
 
 
 COMMANDS_PATH = Path("docs/openspec/v3/protocol/commands.json")
@@ -70,3 +71,12 @@ def test_protocol_constants_match_mcu_response_schema_contract() -> None:
     assert properties["queue_depth"]["minimum"] == QUEUE_DEPTH_MIN
     assert set(properties["mode"]["enum"]) == ALLOWED_MODES
     assert set(properties["scheduler_state"]["enum"]) == ALLOWED_SCHEDULER_STATES
+
+
+def test_code_7_canonical_detail_pair_is_shared_constant() -> None:
+    code, detail = CANONICAL_NACK_7
+
+    assert code == NACK_BUSY
+    assert detail == "BUSY"
+    assert canonical_detail_for_code(code) == detail
+

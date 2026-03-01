@@ -6,10 +6,11 @@ from coloursorter.bench.serial_transport import (
     SerialMcuTransport,
     SerialTransportConfig,
     SerialTransportError,
+    _map_ack_to_bench_state,
 )
 from coloursorter.bench.types import AckCode, FaultState
 from coloursorter.protocol import OpenSpecV3Host
-from coloursorter.protocol.nack_codes import DETAIL_BUSY, DETAIL_WATCHDOG, NACK_BUSY
+from coloursorter.protocol.nack_codes import CANONICAL_NACK_7, DETAIL_BUSY, DETAIL_WATCHDOG, NACK_BUSY
 from coloursorter.scheduler import ScheduledCommand
 
 
@@ -123,9 +124,16 @@ def test_serial_transport_contract_ack_nack_mapping(
     assert response.fault_state == expected_fault
 
 
-def test_serial_transport_maps_canonical_watchdog_without_nack_code() -> None:
-    from coloursorter.bench.serial_transport import _map_ack_to_bench_state
+def test_serial_transport_maps_canonical_busy_pair_to_busy_state() -> None:
+    code, detail = CANONICAL_NACK_7
 
+    ack_code, fault_state = _map_ack_to_bench_state("NACK", code, detail)
+
+    assert ack_code == AckCode.NACK_BUSY
+    assert fault_state == FaultState.NORMAL
+
+
+def test_serial_transport_maps_canonical_watchdog_without_nack_code() -> None:
     ack_code, fault_state = _map_ack_to_bench_state("NACK", None, DETAIL_WATCHDOG)
 
     assert ack_code == AckCode.NACK_WATCHDOG
