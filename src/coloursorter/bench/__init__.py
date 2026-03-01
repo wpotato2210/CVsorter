@@ -1,3 +1,5 @@
+from .frame_source import BenchFrameSource, FrameSourceError
+from .live_source import LiveConfig, LiveFrameSource
 from .mock_transport import MockMcuTransport, MockTransportConfig
 from .replay_source import ReplayConfig, ReplayFrameSource
 from .runner import BenchRunResult, BenchRunner
@@ -14,9 +16,13 @@ __all__ = [
     "BenchRunner",
     "BenchScenario",
     "BenchSummary",
+    "BenchFrameSource",
     "EncoderConfig",
     "EncoderFaultConfig",
     "FaultState",
+    "FrameSourceError",
+    "LiveConfig",
+    "LiveFrameSource",
     "MockMcuTransport",
     "MockTransportConfig",
     "ReplayConfig",

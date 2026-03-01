@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Iterator
 
 import cv2
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
@@ -12,9 +11,13 @@ from PySide6.QtWidgets import QApplication
 from coloursorter.bench import (
     BenchLogEntry,
     BenchMode,
+    BenchFrameSource,
     BenchRunner,
     EncoderConfig,
     FaultState,
+    FrameSourceError,
+    LiveConfig,
+    LiveFrameSource,
     MockMcuTransport,
     MockTransportConfig,
     ReplayConfig,
@@ -98,6 +101,7 @@ class BenchAppController(QObject):
 
         project_root = Path(__file__).resolve().parents[2]
         self.replay_source = ReplayFrameSource(project_root / "data", ReplayConfig(frame_period_s=1.0 / 30.0))
+        self.live_config = LiveConfig(camera_index=0, frame_period_s=1.0 / 30.0)
         self.pipeline = PipelineRunner(
             lane_config_path=project_root / "configs" / "lane_geometry.yaml",
             calibration_path=project_root / "configs" / "calibration.json",
@@ -118,7 +122,7 @@ class BenchAppController(QObject):
             )
         )
         self.bench_runner = BenchRunner(self.pipeline, self.transport, self.encoder)
-        self._replay_frames_iter: Iterator | None = None
+        self._frame_source: BenchFrameSource | None = None
         self._cycle_timer = QTimer(self)
         self._cycle_timer.setInterval(self.cycle_config.period_ms)
         self._cycle_timer.timeout.connect(self._on_cycle_tick)
@@ -202,8 +206,14 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state not in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
             return
 
-        frame = self._next_frame()
+        try:
+            frame = self._next_frame()
+        except FrameSourceError as error:
+            self._handle_source_fault(str(error))
+            return
+
         if frame is None:
+            self._release_frame_source()
             self._transition_to(ControllerState.IDLE, overlay_text="Replay complete")
             return
 
@@ -235,15 +245,41 @@ class BenchAppController(QObject):
         self._emit_runtime_state()
 
     def _next_frame(self):
-        if self.runtime_state.controller_state == ControllerState.REPLAY_RUNNING:
-            if self._replay_frames_iter is None:
-                self._replay_frames_iter = self.replay_source.frames()
-            return next(self._replay_frames_iter, None)
-        if self.runtime_state.controller_state == ControllerState.LIVE_RUNNING:
-            if self._replay_frames_iter is None:
-                self._replay_frames_iter = self.replay_source.frames()
-            return next(self._replay_frames_iter, None)
-        return None
+        if self._frame_source is None:
+            return None
+        return self._frame_source.next_frame()
+
+    def _release_frame_source(self) -> None:
+        if self._frame_source is not None:
+            self._frame_source.release()
+            self._frame_source = None
+
+    def _activate_frame_source(self, mode: BenchMode) -> bool:
+        self._release_frame_source()
+        source: BenchFrameSource = self.replay_source if mode == BenchMode.REPLAY else LiveFrameSource(self.live_config)
+        try:
+            source.open()
+        except FrameSourceError as error:
+            self._handle_source_fault(str(error))
+            return False
+        self._frame_source = source
+        return True
+
+    def _handle_source_fault(self, message: str) -> None:
+        self._release_frame_source()
+        self.runtime_state.fault_state = FaultState.WATCHDOG
+        self._transition_to(ControllerState.FAULTED, overlay_text=message)
+        self.log_entry_requested.emit(
+            BenchLogEntry(
+                frame_timestamp_s=self.runtime_state.previous_timestamp_s,
+                trigger_generation_s=0.0,
+                lane=-1,
+                decision=f"source_fault: {message}",
+                rejection_reason="frame_source_error",
+                protocol_round_trip_ms=0.0,
+                ack_code="-",
+            )
+        )
 
     def _step_transport_queue(self) -> None:
         if self.cycle_config.queue_consumption_policy == QueueConsumptionPolicy.NONE:
@@ -259,7 +295,8 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state != ControllerState.IDLE:
             return
         self.runtime_state.mode = BenchMode.REPLAY
-        self._replay_frames_iter = self.replay_source.frames()
+        if not self._activate_frame_source(BenchMode.REPLAY):
+            return
         self._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
 
     @Slot()
@@ -267,7 +304,8 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state != ControllerState.IDLE:
             return
         self.runtime_state.mode = BenchMode.LIVE
-        self._replay_frames_iter = self.replay_source.frames()
+        if not self._activate_frame_source(BenchMode.LIVE):
+            return
         self._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
 
     @Slot()
@@ -276,7 +314,7 @@ class BenchAppController(QObject):
             return
         self._cycle_timer.stop()
         self.transport.queue.clear()
-        self._replay_frames_iter = None
+        self._release_frame_source()
         self.runtime_state.previous_timestamp_s = 0.0
         self.runtime_state.fault_state = FaultState.NORMAL
         self._transition_to(ControllerState.IDLE, overlay_text="Homing complete")

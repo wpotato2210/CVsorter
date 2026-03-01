@@ -6,6 +6,7 @@ from typing import Iterator
 
 import cv2
 
+from .frame_source import FrameSourceError
 from .types import BenchFrame
 
 
@@ -18,18 +19,28 @@ class ReplayFrameSource:
     def __init__(self, source_path: str | Path, config: ReplayConfig) -> None:
         self._source_path = Path(source_path)
         self._config = config
+        self._frames_iter: Iterator[BenchFrame] | None = None
 
-    def frames(self) -> Iterator[BenchFrame]:
+    def open(self) -> None:
+        self._frames_iter = self._build_frame_iterator()
+
+    def next_frame(self) -> BenchFrame | None:
+        if self._frames_iter is None:
+            raise FrameSourceError("Replay source is not open")
+        return next(self._frames_iter, None)
+
+    def release(self) -> None:
+        self._frames_iter = None
+
+    def _build_frame_iterator(self) -> Iterator[BenchFrame]:
         if self._source_path.is_dir():
-            yield from self._frames_from_directory()
-            return
+            return self._frames_from_directory()
         if self._source_path.suffix.lower() in {".mp4", ".avi", ".mov", ".mkv"}:
-            yield from self._frames_from_video()
-            return
+            return self._frames_from_video()
         image = cv2.imread(str(self._source_path))
         if image is None:
-            raise ValueError(f"Unsupported replay source: {self._source_path}")
-        yield BenchFrame(frame_id=0, timestamp_s=0.0, image_bgr=image)
+            raise FrameSourceError(f"Unsupported replay source: {self._source_path}")
+        return iter((BenchFrame(frame_id=0, timestamp_s=0.0, image_bgr=image),))
 
     def _frames_from_directory(self) -> Iterator[BenchFrame]:
         image_paths = sorted(
@@ -48,7 +59,8 @@ class ReplayFrameSource:
     def _frames_from_video(self) -> Iterator[BenchFrame]:
         capture = cv2.VideoCapture(str(self._source_path))
         if not capture.isOpened():
-            raise ValueError(f"Unable to open replay video: {self._source_path}")
+            raise FrameSourceError(f"Unable to open replay video: {self._source_path}")
+
         frame_id = 0
         fps = capture.get(cv2.CAP_PROP_FPS)
         frame_period_s = 1.0 / fps if fps > 0 else self._config.frame_period_s
