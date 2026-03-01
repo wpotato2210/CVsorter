@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from coloursorter.config import ScenarioThresholdsConfig
+
 
 @dataclass(frozen=True)
 class ScenarioResult:
@@ -44,6 +46,39 @@ class BenchScenario:
                 f"recovered={summary.recovered_from_safe}"
             ),
         )
+
+
+def scenarios_from_thresholds(thresholds: ScenarioThresholdsConfig) -> tuple[BenchScenario, ...]:
+    return (
+        BenchScenario(
+            "nominal",
+            max_avg_rtt_ms=thresholds.nominal_max_avg_rtt_ms,
+            max_peak_rtt_ms=thresholds.nominal_max_peak_rtt_ms,
+            require_safe_transition=False,
+            require_recovery=False,
+        ),
+        BenchScenario(
+            "latency_stress",
+            max_avg_rtt_ms=thresholds.stress_max_avg_rtt_ms,
+            max_peak_rtt_ms=thresholds.stress_max_peak_rtt_ms,
+            require_safe_transition=False,
+            require_recovery=False,
+        ),
+        BenchScenario(
+            "fault_to_safe",
+            max_avg_rtt_ms=thresholds.fault_max_avg_rtt_ms,
+            max_peak_rtt_ms=thresholds.fault_max_peak_rtt_ms,
+            require_safe_transition=True,
+            require_recovery=False,
+        ),
+        BenchScenario(
+            "recovery_flow",
+            max_avg_rtt_ms=thresholds.fault_max_avg_rtt_ms,
+            max_peak_rtt_ms=thresholds.fault_max_peak_rtt_ms,
+            require_safe_transition=True,
+            require_recovery=True,
+        ),
+    )
 
 
 def default_scenarios() -> tuple[BenchScenario, ...]:

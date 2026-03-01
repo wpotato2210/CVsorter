@@ -36,5 +36,8 @@ class MockMcuTransport:
         if consume:
             del self.queue[:consume]
 
+    def current_fault_state(self) -> FaultState:
+        return self.fault_state
+
     def _round_trip_ms(self) -> float:
         return self.config.base_round_trip_ms + len(self.queue) * self.config.per_item_penalty_ms

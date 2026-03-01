@@ -4,9 +4,12 @@ from typing import Protocol
 
 from coloursorter.scheduler import ScheduledCommand
 
-from .types import TransportResponse
+from .types import FaultState, TransportResponse
 
 
 class McuTransport(Protocol):
     def send(self, command: ScheduledCommand) -> TransportResponse:
+        ...
+
+    def current_fault_state(self) -> FaultState:
         ...

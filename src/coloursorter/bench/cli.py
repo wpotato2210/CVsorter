@@ -18,9 +18,11 @@ from coloursorter.bench import (
     ReplayFrameSource,
     VirtualEncoder,
     default_scenarios,
+    scenarios_from_thresholds,
 )
 from coloursorter.bench.evaluation import evaluate_logs, write_artifacts
-from coloursorter.deploy import PipelineRunner
+from coloursorter.config import RuntimeConfig
+from coloursorter.deploy import OpenCvDetectionProvider, PipelineRunner
 
 
 def _parse_args() -> argparse.Namespace:
@@ -35,11 +37,20 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--text-report", action="store_true")
     parser.add_argument("--lane-config", default="configs/lane_geometry.yaml")
     parser.add_argument("--calibration", default="configs/calibration.json")
+    parser.add_argument("--runtime-config", default="configs/bench_runtime.yaml")
     return parser.parse_args()
 
 
-def _select_scenarios(names: list[str]):
-    available = {scenario.name: scenario for scenario in default_scenarios()}
+def _load_available_scenarios(runtime_config_path: str | Path):
+    config_path = Path(runtime_config_path)
+    if not config_path.exists():
+        return default_scenarios()
+    runtime_config = RuntimeConfig.load_startup(config_path)
+    return scenarios_from_thresholds(runtime_config.scenario_thresholds)
+
+
+def _select_scenarios(names: list[str], runtime_config_path: str | Path):
+    available = {scenario.name: scenario for scenario in _load_available_scenarios(runtime_config_path)}
     selected_names = names or ["nominal"]
     missing = [name for name in selected_names if name not in available]
     if missing:
@@ -55,6 +66,7 @@ def _run_cycles(args: argparse.Namespace, runner: BenchRunner) -> tuple[BenchLog
         else LiveFrameSource(LiveConfig(camera_index=args.camera_index, frame_period_s=args.frame_period_s))
     )
     frame_source.open()
+    detector = OpenCvDetectionProvider()
     logs: list[BenchLogEntry] = []
     previous_timestamp_s = 0.0
     try:
@@ -63,12 +75,13 @@ def _run_cycles(args: argparse.Namespace, runner: BenchRunner) -> tuple[BenchLog
             if frame is None:
                 break
             frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
+            detections = detector.detect(frame.image_bgr)
             cycle_logs = runner.run_cycle(
                 frame_id=frame.frame_id,
                 timestamp_s=frame.timestamp_s,
                 image_height_px=frame_rgb.shape[0],
                 image_width_px=frame_rgb.shape[1],
-                detections=[],
+                detections=detections,
                 previous_timestamp_s=previous_timestamp_s,
             )
             logs.extend(cycle_logs)
@@ -80,7 +93,7 @@ def _run_cycles(args: argparse.Namespace, runner: BenchRunner) -> tuple[BenchLog
 
 def main() -> int:
     args = _parse_args()
-    scenarios = _select_scenarios(args.scenario)
+    scenarios = _select_scenarios(args.scenario, args.runtime_config)
     pipeline = PipelineRunner(lane_config_path=Path(args.lane_config), calibration_path=Path(args.calibration))
     transport = MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.8))
     encoder = EncoderConfig(

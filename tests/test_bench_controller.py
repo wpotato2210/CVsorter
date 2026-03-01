@@ -138,3 +138,48 @@ def test_ui_update_side_effects_log_queue_fault_labels(qapp: QApplication) -> No
     assert window.log_table.rowCount() == 2
     assert window.log_table.item(1, 2).text() == "2/reject"
     assert window.log_table.item(1, 5).text() == "NACK_QUEUE_FULL"
+
+
+class _RecordingDetector:
+    def __init__(self, detections) -> None:
+        self._detections = detections
+        self.calls = 0
+
+    def detect(self, _frame_bgr):
+        self.calls += 1
+        return self._detections
+
+
+def test_controller_cycle_uses_detector_output_for_runner(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    detections = [
+        {
+            "object_id": "det-1",
+            "centroid_x_px": 10.0,
+            "centroid_y_px": 10.0,
+            "classification": "reject",
+        }
+    ]
+    from coloursorter.model import ObjectDetection
+
+    detector = _RecordingDetector([ObjectDetection(**detections[0])])
+    controller._detector = detector
+
+    recording_runner = _RecordingRunner(())
+    controller.bench_runner = recording_runner
+
+    frame = BenchFrame(frame_id=1, timestamp_s=0.1, image_bgr=object())
+    controller._frame_source = _FakeFrameSource([frame])
+    controller.runtime_state.previous_timestamp_s = 0.0
+    controller.runtime_state.controller_state = ControllerState.REPLAY_RUNNING
+
+    monkeypatch.setattr("gui.bench_app.controller.cv2.cvtColor", lambda _image, _code: _FakeRgbFrame(b"abc", 2, 2))
+
+    controller._on_cycle_tick()
+
+    assert detector.calls == 1
+    assert len(recording_runner.calls) == 1
+    assert len(recording_runner.calls[0]["detections"]) == 1
+    assert recording_runner.calls[0]["detections"][0].object_id == "det-1"

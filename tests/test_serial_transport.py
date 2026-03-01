@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from coloursorter.bench.serial_transport import SerialMcuTransport, SerialTransportConfig, SerialTransportError
+from coloursorter.bench.serial_transport import (
+    SerialMcuTransport,
+    SerialTransportConfig,
+    SerialTransportError,
+)
 from coloursorter.bench.types import AckCode, FaultState
 from coloursorter.scheduler import ScheduledCommand
 
@@ -34,6 +38,7 @@ def test_serial_transport_encodes_sched_and_parses_ack() -> None:
     assert fake.written == b"<SCHED|1|200.000>\n"
     assert response.ack_code == AckCode.ACK
     assert response.fault_state == FaultState.NORMAL
+    assert transport.current_fault_state() == FaultState.NORMAL
 
 
 def test_serial_transport_maps_nack_watchdog() -> None:
@@ -105,3 +110,16 @@ def test_serial_transport_raises_structured_parse_error() -> None:
     assert exc_info.value.category == "serial_parse_error"
     assert exc_info.value.fault_state == FaultState.SAFE
     assert exc_info.value.telemetry.fault_state == FaultState.SAFE
+
+
+def test_serial_transport_updates_current_fault_state_on_nack() -> None:
+    fake = _FakeSerial(b"<NACK|2|SAFE>\n")
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: fake,
+    )
+
+    response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
+
+    assert response.fault_state == FaultState.SAFE
+    assert transport.current_fault_state() == FaultState.SAFE
