@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "command",
+    "status"
+  ]
+}
