@@ -13,3 +13,8 @@
 ## Determinism constraints
 - Encoder pulse generation uses accumulator arithmetic (no per-cycle truncation drift).
 - Zero-speed and missing-pulse paths must emit stable trigger timestamps.
+
+## Validation references
+- Retry + timeout behavior: `tests/test_serial_transport.py`
+- Nominal RTT envelope and trigger timestamp flow: `tests/test_integration.py`
+- Deterministic encoder behavior: `tests/test_determinism_and_telemetry.py`

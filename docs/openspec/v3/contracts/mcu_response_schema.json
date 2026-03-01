@@ -14,8 +14,8 @@
     },
     "nack_code": {
       "type": "integer",
-      "minimum": 0,
-      "maximum": 255
+      "minimum": 1,
+      "maximum": 8
     },
     "detail": {
       "type": "string"
@@ -39,9 +39,7 @@
       "type": "string",
       "enum": [
         "IDLE",
-        "ARMED",
-        "FIRING",
-        "SAFE"
+        "ACTIVE"
       ]
     },
     "message": {

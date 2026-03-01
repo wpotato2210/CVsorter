@@ -50,3 +50,6 @@ class ObjectDetection:
     centroid_x_px: float
     centroid_y_px: float
     classification: str
+    infection_score: float = 0.0
+    curve_score: float = 0.0
+    size_mm: float = 0.0

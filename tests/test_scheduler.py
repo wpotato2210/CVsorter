@@ -7,6 +7,7 @@ import pytest
 from coloursorter.calibration import load_calibration
 from coloursorter.deploy import PipelineRunner
 from coloursorter.model import FrameMetadata, ObjectDetection
+from coloursorter.scheduler import build_scheduled_command
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -45,3 +46,14 @@ def test_scheduler_trigger_mm_adds_camera_offset_and_centroid_mm() -> None:
     sched = result.schedule_commands[0]
     assert sched.lane == 2
     assert sched.position_mm == decision.trigger_mm
+
+
+def test_scheduler_enforces_full_22_lane_range_boundaries() -> None:
+    assert build_scheduled_command(0, 10.0).lane == 0
+    assert build_scheduled_command(21, 10.0).lane == 21
+
+    with pytest.raises(ValueError, match="range 0..21"):
+        build_scheduled_command(-1, 10.0)
+
+    with pytest.raises(ValueError, match="range 0..21"):
+        build_scheduled_command(22, 10.0)
