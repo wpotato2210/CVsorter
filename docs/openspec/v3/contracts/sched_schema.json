@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "lane": {
+      "type": "integer"
+    },
+    "trigger_mm": {
+      "type": "number"
+    },
+    "classification": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "lane",
+    "trigger_mm",
+    "classification"
+  ]
+}
