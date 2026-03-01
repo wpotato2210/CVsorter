@@ -35,3 +35,11 @@ coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
 - Canonical bench startup config: `configs/bench_runtime.yaml`.
 - Migration notes from legacy startup keys: `docs/bench_runtime_config_migration.md`.
 - Enum migration notes: `docs/config_migration_v4.md`.
+
+## Release done definition
+
+A release is only considered finished after the hardware readiness gate passes.
+
+1. Ensure required evidence is checked into `docs/artifacts/hardware_readiness/` per `docs/hardware_readiness_gate.md`.
+2. Run `python tools/hardware_readiness_report.py --strict`.
+3. Declare release complete only when the report returns `Overall status: PASS`.
