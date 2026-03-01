@@ -28,7 +28,9 @@ from coloursorter.config import RuntimeConfig
 class QueueState:
     depth: int
     capacity: int
-    state: str
+    controller_state: str
+    scheduler_state: str
+    mode: str
 
 
 class BenchMainWindow(QMainWindow):
@@ -45,6 +47,7 @@ class BenchMainWindow(QMainWindow):
         layout.addWidget(self._build_controls_panel(), 1, 1)
         layout.addWidget(self._build_fault_panel(), 2, 0, 1, 2)
         layout.addWidget(self._build_log_panel(), 3, 0, 1, 2)
+        self.statusBar().showMessage("Bench idle")
 
     def _build_live_preview_panel(self) -> QGroupBox:
         box = QGroupBox("Live Frame Preview")
@@ -67,8 +70,12 @@ class BenchMainWindow(QMainWindow):
         box_layout = QVBoxLayout(box)
         self.queue_depth_label = QLabel("Depth: 0/0")
         self.queue_state_label = QLabel("State: idle")
+        self.scheduler_state_label = QLabel("Scheduler: IDLE")
+        self.mode_label = QLabel("Mode: AUTO")
         box_layout.addWidget(self.queue_depth_label)
         box_layout.addWidget(self.queue_state_label)
+        box_layout.addWidget(self.scheduler_state_label)
+        box_layout.addWidget(self.mode_label)
         return box
 
     def _build_controls_panel(self) -> QGroupBox:
@@ -117,7 +124,12 @@ class BenchMainWindow(QMainWindow):
 
     def set_queue_state(self, queue_state: QueueState) -> None:
         self.queue_depth_label.setText(f"Depth: {queue_state.depth}/{queue_state.capacity}")
-        self.queue_state_label.setText(f"State: {queue_state.state}")
+        self.queue_state_label.setText(f"State: {queue_state.controller_state}")
+        self.scheduler_state_label.setText(f"Scheduler: {queue_state.scheduler_state}")
+        self.mode_label.setText(f"Mode: {queue_state.mode}")
+        self.statusBar().showMessage(
+            f"{queue_state.controller_state} | mode={queue_state.mode} | sched={queue_state.scheduler_state} | queue={queue_state.depth}/{queue_state.capacity}"
+        )
 
     def set_fault_state(self, fault_state: FaultState) -> None:
         self.safe_label.setText(f"SAFE: {'on' if fault_state == FaultState.SAFE else 'off'}")

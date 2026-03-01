@@ -159,7 +159,7 @@ def test_cycle_processing_is_deterministic_with_mocked_frame_source_and_clock(
 def test_ui_update_side_effects_log_queue_fault_labels(qapp: QApplication) -> None:
     window = BenchMainWindow()
 
-    window.set_queue_state(QueueState(depth=3, capacity=8, state="replay_running"))
+    window.set_queue_state(QueueState(depth=3, capacity=8, controller_state="replay_running", scheduler_state="ACTIVE", mode="AUTO"))
     assert window.queue_depth_label.text() == "Depth: 3/8"
     assert window.queue_state_label.text() == "State: replay_running"
 
