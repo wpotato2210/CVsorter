@@ -14,6 +14,27 @@
       },
       "minItems": 3,
       "maxItems": 3
+    },
+    "lane_index": {
+      "type": "integer"
+    },
+    "centroid_mm": {
+      "type": "object",
+      "properties": {
+        "x_mm": {
+          "type": "number"
+        },
+        "y_mm": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x_mm",
+        "y_mm"
+      ]
+    },
+    "trigger_mm": {
+      "type": "number"
     }
   },
   "required": [
