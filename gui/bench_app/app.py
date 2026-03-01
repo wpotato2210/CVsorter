@@ -136,11 +136,11 @@ class BenchMainWindow(QMainWindow):
 
 
 def run() -> int:
+    from .controller import BenchAppController
+
     app = QApplication([])
-    window = BenchMainWindow()
-    window.resize(1200, 900)
-    window.show()
-    return app.exec()
+    controller = BenchAppController(app)
+    return controller.start()
 
 
 if __name__ == "__main__":
