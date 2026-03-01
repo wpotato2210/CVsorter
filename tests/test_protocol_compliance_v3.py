@@ -49,6 +49,16 @@ def test_nack_semantics_align_to_spec_codes_1_to_8() -> None:
     assert _response_tokens(host.handle_frame("SCHED|1|10.0"))[:2] == ["NACK", "8"]
 
 
+def test_nack_code_7_is_canonical_busy_only() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2)
+    host.busy = True
+
+    ack = parse_ack_tokens(_response_tokens(host.handle_frame("<GET_STATE>")))
+
+    assert ack.status == "NACK"
+    assert ack.nack_code == 7
+    assert ack.detail == "BUSY"
+
 def test_ack_metadata_parsing_mode_queue_scheduler_and_queue_cleared() -> None:
     host = OpenSpecV3Host(max_queue_depth=4)
     host.handle_frame("<SCHED|1|120.0>")

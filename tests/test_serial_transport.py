@@ -61,6 +61,20 @@ def test_serial_transport_maps_nack_busy() -> None:
     assert response.nack_detail == "BUSY"
 
 
+def test_serial_transport_treats_noncanonical_nack_code_7_watchdog_as_safe() -> None:
+    fake = _FakeSerial(b"<NACK|7|WATCHDOG>\n")
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: fake,
+    )
+
+    response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
+
+    assert response.ack_code == AckCode.NACK_SAFE
+    assert response.fault_state == FaultState.SAFE
+    assert response.nack_code == 7
+    assert response.nack_detail == "WATCHDOG"
+
 @pytest.mark.parametrize(
     ("raw_response", "expected_ack", "expected_fault"),
     [
@@ -86,6 +100,14 @@ def test_serial_transport_contract_ack_nack_mapping(
     assert response.ack_code == expected_ack
     assert response.fault_state == expected_fault
 
+
+def test_serial_transport_maps_canonical_watchdog_without_nack_code() -> None:
+    from coloursorter.bench.serial_transport import _map_ack_to_bench_state
+
+    ack_code, fault_state = _map_ack_to_bench_state("NACK", None, "WATCHDOG")
+
+    assert ack_code == AckCode.NACK_WATCHDOG
+    assert fault_state == FaultState.WATCHDOG
 
 def test_serial_transport_raises_structured_timeout_error() -> None:
     fake = _FakeSerial(b"")

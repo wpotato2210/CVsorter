@@ -24,7 +24,7 @@ class MockMcuTransport:
         if self.fault_state == FaultState.SAFE:
             return TransportResponse(AckCode.NACK_SAFE, len(self.queue), self._round_trip_ms(), FaultState.SAFE, nack_code=5, nack_detail="SAFE")
         if self.fault_state == FaultState.WATCHDOG:
-            return TransportResponse(AckCode.NACK_WATCHDOG, len(self.queue), self._round_trip_ms(), FaultState.WATCHDOG, nack_code=7, nack_detail="WATCHDOG")
+            return TransportResponse(AckCode.NACK_WATCHDOG, len(self.queue), self._round_trip_ms(), FaultState.WATCHDOG, nack_code=None, nack_detail="WATCHDOG")
         if len(self.queue) >= self.config.max_queue_depth:
             return TransportResponse(AckCode.NACK_QUEUE_FULL, len(self.queue), self._round_trip_ms(), FaultState.NORMAL, nack_code=6, nack_detail="QUEUE_FULL")
 
