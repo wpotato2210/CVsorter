@@ -111,6 +111,8 @@ class SerialMcuTransport:
                 scheduler_state=ack.scheduler_state or "UNKNOWN",
                 mode=ack.mode or "UNKNOWN",
                 queue_cleared=ack.queue_cleared,
+                nack_code=ack.nack_code,
+                nack_detail=ack.detail,
             )
 
         raise AssertionError("unreachable")

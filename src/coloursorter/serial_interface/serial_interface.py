@@ -111,7 +111,11 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
             queue_depth = int(token_list[2])
         except ValueError as exc:
             raise PacketValidationError("ACK queue_depth must be an integer") from exc
+        if queue_depth < 0:
+            raise PacketValidationError("ACK queue_depth must be >= 0")
         scheduler_state = token_list[3].strip().upper()
+        if scheduler_state not in {"IDLE", "ACTIVE"}:
+            raise PacketValidationError("ACK scheduler_state must be IDLE or ACTIVE")
         raw_queue_cleared = token_list[4].strip().lower()
         if raw_queue_cleared not in {"true", "false"}:
             raise PacketValidationError("ACK queue_cleared must be true or false")

@@ -5,8 +5,10 @@ from pathlib import Path
 
 
 REQUIRED_ARTIFACTS = (
+    "docs/openspec/icd.md",
     "docs/openspec/v3/state_machine.md",
     "docs/openspec/v3/protocol_compliance_matrix.md",
+    "docs/openspec/v3/system_compliance_matrix.md",
     "docs/openspec/v3/timing_budget.md",
     "docs/openspec/v3/telemetry_schema.md",
 )
@@ -36,3 +38,10 @@ def test_mcu_response_schema_nack_range_matches_v3_protocol() -> None:
 
     assert nack_schema["minimum"] == 1
     assert nack_schema["maximum"] == len(nack_codes)
+
+
+def test_icd_cross_references_runtime_and_protocol() -> None:
+    icd = Path("docs/openspec/icd.md").read_text(encoding="utf-8")
+    assert "docs/openspec/v3/protocol/commands.json" in icd
+    assert "src/coloursorter/protocol/host.py" in icd
+    assert "src/coloursorter/serial_interface/serial_interface.py" in icd

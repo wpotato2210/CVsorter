@@ -1,0 +1,11 @@
+# OpenSpec v3 System Compliance Matrix
+
+| Domain | Requirement | Runtime reference | Validation reference |
+|---|---|---|---|
+| State machine | SAFE direct AUTO transition rejected | `src/coloursorter/protocol/host.py::_set_mode` | `tests/test_protocol_compliance_v3.py::test_nack_semantics_align_to_spec_codes_1_to_8` |
+| State machine | SAFE recovery path supports MANUAL then AUTO operator flow | `gui/bench_app/controller.py::recover_safe_to_manual`, `recover_to_auto` | `tests/test_bench_controller.py::test_safe_state_can_recover_manual_then_auto` |
+| Protocol | ACK metadata validates queue depth and scheduler state semantics | `src/coloursorter/serial_interface/serial_interface.py::parse_ack_tokens` | `tests/test_serial_interface.py::test_ack_metadata_rejects_negative_queue_depth`, `test_ack_metadata_rejects_unknown_scheduler_state` |
+| Scheduling | Lane and trigger range guards aligned between scheduler and host | `src/coloursorter/scheduler/output.py`, `src/coloursorter/protocol/host.py::_sched` | `tests/test_scheduler.py::test_scheduler_enforces_trigger_mm_bounds`, `tests/test_protocol_compliance_v3.py::test_scheduler_and_host_trigger_bounds_match` |
+| Timing | Stage timing fields emitted for ingest/decision/schedule/transport/cycle | `src/coloursorter/bench/runner.py::run_cycle` | `tests/test_determinism_and_telemetry.py::test_stage_latency_fields_are_populated_for_each_log` |
+| Telemetry | Raw NACK detail retained in transport response and artifact CSV | `src/coloursorter/bench/serial_transport.py::send`, `src/coloursorter/bench/evaluation.py::write_artifacts` | `tests/test_serial_transport.py::test_serial_transport_preserves_raw_nack_detail`, `tests/test_bench_evaluation.py::test_telemetry_csv_preserves_nack_detail_and_stage_latency_fields` |
+| Determinism | Encoder dropout quantization is deterministic | `src/coloursorter/bench/virtual_encoder.py::pulses_between` | `tests/test_determinism_and_telemetry.py::test_encoder_dropout_ratio_quantization_behavior_is_deterministic` |

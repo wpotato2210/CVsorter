@@ -57,3 +57,14 @@ def test_scheduler_enforces_full_22_lane_range_boundaries() -> None:
 
     with pytest.raises(ValueError, match="range 0..21"):
         build_scheduled_command(22, 10.0)
+
+
+def test_scheduler_enforces_trigger_mm_bounds() -> None:
+    assert build_scheduled_command(1, 0.0).position_mm == 0.0
+    assert build_scheduled_command(1, 2000.0).position_mm == 2000.0
+
+    with pytest.raises(ValueError, match="0.0..2000.0"):
+        build_scheduled_command(1, -0.001)
+
+    with pytest.raises(ValueError, match="0.0..2000.0"):
+        build_scheduled_command(1, 2000.001)

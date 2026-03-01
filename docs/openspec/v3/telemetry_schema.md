@@ -21,3 +21,13 @@ Validation tests:
 - `tests/test_bench_evaluation.py::test_telemetry_csv_includes_required_openspec_v3_fields`
 
 Additional compatibility fields may remain, but the fields above are mandatory for governance-complete telemetry.
+
+
+Extended hardening telemetry fields (non-breaking additions):
+- `ingest_latency_ms`
+- `decision_latency_ms`
+- `schedule_latency_ms`
+- `transport_latency_ms`
+- `cycle_latency_ms`
+- `nack_code`
+- `nack_detail`

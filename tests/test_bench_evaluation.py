@@ -81,3 +81,48 @@ def test_telemetry_csv_includes_required_openspec_v3_fields(tmp_path: Path) -> N
         "scheduler_state",
         "mode",
     ]
+
+
+def test_telemetry_csv_preserves_nack_detail_and_stage_latency_fields(tmp_path: Path) -> None:
+    logs = (
+        BenchLogEntry(
+            frame_timestamp_s=0.2,
+            trigger_generation_s=0.2,
+            lane=2,
+            decision="reject",
+            rejection_reason="classified_reject",
+            protocol_round_trip_ms=5.0,
+            ack_code=AckCode.NACK_SAFE,
+            trigger_timestamp_s=0.2,
+            trigger_mm=304.6,
+            lane_index=2,
+            belt_speed_mm_s=300.0,
+            queue_depth=1,
+            scheduler_state="ACTIVE",
+            mode="SAFE",
+            ingest_latency_ms=0.1,
+            decision_latency_ms=0.2,
+            schedule_latency_ms=0.3,
+            transport_latency_ms=5.0,
+            cycle_latency_ms=5.7,
+            nack_code=5,
+            nack_detail="SAFE",
+        ),
+    )
+    scenarios = (
+        BenchScenario("fault", max_avg_rtt_ms=20.0, max_peak_rtt_ms=20.0, require_safe_transition=True, require_recovery=False),
+    )
+    evaluation = evaluate_logs(logs, scenarios)
+
+    artifact_dir = write_artifacts(logs, evaluation, tmp_path, include_text_report=False)
+    rows = (artifact_dir / "telemetry.csv").read_text(encoding="utf-8").splitlines()
+    header = rows[0].split(",")
+    values = rows[1].split(",")
+
+    assert "ingest_latency_ms" in header
+    assert "transport_latency_ms" in header
+    assert "nack_code" in header
+    assert "nack_detail" in header
+
+    index_nack_detail = header.index("nack_detail")
+    assert values[index_nack_detail] == "SAFE"

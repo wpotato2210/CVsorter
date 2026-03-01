@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover - environment dependent
 from coloursorter.bench import AckCode, BenchFrame, BenchLogEntry, FaultState
 from coloursorter.config import RuntimeConfig
 from gui.bench_app.app import BenchMainWindow, QueueState
-from gui.bench_app.controller import BenchAppController, ControllerState
+from gui.bench_app.controller import BenchAppController, ControllerState, OperatorMode
 
 
 class _FakeFrameSource:
@@ -185,3 +185,36 @@ def test_controller_cycle_uses_detector_output_for_runner(
     assert len(recording_runner.calls) == 1
     assert len(recording_runner.calls[0]["detections"]) == 1
     assert recording_runner.calls[0]["detections"][0].object_id == "det-1"
+
+
+def test_safe_state_can_recover_directly_to_auto_via_home(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller.runtime_state.fault_state = FaultState.SAFE
+    controller.runtime_state.operator_mode = OperatorMode.SAFE
+    controller._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
+
+    controller.on_home_clicked()
+
+    assert controller.runtime_state.controller_state == ControllerState.IDLE
+    assert controller.runtime_state.fault_state == FaultState.NORMAL
+    assert controller.runtime_state.operator_mode == OperatorMode.AUTO
+
+
+def test_safe_state_can_recover_manual_then_auto(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller.runtime_state.fault_state = FaultState.SAFE
+    controller.runtime_state.operator_mode = OperatorMode.SAFE
+    controller._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
+
+    assert controller.recover_safe_to_manual() is True
+    assert controller.runtime_state.controller_state == ControllerState.IDLE
+    assert controller.runtime_state.operator_mode == OperatorMode.MANUAL
+
+    assert controller.recover_to_auto() is True
+    assert controller.runtime_state.operator_mode == OperatorMode.AUTO
+
+
+def test_safe_recovery_calls_are_rejected_when_not_in_safe(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    assert controller.recover_safe_to_manual() is False

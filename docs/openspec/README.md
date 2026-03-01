@@ -38,3 +38,10 @@ Source commit for all files imported in this pass: `01cf4bd17fb56664efe11f0ca67d
 | `docs/openspec/v3/configs/calibration.json` | `configs/calibration.json` | `01cf4bd17fb56664efe11f0ca67d427f62469c66` |
 | `docs/openspec/v3/configs/lane_geometry.yaml` | `configs/lane_geometry.yaml` | `01cf4bd17fb56664efe11f0ca67d427f62469c66` |
 | `docs/openspec/v3/gui/ui_main_layout.json` | `gui/ui_main_layout.json` | `01cf4bd17fb56664efe11f0ca67d427f62469c66` |
+
+
+## Governance artifacts
+
+- Interface Control Document: `docs/openspec/icd.md`.
+- Protocol matrix: `docs/openspec/v3/protocol_compliance_matrix.md`.
+- System matrix (state/timing/telemetry): `docs/openspec/v3/system_compliance_matrix.md`.

@@ -21,3 +21,9 @@
 - Zero belt speed: same as missing pulse behavior.
 - Watchdog timeout: transport fault state transitions to `WATCHDOG`.
 - Explicit SAFE command: immediate `mode=SAFE`, queue cleared, `scheduler_state=IDLE`.
+
+
+## GUI/operator recovery
+- SAFE can be cleared directly to AUTO in operator flow.
+- SAFE recovery can also follow `SAFE -> MANUAL -> AUTO` in operator flow.
+- Validation reference: `tests/test_bench_controller.py`.
