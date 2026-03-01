@@ -47,7 +47,10 @@ class BenchRunner:
             image_width_px=image_width_px,
         )
         pulses = self._encoder.pulses_between(previous_timestamp_s, timestamp_s)
-        trigger_generation_s = timestamp_s if pulses > 0 else previous_timestamp_s
+        if pulses > 0:
+            trigger_generation_s = self._encoder.last_pulse_timestamp_s or timestamp_s
+        else:
+            trigger_generation_s = self._encoder.last_pulse_timestamp_s or previous_timestamp_s
         ingest_latency_ms = (time.perf_counter() - ingest_started) * 1000.0
 
         decision_started = time.perf_counter()
@@ -60,6 +63,13 @@ class BenchRunner:
 
         logs: list[BenchLogEntry] = []
         for decision, command in scheduled_pairs:
+            projected_trigger_timestamp_s = trigger_generation_s
+            belt_speed_mm_s = self._encoder.belt_speed_mm_per_s
+            if belt_speed_mm_s > 0.0:
+                travel_time_s = command.position_mm / belt_speed_mm_s
+                decision_schedule_time_s = (decision_latency_ms + schedule_latency_ms) / 1000.0
+                projected_trigger_timestamp_s = trigger_generation_s + decision_schedule_time_s + travel_time_s
+
             transport_started = time.perf_counter()
             response = self._transport.send(command)
             transport_latency_ms = (time.perf_counter() - transport_started) * 1000.0
@@ -68,13 +78,13 @@ class BenchRunner:
                 BenchLogEntry(
                     frame_timestamp_s=timestamp_s,
                     trigger_generation_s=trigger_generation_s,
-                    trigger_timestamp_s=trigger_generation_s,
+                    trigger_timestamp_s=projected_trigger_timestamp_s,
                     trigger_mm=command.position_mm,
                     lane=decision.lane,
                     lane_index=decision.lane,
                     decision=decision.classification,
                     rejection_reason=decision.rejection_reason,
-                    belt_speed_mm_s=self._encoder.belt_speed_mm_per_s,
+                    belt_speed_mm_s=belt_speed_mm_s,
                     queue_depth=response.queue_depth,
                     scheduler_state=response.scheduler_state,
                     mode=response.mode,

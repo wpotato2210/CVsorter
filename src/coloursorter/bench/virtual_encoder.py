@@ -22,10 +22,15 @@ class VirtualEncoder:
         self._config = config
         self._fault_config = fault_config or EncoderFaultConfig()
         self._pulse_accumulator = 0.0
+        self._last_pulse_timestamp_s: float | None = None
 
     @property
     def belt_speed_mm_per_s(self) -> float:
         return 0.0 if self._fault_config.force_zero_speed else self._config.belt_speed_mm_per_s
+
+    @property
+    def last_pulse_timestamp_s(self) -> float | None:
+        return self._last_pulse_timestamp_s
 
     def pulses_between(self, start_time_s: float, end_time_s: float) -> int:
         duration_s = max(0.0, end_time_s - start_time_s)
@@ -41,10 +46,14 @@ class VirtualEncoder:
         if self._fault_config.force_missing_pulses:
             return 0
         if self._config.dropout_ratio <= 0.0:
+            if pulses > 0:
+                self._last_pulse_timestamp_s = end_time_s
             return pulses
 
         kept_ratio = max(0.0, min(1.0, 1.0 - self._config.dropout_ratio))
         adjusted_pulses = pulses * kept_ratio
         kept_integer = int(adjusted_pulses)
         self._pulse_accumulator += adjusted_pulses - kept_integer
+        if kept_integer > 0:
+            self._last_pulse_timestamp_s = end_time_s
         return kept_integer

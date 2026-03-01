@@ -69,6 +69,7 @@ def test_bench_logs_include_required_telemetry_fields() -> None:
     log = logs[0]
     assert log.frame_timestamp_s > 0
     assert log.trigger_timestamp_s >= 0
+    assert log.trigger_timestamp_s > log.trigger_generation_s
     assert log.trigger_mm > 0
     assert log.lane_index >= 0
     assert log.rejection_reason is not None
@@ -76,6 +77,65 @@ def test_bench_logs_include_required_telemetry_fields() -> None:
     assert log.queue_depth >= 0
     assert log.scheduler_state
     assert log.mode
+
+
+def test_trigger_timestamp_uses_distance_and_stage_timing_projection() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5)),
+        encoder=VirtualEncoder(EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0)),
+    )
+
+    log = runner.run_cycle(
+        frame_id=1,
+        timestamp_s=0.2,
+        image_height_px=720,
+        image_width_px=1056,
+        detections=[_reject_detection()],
+        previous_timestamp_s=0.1,
+    )[0]
+
+    minimum_projection_s = log.trigger_generation_s + (log.trigger_mm / log.belt_speed_mm_s)
+    assert log.trigger_timestamp_s >= minimum_projection_s
+    assert log.trigger_timestamp_s >= log.trigger_generation_s + ((log.decision_latency_ms + log.schedule_latency_ms) / 1000.0)
+
+
+def test_trigger_timestamp_is_anchored_to_last_encoder_pulse_across_dropout_cycles() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5)),
+        encoder=VirtualEncoder(
+            EncoderConfig(
+                pulses_per_revolution=100,
+                belt_speed_mm_per_s=100.0,
+                pulley_circumference_mm=200.0,
+                dropout_ratio=0.95,
+            )
+        ),
+    )
+
+    first = runner.run_cycle(1, 0.2, 720, 1056, [_reject_detection()], 0.1)[0]
+    second = runner.run_cycle(2, 0.3, 720, 1056, [_reject_detection()], 0.2)[0]
+
+    assert first.trigger_generation_s == 0.1
+    assert second.trigger_generation_s == 0.2
+    assert second.trigger_generation_s >= first.trigger_generation_s
+    assert second.trigger_timestamp_s > second.trigger_generation_s
+
+
+def test_trigger_timestamp_is_stable_under_variable_cycle_timing() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5)),
+        encoder=VirtualEncoder(EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0)),
+    )
+
+    intervals = [(0.0, 0.11), (0.11, 0.33), (0.33, 0.37), (0.37, 0.59)]
+    logs = [runner.run_cycle(i + 1, end, 720, 1056, [_reject_detection()], start)[0] for i, (start, end) in enumerate(intervals)]
+
+    projected_offsets = [log.trigger_timestamp_s - log.trigger_generation_s for log in logs]
+    assert all(offset > 1.0 for offset in projected_offsets)
+    assert max(projected_offsets) - min(projected_offsets) < 0.05
 
 
 def test_safe_fault_conditions_and_recovery_paths() -> None:
@@ -185,4 +245,3 @@ def test_watchdog_summary_counts_ack_code_not_nack_code_aliases() -> None:
 
     summary = BenchRunner.summarize(watchdog_logs)
     assert summary.watchdog_transitions == 1
-
