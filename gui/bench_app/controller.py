@@ -5,11 +5,13 @@ from enum import Enum
 from pathlib import Path
 
 import cv2
+import numpy as np
 from PySide6.QtCore import QObject, QState, QStateMachine, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
 from coloursorter.bench import (
     BenchFrameSource,
+    BenchFrame,
     BenchLogEntry,
     BenchMode,
     BenchRunner,
@@ -236,6 +238,8 @@ class BenchAppController(QObject):
         )
         self._session_logs: list[BenchLogEntry] = []
         self._frame_source: BenchFrameSource | None = None
+        self._use_simulated_live_feed = False
+        self._simulated_frame_id = 0
         self._latest_transport_queue_depth = 0
         self._latest_transport_queue_cleared = False
         self._cycle_timer = QTimer(self)
@@ -414,9 +418,23 @@ class BenchAppController(QObject):
         self._emit_runtime_state()
 
     def _next_frame(self):
+        # Temporary POC simplification: if no camera is available in LIVE mode,
+        # generate synthetic frames so the GUI and protocol path stay testable.
+        if self._use_simulated_live_feed:
+            return self._build_simulated_frame()
         if self._frame_source is None:
             return None
         return self._frame_source.next_frame()
+
+    def _build_simulated_frame(self) -> BenchFrame:
+        height, width = 480, 640
+        image_bgr = np.zeros((height, width, 3), dtype=np.uint8)
+        x = 40 + (self._simulated_frame_id * 12) % (width - 80)
+        cv2.circle(image_bgr, (x, height // 2), 26, (0, 255, 255), -1)
+        timestamp_s = self._simulated_frame_id * self.live_config.frame_period_s
+        frame = BenchFrame(frame_id=self._simulated_frame_id, timestamp_s=timestamp_s, image_bgr=image_bgr)
+        self._simulated_frame_id += 1
+        return frame
 
     def _release_frame_source(self) -> None:
         if self._frame_source is not None:
@@ -425,10 +443,16 @@ class BenchAppController(QObject):
 
     def _activate_frame_source(self, mode: BenchMode) -> bool:
         self._release_frame_source()
+        self._use_simulated_live_feed = False
         source: BenchFrameSource = self.replay_source if mode == BenchMode.REPLAY else LiveFrameSource(self.live_config)
         try:
             source.open()
         except FrameSourceError as error:
+            if mode == BenchMode.LIVE:
+                self._use_simulated_live_feed = True
+                self._simulated_frame_id = 0
+                self.lane_overlay_requested.emit("LIVE mode (simulated camera feed)")
+                return True
             self._handle_source_fault(str(error))
             return False
         self._frame_source = source
