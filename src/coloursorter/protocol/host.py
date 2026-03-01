@@ -2,9 +2,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from coloursorter.scheduler.output import MAX_TRIGGER_MM, MIN_TRIGGER_MM
 from coloursorter.serial_interface import FrameFormatError, parse_frame, serialize_packet
 
+from .constants import (
+    ACK_TOKEN,
+    ALLOWED_MODES,
+    CMD_GET_STATE,
+    CMD_RESET_QUEUE,
+    CMD_SCHED,
+    CMD_SET_MODE,
+    DEFAULT_MAX_QUEUE_DEPTH,
+    LANE_MAX,
+    LANE_MIN,
+    MODE_AUTO,
+    NACK_TOKEN,
+    SCHEDULER_ACTIVE,
+    SCHEDULER_IDLE,
+    TRIGGER_MM_MAX,
+    TRIGGER_MM_MIN,
+)
 from .nack_codes import (
     DETAIL_ARG_COUNT_MISMATCH,
     DETAIL_ARG_RANGE_ERROR,
@@ -28,9 +44,9 @@ from .policy import is_mode_transition_allowed
 
 @dataclass
 class OpenSpecV3Host:
-    max_queue_depth: int = 8
-    mode: str = "AUTO"
-    scheduler_state: str = "IDLE"
+    max_queue_depth: int = DEFAULT_MAX_QUEUE_DEPTH
+    mode: str = MODE_AUTO
+    scheduler_state: str = SCHEDULER_IDLE
     queue: list[tuple[int, float]] = field(default_factory=list)
     busy: bool = False
 
@@ -44,20 +60,20 @@ class OpenSpecV3Host:
         args = packet.args
         if self.busy:
             return self._nack(NACK_BUSY, DETAIL_BUSY)
-        if cmd == "SET_MODE":
+        if cmd == CMD_SET_MODE:
             return self._set_mode(args)
-        if cmd == "SCHED":
+        if cmd == CMD_SCHED:
             return self._sched(args)
-        if cmd == "GET_STATE":
+        if cmd == CMD_GET_STATE:
             if args:
                 return self._nack(NACK_ARG_COUNT_MISMATCH, DETAIL_ARG_COUNT_MISMATCH)
             return self._ack(False)
-        if cmd == "RESET_QUEUE":
+        if cmd == CMD_RESET_QUEUE:
             if args:
                 return self._nack(NACK_ARG_COUNT_MISMATCH, DETAIL_ARG_COUNT_MISMATCH)
             queue_cleared = bool(self.queue)
             self.queue.clear()
-            self.scheduler_state = "IDLE"
+            self.scheduler_state = SCHEDULER_IDLE
             return self._ack(queue_cleared)
         return self._nack(NACK_UNKNOWN_COMMAND, DETAIL_UNKNOWN_COMMAND)
 
@@ -65,7 +81,7 @@ class OpenSpecV3Host:
         if len(args) != 1:
             return self._nack(NACK_ARG_COUNT_MISMATCH, DETAIL_ARG_COUNT_MISMATCH)
         target_mode = args[0].upper()
-        if target_mode not in {"AUTO", "MANUAL", "SAFE"}:
+        if target_mode not in ALLOWED_MODES:
             return self._nack(NACK_ARG_TYPE_ERROR, DETAIL_ARG_TYPE_ERROR)
         if not is_mode_transition_allowed(self.mode, target_mode):
             return self._nack(NACK_INVALID_MODE_TRANSITION, DETAIL_INVALID_MODE_TRANSITION)
@@ -74,7 +90,7 @@ class OpenSpecV3Host:
         if target_mode != self.mode:
             queue_cleared = bool(self.queue)
             self.queue.clear()
-            self.scheduler_state = "IDLE"
+            self.scheduler_state = SCHEDULER_IDLE
             self.mode = target_mode
         return self._ack(queue_cleared)
 
@@ -90,20 +106,20 @@ class OpenSpecV3Host:
         except ValueError:
             return self._nack(NACK_ARG_TYPE_ERROR, DETAIL_ARG_TYPE_ERROR)
 
-        if lane < 0 or lane > 21:
+        if lane < LANE_MIN or lane > LANE_MAX:
             return self._nack(NACK_ARG_RANGE_ERROR, DETAIL_ARG_RANGE_ERROR)
-        if trigger_mm < MIN_TRIGGER_MM or trigger_mm > MAX_TRIGGER_MM:
+        if trigger_mm < TRIGGER_MM_MIN or trigger_mm > TRIGGER_MM_MAX:
             return self._nack(NACK_ARG_RANGE_ERROR, DETAIL_ARG_RANGE_ERROR)
         if len(self.queue) >= self.max_queue_depth:
             return self._nack(NACK_QUEUE_FULL, DETAIL_QUEUE_FULL)
 
         self.queue.append((lane, trigger_mm))
-        self.scheduler_state = "ACTIVE"
+        self.scheduler_state = SCHEDULER_ACTIVE
         return self._ack(False)
 
     def _ack(self, queue_cleared: bool) -> str:
         return serialize_packet(
-            "ACK",
+            ACK_TOKEN,
             (
                 self.mode,
                 str(len(self.queue)),
@@ -114,4 +130,4 @@ class OpenSpecV3Host:
 
     @staticmethod
     def _nack(code: int, detail: str) -> str:
-        return serialize_packet("NACK", (str(code), detail))
+        return serialize_packet(NACK_TOKEN, (str(code), detail))
