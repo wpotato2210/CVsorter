@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from coloursorter.deploy import PipelineRunner
 from coloursorter.model import FrameMetadata, ObjectDetection
 
-from .mock_transport import MockMcuTransport
+from .transport import McuTransport
 from .scenarios import BenchSummary
 from .types import AckCode, BenchLogEntry
 from .virtual_encoder import VirtualEncoder
@@ -21,7 +21,7 @@ class BenchRunner:
     def __init__(
         self,
         pipeline: PipelineRunner,
-        transport: MockMcuTransport,
+        transport: McuTransport,
         encoder: VirtualEncoder,
     ) -> None:
         self._pipeline = pipeline

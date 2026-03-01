@@ -43,6 +43,7 @@ class TransportResponse:
     ack_code: AckCode
     queue_depth: int
     round_trip_ms: float
+    fault_state: FaultState = FaultState.NORMAL
 
 
 @dataclass(frozen=True)
