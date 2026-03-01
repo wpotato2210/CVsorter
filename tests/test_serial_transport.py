@@ -49,6 +49,32 @@ def test_serial_transport_maps_nack_watchdog() -> None:
     assert response.fault_state == FaultState.WATCHDOG
 
 
+@pytest.mark.parametrize(
+    ("raw_response", "expected_ack", "expected_fault"),
+    [
+        (b"<ACK>\n", AckCode.ACK, FaultState.NORMAL),
+        (b"<NACK|1|QUEUE_FULL>\n", AckCode.NACK_QUEUE_FULL, FaultState.NORMAL),
+        (b"<NACK|2|SAFE>\n", AckCode.NACK_SAFE, FaultState.SAFE),
+        (b"<NACK|3|WATCHDOG>\n", AckCode.NACK_WATCHDOG, FaultState.WATCHDOG),
+    ],
+)
+def test_serial_transport_contract_ack_nack_mapping(
+    raw_response: bytes,
+    expected_ack: AckCode,
+    expected_fault: FaultState,
+) -> None:
+    fake = _FakeSerial(raw_response)
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: fake,
+    )
+
+    response = transport.send(ScheduledCommand(lane=1, position_mm=210.0))
+
+    assert response.ack_code == expected_ack
+    assert response.fault_state == expected_fault
+
+
 def test_serial_transport_raises_structured_timeout_error() -> None:
     fake = _FakeSerial(b"")
     transport = SerialMcuTransport(
@@ -60,8 +86,10 @@ def test_serial_transport_raises_structured_timeout_error() -> None:
         transport.send(ScheduledCommand(lane=3, position_mm=111.0))
 
     assert exc_info.value.category == "serial_timeout"
+    assert "No MCU response within" in exc_info.value.detail
     assert exc_info.value.fault_state == FaultState.WATCHDOG
     assert exc_info.value.telemetry.category == "serial_timeout"
+    assert exc_info.value.telemetry.fault_state == FaultState.WATCHDOG
 
 
 def test_serial_transport_raises_structured_parse_error() -> None:

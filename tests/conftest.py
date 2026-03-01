@@ -6,6 +6,8 @@ import types
 if "cv2" not in sys.modules:
     cv2_stub = types.SimpleNamespace(
         imread=lambda *_args, **_kwargs: None,
+        cvtColor=lambda image, _code: image,
+        COLOR_BGR2RGB=1,
         VideoCapture=lambda *_args, **_kwargs: types.SimpleNamespace(
             isOpened=lambda: False,
             get=lambda *_a, **_k: 0.0,
