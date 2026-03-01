@@ -8,11 +8,9 @@ class ScheduledCommand:
     lane: int
     position_mm: float
 
-    def to_wire(self) -> str:
-        return f"SCHED:{self.lane}:{self.position_mm:.3f}"
 
 
 def build_scheduled_command(lane: int, position_mm: float) -> ScheduledCommand:
-    if lane < 0:
-        raise ValueError("lane must be >= 0")
+    if lane < 0 or lane > 21:
+        raise ValueError("lane must be in range 0..21")
     return ScheduledCommand(lane=lane, position_mm=position_mm)

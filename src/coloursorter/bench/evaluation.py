@@ -64,11 +64,16 @@ def write_artifacts(
         writer = csv.writer(handle)
         writer.writerow(
             [
-                "frame_timestamp_s",
-                "trigger_generation_s",
-                "lane",
-                "decision",
+                "frame_timestamp",
+                "trigger_timestamp",
+                "trigger_mm",
+                "lane_index",
                 "rejection_reason",
+                "belt_speed_mm_s",
+                "queue_depth",
+                "scheduler_state",
+                "mode",
+                "decision",
                 "protocol_round_trip_ms",
                 "ack_code",
             ]
@@ -78,10 +83,15 @@ def write_artifacts(
             writer.writerow(
                 [
                     f"{entry.frame_timestamp_s:.6f}",
-                    f"{entry.trigger_generation_s:.6f}",
-                    entry.lane,
-                    entry.decision,
+                    f"{entry.trigger_timestamp_s:.6f}",
+                    f"{entry.trigger_mm:.6f}",
+                    entry.lane_index,
                     entry.rejection_reason or "",
+                    f"{entry.belt_speed_mm_s:.6f}",
+                    entry.queue_depth,
+                    entry.scheduler_state,
+                    entry.mode,
+                    entry.decision,
                     f"{entry.protocol_round_trip_ms:.3f}",
                     ack_code,
                 ]

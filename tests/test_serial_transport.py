@@ -12,7 +12,7 @@ from coloursorter.scheduler import ScheduledCommand
 
 
 class _FakeSerial:
-    def __init__(self, response: bytes) -> None:
+    def __init__(self, response: bytes | list[bytes]) -> None:
         self._response = response
         self.written: bytes | None = None
 
@@ -20,6 +20,8 @@ class _FakeSerial:
         self.written = payload
 
     def readline(self) -> bytes:
+        if isinstance(self._response, list):
+            return self._response.pop(0) if self._response else b""
         return self._response
 
     def close(self) -> None:
@@ -126,3 +128,34 @@ def test_serial_transport_updates_current_fault_state_on_nack() -> None:
 
     assert response.fault_state == FaultState.SAFE
     assert transport.current_fault_state() == FaultState.SAFE
+
+
+def test_serial_transport_retries_on_timeout_then_succeeds() -> None:
+    fake = _FakeSerial([b"", b"<ACK|AUTO|1|ACTIVE|false>\n"])
+    slept: list[float] = []
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: fake,
+        sleep_fn=lambda s: slept.append(s),
+    )
+
+    response = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
+
+    assert response.ack_code == AckCode.ACK
+    assert slept == [0.0]
+
+
+def test_serial_transport_exhausts_retries_before_timeout_error() -> None:
+    fake = _FakeSerial([b"", b"", b"", b""])
+    slept: list[float] = []
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: fake,
+        sleep_fn=lambda s: slept.append(s),
+    )
+
+    with pytest.raises(SerialTransportError) as exc_info:
+        transport.send(ScheduledCommand(lane=3, position_mm=111.0))
+
+    assert exc_info.value.category == "serial_timeout"
+    assert slept == [0.0, 0.05, 0.1]
