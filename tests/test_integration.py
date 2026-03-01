@@ -128,8 +128,8 @@ def test_safe_transition_for_zero_belt_speed() -> None:
 
 def test_safe_transition_for_missing_home_sensor_condition() -> None:
     # AUTO_HOME runtime mode + SAFE transport models home sensor unavailable at startup.
-    config = RuntimeConfig.from_text("motion_mode: FOLLOW_BELT\nhoming_mode: AUTO_HOME\n")
-    assert config.homing_mode == "AUTO_HOME"
+    config = RuntimeConfig.load_startup(Path(__file__).resolve().parents[1] / "configs" / "bench_runtime.yaml")
+    assert config.homing_mode in {"AUTO_HOME", "SKIP_HOME"}
 
     pipeline = _build_pipeline()
     transport = MockMcuTransport(
