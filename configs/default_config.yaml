@@ -5,5 +5,5 @@ defect_thresholds:
   infection_score: 0.5
   size_mm: 3
   snapped_score: 0.6
-mode: ENCODER
-homing: DISABLED
+motion_mode: FOLLOW_BELT
+homing_mode: SKIP_HOME

@@ -1,7 +1,7 @@
 {
   "type": "object",
   "properties": {
-    "lane": {
+    "lane_index": {
       "type": "integer"
     },
     "trigger_mm": {
@@ -12,7 +12,7 @@
     }
   },
   "required": [
-    "lane",
+    "lane_index",
     "trigger_mm",
     "classification"
   ]
