@@ -226,3 +226,27 @@
 - The JSON task payload appears truncated in this handoff (final command for `phase2-04` is incomplete), so the plan cannot be treated as fully machine-executable in current form.
 - Several task file paths use pre-package-root assumptions (missing `src/coloursorter/` prefix), creating path-resolution ambiguity for implementation tracking.
 - At least one task describes functionality already present in repository state (per-stage timing fields), indicating baseline drift between sprint plan and current codebase snapshot.
+
+---
+
+## 10) Action Next Sprint (Prioritized and Execution-Ready)
+
+1. **Fix protocol NACK-7 semantic mismatch first (BUSY vs WATCHDOG)**
+   - **Scope:** `src/coloursorter/bench/serial_transport.py`, `src/coloursorter/protocol/host.py`, compliance docs/tests.
+   - **Definition of done:** NACK code mappings are unambiguous, host + transport interpretation match, and protocol compliance tests assert code-7 behavior explicitly.
+
+2. **Unify SAFE transition policy between host and GUI flow**
+   - **Scope:** `src/coloursorter/protocol/host.py`, `gui/bench_app/controller.py`, `docs/openspec/v3/state_machine.md`.
+   - **Definition of done:** one authoritative SAFE transition contract is documented and implemented consistently (including GUI recovery behavior).
+
+3. **Add serial-path queue observability to bench GUI**
+   - **Scope:** `gui/bench_app/controller.py`, transport response plumbing.
+   - **Definition of done:** GUI displays real queue depth/clear-state in serial mode instead of static fallback depth values.
+
+4. **Correct trigger timestamp semantics to transport-aligned trigger execution time**
+   - **Scope:** `src/coloursorter/bench/runner.py`, `src/coloursorter/bench/virtual_encoder.py`, telemetry docs/tests.
+   - **Definition of done:** `trigger_timestamp_s` reflects modeled trigger execution timing, not pulse-presence proxy behavior.
+
+5. **Normalize stale sprint task paths before implementation begins**
+   - **Scope:** sprint plan JSON/task tracker references.
+   - **Definition of done:** every task points at valid repository paths (`src/coloursorter/...`, `docs/openspec/v3/protocol/commands.json`, etc.) and includes executable checkpoints.
