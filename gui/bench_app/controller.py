@@ -294,8 +294,7 @@ class BenchAppController(QObject):
 
     @Slot(object)
     def _on_transport_response_received(self, log_entry: BenchLogEntry) -> None:
-        self._latest_transport_queue_depth = max(0, int(log_entry.queue_depth))
-        self._latest_transport_queue_cleared = bool(log_entry.queue_cleared)
+        self._update_transport_queue_observation(log_entry.queue_depth, log_entry.queue_cleared)
         self.runtime_state.scheduler_state = log_entry.scheduler_state
         self._set_operator_mode(OperatorMode(log_entry.mode))
         self._apply_protocol_queue_side_effects(log_entry.queue_cleared)
@@ -458,6 +457,7 @@ class BenchAppController(QObject):
         ack = self._send_protocol_command("RESET_QUEUE")
         if ack is None or ack.status != "ACK":
             return None
+        self._update_transport_queue_observation(ack.queue_depth, ack.queue_cleared)
         self.runtime_state.scheduler_state = ack.scheduler_state or "IDLE"
         self._transport_clear_queue() if ack.queue_cleared else None
         return ack
@@ -487,10 +487,16 @@ class BenchAppController(QObject):
             return None
         if ack.status != "ACK":
             return None
+        self._update_transport_queue_observation(ack.queue_depth, ack.queue_cleared)
         self._set_operator_mode(target_mode)
         self.runtime_state.scheduler_state = ack.scheduler_state
         self._apply_protocol_queue_side_effects(ack.queue_cleared)
         return ack
+
+    def _update_transport_queue_observation(self, depth: object, queue_cleared: object) -> None:
+        if isinstance(depth, int) and depth >= 0:
+            self._latest_transport_queue_depth = depth
+        self._latest_transport_queue_cleared = bool(queue_cleared)
 
     @staticmethod
     def _is_mode_transition_allowed(current_mode: OperatorMode, target_mode: OperatorMode) -> bool:
@@ -543,11 +549,14 @@ class BenchAppController(QObject):
         return True
 
     def _transport_queue_depth(self) -> int:
-        if hasattr(self.transport, "current_queue_depth"):
-            depth = self.transport.current_queue_depth()
-            if isinstance(depth, int) and depth >= 0:
-                self._latest_transport_queue_depth = depth
-                return depth
+        for accessor_name in ("transport_queue_depth", "current_queue_depth"):
+            if hasattr(self.transport, accessor_name):
+                accessor = getattr(self.transport, accessor_name)
+                if callable(accessor):
+                    depth = accessor()
+                    if isinstance(depth, int) and depth >= 0:
+                        self._latest_transport_queue_depth = depth
+                        return depth
         return self._latest_transport_queue_depth
 
     def _transport_clear_queue(self) -> None:
@@ -555,11 +564,14 @@ class BenchAppController(QObject):
             self.transport.queue.clear()
 
     def _transport_last_queue_cleared(self) -> bool:
-        if hasattr(self.transport, "last_queue_cleared_observation"):
-            observed = self.transport.last_queue_cleared_observation()
-            if isinstance(observed, bool):
-                self._latest_transport_queue_cleared = observed
-                return observed
+        for accessor_name in ("transport_last_queue_cleared", "last_queue_cleared_observation"):
+            if hasattr(self.transport, accessor_name):
+                accessor = getattr(self.transport, accessor_name)
+                if callable(accessor):
+                    observed = accessor()
+                    if isinstance(observed, bool):
+                        self._latest_transport_queue_cleared = observed
+                        return observed
         return self._latest_transport_queue_cleared
 
     def _apply_protocol_queue_side_effects(self, queue_cleared: bool) -> None:

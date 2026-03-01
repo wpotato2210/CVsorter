@@ -30,6 +30,8 @@
   panels: live preview | lane overlay | queue depth/state | mode/homing | SAFE/watchdog | telemetry log
   I/O: BenchLogEntry stream -> table rows and status labels
   deps: PySide6, coloursorter.bench
+
+Note: Serial transport now exposes stable queue observability accessors (`transport_queue_depth`, `transport_last_queue_cleared`) so controller queue-state signals can report real queue depth/clear observations in serial mode.
 ```
 
 ## Pass/Fail scenarios
