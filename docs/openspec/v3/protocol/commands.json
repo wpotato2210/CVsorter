@@ -1,30 +1,95 @@
 {
+  "wire_format": {
+    "frame": "<CMD|arg1|arg2>",
+    "delimiter": "|",
+    "start_token": "<",
+    "end_token": ">",
+    "encoding": "ascii",
+    "notes": [
+      "CMD is an uppercase command token.",
+      "Arguments are positional and must match command metadata.",
+      "Literal '|' and angle brackets are not allowed inside argument payloads."
+    ]
+  },
   "commands": [
     {
       "name": "SET_MODE",
+      "description": "Switch controller mode.",
       "args": [
-        "mode"
+        {
+          "name": "mode",
+          "type": "enum",
+          "allowed": [
+            "AUTO",
+            "MANUAL",
+            "SAFE"
+          ]
+        }
       ]
     },
     {
       "name": "SCHED",
+      "description": "Enqueue lane trigger in millimeters.",
       "args": [
-        "lane",
-        "trigger_mm"
+        {
+          "name": "lane",
+          "type": "int",
+          "min": 0,
+          "max": 7
+        },
+        {
+          "name": "trigger_mm",
+          "type": "float",
+          "min": 0.0,
+          "max": 2000.0,
+          "precision_dp": 3
+        }
       ]
     },
     {
       "name": "GET_STATE",
+      "description": "Return mode, queue depth, and scheduler state.",
       "args": []
     },
     {
       "name": "RESET_QUEUE",
+      "description": "Clear all pending queue entries.",
       "args": []
     }
   ],
-  "ack_policy": {
-    "ack": "ACK",
-    "nack": "NACK",
-    "timeout_ms": 100
+  "ack_nack": {
+    "ack_token": "ACK",
+    "nack_token": "NACK",
+    "nack_codes": {
+      "0": "UNSPECIFIED",
+      "1": "UNKNOWN_COMMAND",
+      "2": "ARG_COUNT_MISMATCH",
+      "3": "ARG_RANGE_ERROR",
+      "4": "ARG_TYPE_ERROR",
+      "5": "INVALID_MODE_TRANSITION",
+      "6": "QUEUE_FULL",
+      "7": "BUSY",
+      "8": "MALFORMED_FRAME"
+    }
+  },
+  "retry_policy": {
+    "ack_timeout_ms": 100,
+    "max_retries": 3,
+    "backoff_ms": [
+      0,
+      50,
+      100
+    ],
+    "on_timeout": "Resend same frame up to max_retries then fail command with timeout error."
+  },
+  "state_transitions": {
+    "mode_change": {
+      "auto_clear_queue": true,
+      "description": "Any SET_MODE change clears queued SCHED entries before applying the target mode."
+    },
+    "safe_entry": {
+      "auto_clear_queue": true,
+      "description": "Queue is always cleared when entering SAFE, including AUTO->SAFE and MANUAL->SAFE."
+    }
   }
 }
