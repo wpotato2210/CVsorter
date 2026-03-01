@@ -325,3 +325,32 @@ def test_serial_transport_queue_depth_is_reflected_in_runtime_telemetry(
     controller._emit_runtime_state()
 
     assert queue_states[-1].depth == 2
+
+
+def test_invalid_transport_mode_token_forces_safe_state(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    events: list[BenchLogEntry] = []
+    controller.log_entry_requested.connect(lambda event: events.append(event))
+
+    controller._on_transport_response_received(
+        BenchLogEntry(
+            frame_timestamp_s=0.1,
+            trigger_generation_s=0.1,
+            lane=1,
+            decision="reject",
+            rejection_reason=None,
+            protocol_round_trip_ms=4.0,
+            ack_code=AckCode.ACK,
+            mode="UNKNOWN",
+            scheduler_state="ACTIVE",
+            queue_depth=1,
+            queue_cleared=False,
+        )
+    )
+
+    assert controller.runtime_state.controller_state == ControllerState.SAFE
+    assert controller.runtime_state.fault_state == FaultState.SAFE
+    assert controller.runtime_state.scheduler_state == "IDLE"
+    assert events[-1].decision == "protocol_mode_parse_error"

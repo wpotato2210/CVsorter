@@ -297,7 +297,26 @@ class BenchAppController(QObject):
         self._latest_transport_queue_depth = max(0, int(log_entry.queue_depth))
         self._latest_transport_queue_cleared = bool(log_entry.queue_cleared)
         self.runtime_state.scheduler_state = log_entry.scheduler_state
-        self._set_operator_mode(OperatorMode(log_entry.mode))
+        mode_token = str(log_entry.mode).strip().upper()
+        if mode_token not in OperatorMode._value2member_map_:
+            self.runtime_state.fault_state = FaultState.SAFE
+            self.runtime_state.scheduler_state = "IDLE"
+            self._transition_to(ControllerState.SAFE, overlay_text=f"Invalid mode token from transport: {mode_token}")
+            self.log_entry_requested.emit(
+                BenchLogEntry(
+                    frame_timestamp_s=log_entry.frame_timestamp_s,
+                    trigger_generation_s=log_entry.trigger_generation_s,
+                    lane=-1,
+                    decision="protocol_mode_parse_error",
+                    rejection_reason=f"invalid_mode_token:{mode_token}",
+                    protocol_round_trip_ms=log_entry.protocol_round_trip_ms,
+                    ack_code=log_entry.ack_code,
+                    nack_code=log_entry.nack_code,
+                    nack_detail=log_entry.nack_detail,
+                )
+            )
+            return
+        self._set_operator_mode(OperatorMode(mode_token))
         self._apply_protocol_queue_side_effects(log_entry.queue_cleared)
         self._emit_runtime_state()
 

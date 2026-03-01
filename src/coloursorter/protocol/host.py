@@ -15,6 +15,7 @@ from .constants import (
     LANE_MAX,
     LANE_MIN,
     MODE_AUTO,
+    MODE_SAFE,
     NACK_TOKEN,
     SCHEDULER_ACTIVE,
     SCHEDULER_IDLE,
@@ -97,6 +98,8 @@ class OpenSpecV3Host:
     def _sched(self, args: tuple[str, ...]) -> str:
         if len(args) != 2:
             return self._nack(NACK_ARG_COUNT_MISMATCH, DETAIL_ARG_COUNT_MISMATCH)
+        if self.mode == MODE_SAFE:
+            return self._nack(NACK_INVALID_MODE_TRANSITION, DETAIL_INVALID_MODE_TRANSITION)
         try:
             lane = int(args[0])
         except ValueError:

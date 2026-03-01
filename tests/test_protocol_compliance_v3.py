@@ -121,6 +121,15 @@ def test_host_enforces_shared_mode_transition_policy() -> None:
     assert manual_to_auto.status == "ACK"
 
 
+def test_sched_is_rejected_while_in_safe_mode() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2, mode="SAFE")
+
+    result = parse_ack_tokens(_response_tokens(host.handle_frame("<SCHED|1|10.0>")))
+
+    assert result.status == "NACK"
+    assert result.nack_code == 5
+
+
 @pytest.mark.parametrize(
     ("current_mode", "target_mode", "expected_status"),
     [
@@ -135,6 +144,8 @@ def test_host_enforces_shared_mode_transition_policy() -> None:
         ("SAFE", "SAFE", "ACK"),
     ],
 )
+
+
 def test_host_mode_transition_outcomes_match_contract(
     current_mode: str, target_mode: str, expected_status: str
 ) -> None:
