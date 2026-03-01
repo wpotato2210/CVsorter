@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("PySide6")
-from PySide6.QtWidgets import QApplication
+try:
+    from PySide6.QtWidgets import QApplication
+except ImportError:  # pragma: no cover - environment dependent
+    pytest.skip("PySide6 with system GL dependencies is required for GUI tests", allow_module_level=True)
 
 from coloursorter.bench import AckCode, BenchFrame, BenchLogEntry, FaultState
 from coloursorter.config import RuntimeConfig

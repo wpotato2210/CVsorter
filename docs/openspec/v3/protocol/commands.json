@@ -35,7 +35,7 @@
           "name": "lane",
           "type": "int",
           "min": 0,
-          "max": 7
+          "max": 21
         },
         {
           "name": "trigger_mm",
@@ -61,7 +61,6 @@
     "ack_token": "ACK",
     "nack_token": "NACK",
     "nack_codes": {
-      "0": "UNSPECIFIED",
       "1": "UNKNOWN_COMMAND",
       "2": "ARG_COUNT_MISMATCH",
       "3": "ARG_RANGE_ERROR",

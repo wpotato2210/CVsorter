@@ -54,9 +54,16 @@ class BenchRunner:
                 BenchLogEntry(
                     frame_timestamp_s=timestamp_s,
                     trigger_generation_s=trigger_generation_s,
+                    trigger_timestamp_s=trigger_generation_s,
+                    trigger_mm=command.position_mm,
                     lane=decision.lane,
+                    lane_index=decision.lane,
                     decision=decision.classification,
                     rejection_reason=decision.rejection_reason,
+                    belt_speed_mm_s=self._encoder.belt_speed_mm_per_s,
+                    queue_depth=response.queue_depth,
+                    scheduler_state=response.scheduler_state,
+                    mode=response.mode,
                     protocol_round_trip_ms=response.round_trip_ms,
                     ack_code=response.ack_code,
                 )

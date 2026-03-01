@@ -31,6 +31,10 @@ class AckResponse:
     status: str
     nack_code: int | None = None
     detail: str | None = None
+    mode: str | None = None
+    queue_depth: int | None = None
+    scheduler_state: str | None = None
+    queue_cleared: bool = False
 
 
 def _validate_token(token: str, field_name: str) -> None:
@@ -96,7 +100,28 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
 
     status = token_list[0].upper()
     if status == "ACK":
-        return AckResponse(status="ACK")
+        if len(token_list) == 1:
+            return AckResponse(status="ACK")
+        if len(token_list) != 5:
+            raise PacketValidationError("ACK metadata must be mode|queue_depth|scheduler_state|queue_cleared")
+        mode = token_list[1].strip().upper()
+        if mode not in {"AUTO", "MANUAL", "SAFE"}:
+            raise PacketValidationError("ACK mode must be AUTO, MANUAL, or SAFE")
+        try:
+            queue_depth = int(token_list[2])
+        except ValueError as exc:
+            raise PacketValidationError("ACK queue_depth must be an integer") from exc
+        scheduler_state = token_list[3].strip().upper()
+        raw_queue_cleared = token_list[4].strip().lower()
+        if raw_queue_cleared not in {"true", "false"}:
+            raise PacketValidationError("ACK queue_cleared must be true or false")
+        return AckResponse(
+            status="ACK",
+            mode=mode,
+            queue_depth=queue_depth,
+            scheduler_state=scheduler_state,
+            queue_cleared=raw_queue_cleared == "true",
+        )
     if status != "NACK":
         raise PacketValidationError("response must start with ACK or NACK")
 
@@ -106,6 +131,8 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
         nack_code = int(token_list[1])
     except ValueError as exc:
         raise PacketValidationError("nack_code must be an integer") from exc
+    if nack_code < 1 or nack_code > 8:
+        raise PacketValidationError("nack_code must be in the OpenSpec range 1..8")
 
     detail = token_list[2] if len(token_list) > 2 else None
     return AckResponse(status="NACK", nack_code=nack_code, detail=detail)

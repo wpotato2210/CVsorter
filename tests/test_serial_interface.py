@@ -30,20 +30,28 @@ def test_decode_packet_bytes_accepts_ascii_wire_payload(payload: bytes) -> None:
 
 
 def test_ack_and_nack_parsing() -> None:
-    ack = parse_ack_tokens(["ACK"])
-    nack = parse_ack_tokens(["NACK", "42", "QUEUE_FULL"])
+    ack = parse_ack_tokens(["ACK", "AUTO", "3", "ACTIVE", "true"])
+    nack = parse_ack_tokens(["NACK", "6", "QUEUE_FULL"])
 
     assert ack.status == "ACK"
-    assert ack.nack_code is None
+    assert ack.mode == "AUTO"
+    assert ack.queue_depth == 3
+    assert ack.scheduler_state == "ACTIVE"
+    assert ack.queue_cleared is True
 
     assert nack.status == "NACK"
-    assert nack.nack_code == 42
+    assert nack.nack_code == 6
     assert nack.detail == "QUEUE_FULL"
 
 
 def test_nack_requires_numeric_code() -> None:
     with pytest.raises(PacketValidationError, match="nack_code must be an integer"):
         parse_ack_tokens(["NACK", "NOT_A_NUMBER"])
+
+
+def test_nack_requires_openspec_range() -> None:
+    with pytest.raises(PacketValidationError, match="OpenSpec range 1..8"):
+        parse_ack_tokens(["NACK", "0"])
 
 
 def test_protocol_framing_rejects_malformed_frame() -> None:

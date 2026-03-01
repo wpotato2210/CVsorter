@@ -44,6 +44,9 @@ class TransportResponse:
     queue_depth: int
     round_trip_ms: float
     fault_state: FaultState = FaultState.NORMAL
+    scheduler_state: str = "IDLE"
+    mode: str = "AUTO"
+    queue_cleared: bool = False
 
 
 @dataclass(frozen=True)
@@ -55,3 +58,10 @@ class BenchLogEntry:
     rejection_reason: str | None
     protocol_round_trip_ms: float
     ack_code: AckCode
+    trigger_timestamp_s: float = 0.0
+    trigger_mm: float = 0.0
+    lane_index: int = -1
+    belt_speed_mm_s: float = 0.0
+    queue_depth: int = 0
+    scheduler_state: str = "IDLE"
+    mode: str = "AUTO"

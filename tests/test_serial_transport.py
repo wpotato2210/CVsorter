@@ -27,7 +27,7 @@ class _FakeSerial:
 
 
 def test_serial_transport_encodes_sched_and_parses_ack() -> None:
-    fake = _FakeSerial(b"<ACK>\n")
+    fake = _FakeSerial(b"<ACK|AUTO|1|ACTIVE|false>\n")
     transport = SerialMcuTransport(
         config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
         serial_factory=lambda **_: fake,
@@ -37,12 +37,15 @@ def test_serial_transport_encodes_sched_and_parses_ack() -> None:
 
     assert fake.written == b"<SCHED|1|200.000>\n"
     assert response.ack_code == AckCode.ACK
+    assert response.queue_depth == 1
+    assert response.scheduler_state == "ACTIVE"
+    assert response.mode == "AUTO"
     assert response.fault_state == FaultState.NORMAL
     assert transport.current_fault_state() == FaultState.NORMAL
 
 
 def test_serial_transport_maps_nack_watchdog() -> None:
-    fake = _FakeSerial(b"<NACK|3|WATCHDOG>\n")
+    fake = _FakeSerial(b"<NACK|7|WATCHDOG>\n")
     transport = SerialMcuTransport(
         config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
         serial_factory=lambda **_: fake,
@@ -58,9 +61,9 @@ def test_serial_transport_maps_nack_watchdog() -> None:
     ("raw_response", "expected_ack", "expected_fault"),
     [
         (b"<ACK>\n", AckCode.ACK, FaultState.NORMAL),
-        (b"<NACK|1|QUEUE_FULL>\n", AckCode.NACK_QUEUE_FULL, FaultState.NORMAL),
-        (b"<NACK|2|SAFE>\n", AckCode.NACK_SAFE, FaultState.SAFE),
-        (b"<NACK|3|WATCHDOG>\n", AckCode.NACK_WATCHDOG, FaultState.WATCHDOG),
+        (b"<NACK|6|QUEUE_FULL>\n", AckCode.NACK_QUEUE_FULL, FaultState.NORMAL),
+        (b"<NACK|5|SAFE>\n", AckCode.NACK_SAFE, FaultState.SAFE),
+        (b"<NACK|7|WATCHDOG>\n", AckCode.NACK_WATCHDOG, FaultState.WATCHDOG),
     ],
 )
 def test_serial_transport_contract_ack_nack_mapping(
@@ -113,7 +116,7 @@ def test_serial_transport_raises_structured_parse_error() -> None:
 
 
 def test_serial_transport_updates_current_fault_state_on_nack() -> None:
-    fake = _FakeSerial(b"<NACK|2|SAFE>\n")
+    fake = _FakeSerial(b"<NACK|5|SAFE>\n")
     transport = SerialMcuTransport(
         config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
         serial_factory=lambda **_: fake,
