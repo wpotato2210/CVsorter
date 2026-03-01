@@ -35,6 +35,17 @@ scenario_thresholds:
   stress_max_peak_rtt_ms: 60.0
   fault_max_avg_rtt_ms: 40.0
   fault_max_peak_rtt_ms: 80.0
+detection:
+  provider: opencv_basic
+  opencv_basic:
+    min_area_px: 120
+    reject_red_threshold: 140
+  opencv_calibrated:
+    min_area_px: 120
+    reject_hue_min: 0
+    reject_hue_max: 12
+    reject_saturation_min: 90
+    reject_value_min: 90
 """
 
 
@@ -52,6 +63,7 @@ def test_startup_config_accepts_canonical_values() -> None:
     assert config.transport.serial_port == "/dev/ttyUSB0"
     assert config.transport.serial_baud == 230400
     assert config.transport.serial_timeout_s == 0.25
+    assert config.detection.provider == "opencv_basic"
 
 
 def test_live_update_rejects_unknown_homing_mode() -> None:
@@ -69,3 +81,9 @@ def test_runtime_config_rejects_invalid_serial_timeout() -> None:
 def test_runtime_config_requires_nested_sections() -> None:
     with pytest.raises(ConfigValidationError, match="frame_source is required"):
         RuntimeConfig.from_text("motion_mode: FOLLOW_BELT\nhoming_mode: SKIP_HOME\n")
+
+
+def test_runtime_config_rejects_unknown_detection_provider() -> None:
+    raw_text = _canonical_text().replace("provider: opencv_basic", "provider: unknown")
+    with pytest.raises(ConfigValidationError, match="Unknown detection.provider"):
+        RuntimeConfig.from_text(raw_text)
