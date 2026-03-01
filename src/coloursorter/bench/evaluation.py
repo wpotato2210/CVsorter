@@ -65,6 +65,7 @@ def write_artifacts(
         writer.writerow(
             [
                 "frame_timestamp",
+                "trigger_generation_timestamp",
                 "trigger_timestamp",
                 "trigger_mm",
                 "lane_index",
@@ -90,6 +91,7 @@ def write_artifacts(
             writer.writerow(
                 [
                     f"{entry.frame_timestamp_s:.6f}",
+                    f"{entry.trigger_generation_s:.6f}",
                     f"{entry.trigger_timestamp_s:.6f}",
                     f"{entry.trigger_mm:.6f}",
                     entry.lane_index,

@@ -70,6 +70,7 @@ def test_latency_budget_at_pipeline_transport_boundary_with_mock_clock() -> None
     assert len(logs) == 1
     log = logs[0]
     assert log.trigger_generation_s == 1.050
+    assert log.trigger_timestamp_s > log.trigger_generation_s
     assert log.protocol_round_trip_ms <= 10.0
     assert log.ack_code == AckCode.ACK
 
@@ -97,6 +98,7 @@ def test_safe_transition_for_missing_pulses() -> None:
 
     assert len(logs) == 1
     assert logs[0].trigger_generation_s == 1.9
+    assert logs[0].trigger_timestamp_s > logs[0].trigger_generation_s
     assert logs[0].ack_code == AckCode.NACK_SAFE
 
 
@@ -123,6 +125,7 @@ def test_safe_transition_for_zero_belt_speed() -> None:
 
     assert len(logs) == 1
     assert logs[0].trigger_generation_s == 2.9
+    assert logs[0].trigger_timestamp_s == logs[0].trigger_generation_s
     assert logs[0].ack_code == AckCode.NACK_SAFE
 
 
