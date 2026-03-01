@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
+from typing import Iterator
 
 import cv2
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
 from coloursorter.bench import (
@@ -39,11 +41,32 @@ class BenchEncoderConfig:
     dropout_ratio: float
 
 
+class QueueConsumptionPolicy(str, Enum):
+    NONE = "none"
+    ONE_PER_TICK = "one_per_tick"
+    ALL = "all"
+
+
+@dataclass(frozen=True)
+class BenchCycleConfig:
+    period_ms: int
+    queue_consumption_policy: QueueConsumptionPolicy
+
+
+class ControllerState(str, Enum):
+    IDLE = "idle"
+    REPLAY_RUNNING = "replay_running"
+    LIVE_RUNNING = "live_running"
+    FAULTED = "faulted"
+    SAFE = "safe"
+
+
 @dataclass
 class BenchRuntimeState:
     mode: BenchMode
     previous_timestamp_s: float
     fault_state: FaultState
+    controller_state: ControllerState
 
 
 class BenchAppController(QObject):
@@ -69,7 +92,9 @@ class BenchAppController(QObject):
             mode=BenchMode.REPLAY,
             previous_timestamp_s=0.0,
             fault_state=FaultState.NORMAL,
+            controller_state=ControllerState.IDLE,
         )
+        self.cycle_config = BenchCycleConfig(period_ms=33, queue_consumption_policy=QueueConsumptionPolicy.ONE_PER_TICK)
 
         project_root = Path(__file__).resolve().parents[2]
         self.replay_source = ReplayFrameSource(project_root / "data", ReplayConfig(frame_period_s=1.0 / 30.0))
@@ -93,10 +118,14 @@ class BenchAppController(QObject):
             )
         )
         self.bench_runner = BenchRunner(self.pipeline, self.transport, self.encoder)
+        self._replay_frames_iter: Iterator | None = None
+        self._cycle_timer = QTimer(self)
+        self._cycle_timer.setInterval(self.cycle_config.period_ms)
+        self._cycle_timer.timeout.connect(self._on_cycle_tick)
 
         self._connect_view_actions()
         self._connect_view_updates()
-        self._emit_runtime_state()
+        self._transition_to(ControllerState.IDLE)
 
     def start(self) -> int:
         self.window.resize(1200, 900)
@@ -120,48 +149,137 @@ class BenchAppController(QObject):
             QueueState(
                 depth=len(self.transport.queue),
                 capacity=self.transport_config.max_queue_depth,
-                state=self.runtime_state.mode.value,
+                state=self.runtime_state.controller_state.value,
             )
         )
         self.fault_state_requested.emit(self.runtime_state.fault_state)
 
-    @Slot()
-    def on_replay_clicked(self) -> None:
-        self.runtime_state.mode = BenchMode.REPLAY
-        self.lane_overlay_requested.emit("Replay mode active")
+    def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
+        legal = {
+            ControllerState.IDLE: {
+                ControllerState.IDLE,
+                ControllerState.REPLAY_RUNNING,
+                ControllerState.LIVE_RUNNING,
+                ControllerState.FAULTED,
+                ControllerState.SAFE,
+            },
+            ControllerState.REPLAY_RUNNING: {
+                ControllerState.IDLE,
+                ControllerState.REPLAY_RUNNING,
+                ControllerState.FAULTED,
+                ControllerState.SAFE,
+            },
+            ControllerState.LIVE_RUNNING: {
+                ControllerState.IDLE,
+                ControllerState.LIVE_RUNNING,
+                ControllerState.FAULTED,
+                ControllerState.SAFE,
+            },
+            ControllerState.FAULTED: {ControllerState.IDLE, ControllerState.SAFE},
+            ControllerState.SAFE: {ControllerState.IDLE},
+        }
+        current = self.runtime_state.controller_state
+        if state not in legal[current]:
+            return
+
+        self.runtime_state.controller_state = state
+        running = state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}
+        if running and not self._cycle_timer.isActive():
+            self._cycle_timer.start()
+        if not running and self._cycle_timer.isActive():
+            self._cycle_timer.stop()
+
+        self.window.replay_button.setEnabled(state in {ControllerState.IDLE})
+        self.window.live_button.setEnabled(state in {ControllerState.IDLE})
+        self.window.home_button.setEnabled(state not in {ControllerState.SAFE})
+
+        if overlay_text is not None:
+            self.lane_overlay_requested.emit(overlay_text)
         self._emit_runtime_state()
 
-        for frame in self.replay_source.frames():
-            frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
-            self.frame_preview_requested.emit(frame_rgb.tobytes(), frame_rgb.shape[1], frame_rgb.shape[0])
+    @Slot()
+    def _on_cycle_tick(self) -> None:
+        if self.runtime_state.controller_state not in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
+            return
 
-            logs = self.bench_runner.run_cycle(
-                frame_id=frame.frame_id,
-                timestamp_s=frame.timestamp_s,
-                image_height_px=frame_rgb.shape[0],
-                image_width_px=frame_rgb.shape[1],
-                detections=[],
-                previous_timestamp_s=self.runtime_state.previous_timestamp_s,
-            )
-            self.runtime_state.previous_timestamp_s = frame.timestamp_s
-            for log_entry in logs:
-                self.log_entry_requested.emit(log_entry)
-            self._emit_runtime_state()
-            break
+        frame = self._next_frame()
+        if frame is None:
+            self._transition_to(ControllerState.IDLE, overlay_text="Replay complete")
+            return
+
+        frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
+        self.frame_preview_requested.emit(frame_rgb.tobytes(), frame_rgb.shape[1], frame_rgb.shape[0])
+
+        logs = self.bench_runner.run_cycle(
+            frame_id=frame.frame_id,
+            timestamp_s=frame.timestamp_s,
+            image_height_px=frame_rgb.shape[0],
+            image_width_px=frame_rgb.shape[1],
+            detections=[],
+            previous_timestamp_s=self.runtime_state.previous_timestamp_s,
+        )
+        self._step_transport_queue()
+
+        for log_entry in logs:
+            self.log_entry_requested.emit(log_entry)
+
+        self.runtime_state.previous_timestamp_s = frame.timestamp_s
+        self.runtime_state.fault_state = self.transport.fault_state
+
+        if self.runtime_state.fault_state == FaultState.SAFE:
+            self._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
+            return
+        if self.runtime_state.fault_state == FaultState.WATCHDOG:
+            self._transition_to(ControllerState.FAULTED, overlay_text="Watchdog fault active")
+            return
+        self._emit_runtime_state()
+
+    def _next_frame(self):
+        if self.runtime_state.controller_state == ControllerState.REPLAY_RUNNING:
+            if self._replay_frames_iter is None:
+                self._replay_frames_iter = self.replay_source.frames()
+            return next(self._replay_frames_iter, None)
+        if self.runtime_state.controller_state == ControllerState.LIVE_RUNNING:
+            if self._replay_frames_iter is None:
+                self._replay_frames_iter = self.replay_source.frames()
+            return next(self._replay_frames_iter, None)
+        return None
+
+    def _step_transport_queue(self) -> None:
+        if self.cycle_config.queue_consumption_policy == QueueConsumptionPolicy.NONE:
+            self.transport.step_queue(items_to_consume=0)
+            return
+        if self.cycle_config.queue_consumption_policy == QueueConsumptionPolicy.ALL:
+            self.transport.step_queue(items_to_consume=len(self.transport.queue))
+            return
+        self.transport.step_queue(items_to_consume=1)
+
+    @Slot()
+    def on_replay_clicked(self) -> None:
+        if self.runtime_state.controller_state != ControllerState.IDLE:
+            return
+        self.runtime_state.mode = BenchMode.REPLAY
+        self._replay_frames_iter = self.replay_source.frames()
+        self._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
 
     @Slot()
     def on_live_clicked(self) -> None:
+        if self.runtime_state.controller_state != ControllerState.IDLE:
+            return
         self.runtime_state.mode = BenchMode.LIVE
-        self.lane_overlay_requested.emit("Live mode active")
-        self._emit_runtime_state()
+        self._replay_frames_iter = self.replay_source.frames()
+        self._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
 
     @Slot()
     def on_home_clicked(self) -> None:
+        if self.runtime_state.controller_state == ControllerState.SAFE:
+            return
+        self._cycle_timer.stop()
         self.transport.queue.clear()
+        self._replay_frames_iter = None
         self.runtime_state.previous_timestamp_s = 0.0
         self.runtime_state.fault_state = FaultState.NORMAL
-        self.lane_overlay_requested.emit("Homing complete")
-        self._emit_runtime_state()
+        self._transition_to(ControllerState.IDLE, overlay_text="Homing complete")
         self.log_entry_requested.emit(
             BenchLogEntry(
                 frame_timestamp_s=0.0,
