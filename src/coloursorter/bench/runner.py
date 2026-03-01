@@ -46,11 +46,8 @@ class BenchRunner:
             image_height_px=image_height_px,
             image_width_px=image_width_px,
         )
-        pulses = self._encoder.pulses_between(previous_timestamp_s, timestamp_s)
-        if pulses > 0:
-            trigger_generation_s = self._encoder.last_pulse_timestamp_s or timestamp_s
-        else:
-            trigger_generation_s = self._encoder.last_pulse_timestamp_s or previous_timestamp_s
+        self._encoder.pulses_between(previous_timestamp_s, timestamp_s)
+        trigger_generation_s = self._encoder.resolve_trigger_generation_timestamp(previous_timestamp_s)
         ingest_latency_ms = (time.perf_counter() - ingest_started) * 1000.0
 
         decision_started = time.perf_counter()
@@ -63,12 +60,13 @@ class BenchRunner:
 
         logs: list[BenchLogEntry] = []
         for decision, command in scheduled_pairs:
-            projected_trigger_timestamp_s = trigger_generation_s
             belt_speed_mm_s = self._encoder.belt_speed_mm_per_s
-            if belt_speed_mm_s > 0.0:
-                travel_time_s = command.position_mm / belt_speed_mm_s
-                decision_schedule_time_s = (decision_latency_ms + schedule_latency_ms) / 1000.0
-                projected_trigger_timestamp_s = trigger_generation_s + decision_schedule_time_s + travel_time_s
+            decision_schedule_time_s = (decision_latency_ms + schedule_latency_ms) / 1000.0
+            projected_trigger_timestamp_s = self._encoder.project_trigger_timestamp(
+                trigger_generation_s=trigger_generation_s,
+                trigger_distance_mm=command.position_mm,
+                schedule_time_s=decision_schedule_time_s,
+            )
 
             transport_started = time.perf_counter()
             response = self._transport.send(command)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from coloursorter.bench.mock_transport import MockMcuTransport, MockTransportConfig
 from coloursorter.bench.runner import BenchRunner
 from coloursorter.bench.scenario_runner import run as run_scenario_cli
@@ -69,7 +71,7 @@ def test_latency_budget_at_pipeline_transport_boundary_with_mock_clock() -> None
 
     assert len(logs) == 1
     log = logs[0]
-    assert log.trigger_generation_s == 1.050
+    assert log.trigger_generation_s == pytest.approx(1.0466666666666666)
     assert log.trigger_timestamp_s > log.trigger_generation_s
     assert log.protocol_round_trip_ms <= 10.0
     assert log.ack_code == AckCode.ACK
