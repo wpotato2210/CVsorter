@@ -6,6 +6,10 @@ from coloursorter.scheduler.output import MAX_TRIGGER_MM, MIN_TRIGGER_MM
 from coloursorter.serial_interface import FrameFormatError, parse_frame, serialize_packet
 
 
+NACK_BUSY_CODE = 7
+NACK_BUSY_DETAIL = "BUSY"
+
+
 @dataclass
 class OpenSpecV3Host:
     max_queue_depth: int = 8
@@ -23,7 +27,7 @@ class OpenSpecV3Host:
         cmd = packet.command
         args = packet.args
         if self.busy:
-            return self._nack(7, "BUSY")
+            return self._nack(NACK_BUSY_CODE, NACK_BUSY_DETAIL)
         if cmd == "SET_MODE":
             return self._set_mode(args)
         if cmd == "SCHED":

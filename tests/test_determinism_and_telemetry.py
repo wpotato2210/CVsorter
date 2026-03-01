@@ -168,3 +168,21 @@ def test_encoder_dropout_ratio_one_drops_all_pulses() -> None:
 
     pulses = [encoder.pulses_between(i * 0.1, (i + 1) * 0.1) for i in range(10)]
     assert sum(pulses) == 0
+
+
+def test_watchdog_summary_counts_ack_code_not_nack_code_aliases() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(
+            MockTransportConfig(max_queue_depth=8, base_round_trip_ms=5.0, per_item_penalty_ms=1.0),
+            fault_state=FaultState.WATCHDOG,
+        ),
+        encoder=VirtualEncoder(EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0)),
+    )
+
+    watchdog_logs = runner.run_cycle(1, 0.2, 720, 1056, [_reject_detection()], 0.1)
+    assert watchdog_logs[0].nack_code is None
+
+    summary = BenchRunner.summarize(watchdog_logs)
+    assert summary.watchdog_transitions == 1
+

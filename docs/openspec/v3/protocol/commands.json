@@ -60,6 +60,10 @@
   "ack_nack": {
     "ack_token": "ACK",
     "nack_token": "NACK",
+    "canonical_rules": [
+      "NACK code 7 is reserved for BUSY and MUST use detail BUSY.",
+      "WATCHDOG is a transport-timeout fault state and not a NACK code mapping."
+    ],
     "nack_codes": {
       "1": "UNKNOWN_COMMAND",
       "2": "ARG_COUNT_MISMATCH",

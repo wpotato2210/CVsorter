@@ -10,6 +10,7 @@
 | Invalid mode transition | NACK-5 INVALID_MODE_TRANSITION | Disallow SAFE->AUTO | `tests/test_protocol_compliance_v3.py::test_nack_semantics_align_to_spec_codes_1_to_8` |
 | Queue full handling | NACK-6 QUEUE_FULL | Reject enqueue when full | `tests/test_protocol_compliance_v3.py::test_nack_semantics_align_to_spec_codes_1_to_8` |
 | Busy handling | NACK-7 BUSY | Return busy while host locked | `tests/test_protocol_compliance_v3.py::test_nack_semantics_align_to_spec_codes_1_to_8` |
+| NACK code 7 canonicalization | NACK-7 BUSY only | Reserve code 7 for BUSY detail only; WATCHDOG is transport-timeout fault telemetry and not a NACK-7 alias | `tests/test_protocol_compliance_v3.py::test_nack_code_7_is_canonical_busy_only`, `tests/test_serial_transport.py::test_serial_transport_treats_noncanonical_nack_code_7_watchdog_as_safe`, `tests/test_serial_transport.py::test_serial_transport_raises_structured_timeout_error` |
 | Malformed frame handling | NACK-8 MALFORMED_FRAME | Reject non-framed payload | `tests/test_protocol_compliance_v3.py::test_nack_semantics_align_to_spec_codes_1_to_8` |
 | ACK metadata | ACK | Parse mode/queue_depth/scheduler_state/queue_cleared | `tests/test_protocol_compliance_v3.py::test_ack_metadata_parsing_mode_queue_scheduler_and_queue_cleared` |
 | Queue clear on mode change | SET_MODE | queue auto-clear + queue_cleared true | `tests/test_protocol_compliance_v3.py::test_set_mode_transition_auto_clears_queue_and_safe_explicit_transition` |
