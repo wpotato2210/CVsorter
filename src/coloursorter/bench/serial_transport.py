@@ -56,10 +56,14 @@ class SerialMcuTransport:
         self._config = config
         self._serial_factory = serial_factory or _default_serial_factory
         self._serial = self._serial_factory(port=config.port, baudrate=config.baud, timeout=config.timeout_s)
+        self._last_fault_state = FaultState.NORMAL
 
     def close(self) -> None:
         if hasattr(self._serial, "close"):
             self._serial.close()
+
+    def current_fault_state(self) -> FaultState:
+        return self._last_fault_state
 
     def send(self, command: ScheduledCommand) -> TransportResponse:
         started = time.perf_counter()
@@ -69,6 +73,7 @@ class SerialMcuTransport:
         round_trip_ms = (time.perf_counter() - started) * 1000.0
 
         if not raw_response:
+            self._last_fault_state = FaultState.WATCHDOG
             raise SerialTransportError.create(
                 category="serial_timeout",
                 detail=f"No MCU response within {self._config.timeout_s:.3f}s",
@@ -79,6 +84,7 @@ class SerialMcuTransport:
             parsed = decode_packet_bytes(raw_response)
             ack = parse_ack_tokens((parsed.command, *parsed.args))
         except (FrameFormatError, PacketValidationError) as exc:
+            self._last_fault_state = FaultState.SAFE
             raise SerialTransportError.create(
                 category="serial_parse_error",
                 detail=str(exc),
@@ -86,6 +92,7 @@ class SerialMcuTransport:
             ) from exc
 
         ack_code, fault_state = _map_ack_to_bench_state(ack.status, ack.nack_code, ack.detail)
+        self._last_fault_state = fault_state
         return TransportResponse(
             ack_code=ack_code,
             queue_depth=0,

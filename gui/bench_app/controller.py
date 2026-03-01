@@ -9,9 +9,9 @@ from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
 from coloursorter.bench import (
+    BenchFrameSource,
     BenchLogEntry,
     BenchMode,
-    BenchFrameSource,
     BenchRunner,
     EncoderConfig,
     FaultState,
@@ -23,12 +23,16 @@ from coloursorter.bench import (
     ReplayConfig,
     ReplayFrameSource,
     VirtualEncoder,
-    default_scenarios,
     evaluate_logs,
+    scenarios_from_thresholds,
 )
-from coloursorter.deploy import PipelineRunner
+from coloursorter.bench.serial_transport import (
+    SerialMcuTransport,
+    SerialTransportConfig,
+    SerialTransportError,
+)
 from coloursorter.config import RuntimeConfig
-from coloursorter.bench.serial_transport import SerialMcuTransport, SerialTransportConfig
+from coloursorter.deploy import OpenCvDetectionProvider, PipelineRunner
 
 from .app import BenchMainWindow, QueueState
 
@@ -151,7 +155,8 @@ class BenchAppController(QObject):
             )
         )
         self.bench_runner = BenchRunner(self.pipeline, self.transport, self.encoder)
-        self._selected_scenarios = tuple(s for s in default_scenarios() if s.name == "nominal")
+        self._detector = OpenCvDetectionProvider()
+        self._selected_scenarios = tuple(s for s in scenarios_from_thresholds(runtime_config.scenario_thresholds) if s.name == "nominal")
         self._session_logs: list[BenchLogEntry] = []
         self._frame_source: BenchFrameSource | None = None
         self._cycle_timer = QTimer(self)
@@ -252,14 +257,20 @@ class BenchAppController(QObject):
         frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
         self.frame_preview_requested.emit(frame_rgb.tobytes(), frame_rgb.shape[1], frame_rgb.shape[0])
 
-        logs = self.bench_runner.run_cycle(
-            frame_id=frame.frame_id,
-            timestamp_s=frame.timestamp_s,
-            image_height_px=frame_rgb.shape[0],
-            image_width_px=frame_rgb.shape[1],
-            detections=[],
-            previous_timestamp_s=self.runtime_state.previous_timestamp_s,
-        )
+        detections = self._detector.detect(frame.image_bgr)
+        try:
+            logs = self.bench_runner.run_cycle(
+                frame_id=frame.frame_id,
+                timestamp_s=frame.timestamp_s,
+                image_height_px=frame_rgb.shape[0],
+                image_width_px=frame_rgb.shape[1],
+                detections=detections,
+                previous_timestamp_s=self.runtime_state.previous_timestamp_s,
+            )
+        except SerialTransportError as error:
+            self.runtime_state.fault_state = error.fault_state
+            self._transition_to(ControllerState.FAULTED, overlay_text=error.detail)
+            return
         self._step_transport_queue()
 
         for log_entry in logs:
@@ -267,7 +278,7 @@ class BenchAppController(QObject):
             self.log_entry_requested.emit(log_entry)
 
         self.runtime_state.previous_timestamp_s = frame.timestamp_s
-        self.runtime_state.fault_state = self.transport.fault_state
+        self.runtime_state.fault_state = self.transport.current_fault_state()
 
         if self.runtime_state.fault_state == FaultState.SAFE:
             self._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
