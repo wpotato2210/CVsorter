@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "frame_id": {
+      "type": "integer"
+    },
+    "timestamp": {
+      "type": "number"
+    },
+    "image_shape": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    }
+  },
+  "required": [
+    "frame_id",
+    "timestamp",
+    "image_shape"
+  ]
+}
