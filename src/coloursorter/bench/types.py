@@ -68,6 +68,7 @@ class BenchLogEntry:
     queue_depth: int = 0
     scheduler_state: str = "IDLE"
     mode: str = "AUTO"
+    queue_cleared: bool = False
     ingest_latency_ms: float = 0.0
     decision_latency_ms: float = 0.0
     schedule_latency_ms: float = 0.0

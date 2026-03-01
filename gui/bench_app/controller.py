@@ -153,6 +153,7 @@ class BenchAppController(QObject):
     fault_state_requested = Signal(object)
     log_entry_requested = Signal(object)
     mode_changed = Signal(object)
+    transport_response_received = Signal(object)
 
     def __init__(self, app: QApplication, runtime_config: RuntimeConfig) -> None:
         super().__init__()
@@ -230,6 +231,8 @@ class BenchAppController(QObject):
         )
         self._session_logs: list[BenchLogEntry] = []
         self._frame_source: BenchFrameSource | None = None
+        self._latest_transport_queue_depth = 0
+        self._latest_transport_queue_cleared = False
         self._cycle_timer = QTimer(self)
         self._cycle_timer.setInterval(self.cycle_config.period_ms)
         self._cycle_timer.timeout.connect(self._on_cycle_tick)
@@ -240,6 +243,7 @@ class BenchAppController(QObject):
         self._connect_view_actions()
         self._connect_view_updates()
         self.mode_changed.connect(self._on_mode_changed)
+        self.transport_response_received.connect(self._on_transport_response_received)
         self._on_controller_state_entered(ControllerState.IDLE)
 
     def start(self) -> int:
@@ -286,6 +290,15 @@ class BenchAppController(QObject):
     @Slot(object)
     def _on_mode_changed(self, mode: OperatorMode) -> None:
         self._update_buttons_for_mode(mode)
+        self._emit_runtime_state()
+
+    @Slot(object)
+    def _on_transport_response_received(self, log_entry: BenchLogEntry) -> None:
+        self._latest_transport_queue_depth = max(0, int(log_entry.queue_depth))
+        self._latest_transport_queue_cleared = bool(log_entry.queue_cleared)
+        self.runtime_state.scheduler_state = log_entry.scheduler_state
+        self._set_operator_mode(OperatorMode(log_entry.mode))
+        self._apply_protocol_queue_side_effects(log_entry.queue_cleared)
         self._emit_runtime_state()
 
     def _set_operator_mode(self, mode: OperatorMode) -> None:
@@ -364,8 +377,7 @@ class BenchAppController(QObject):
 
         for log_entry in logs:
             self._session_logs.append(log_entry)
-            self.runtime_state.scheduler_state = log_entry.scheduler_state
-            self._set_operator_mode(OperatorMode(log_entry.mode))
+            self.transport_response_received.emit(log_entry)
             self.log_entry_requested.emit(log_entry)
 
         self.runtime_state.previous_timestamp_s = frame.timestamp_s
@@ -504,14 +516,24 @@ class BenchAppController(QObject):
         return True
 
     def _transport_queue_depth(self) -> int:
-        return self.transport.current_queue_depth()
+        if hasattr(self.transport, "current_queue_depth"):
+            depth = self.transport.current_queue_depth()
+            if isinstance(depth, int) and depth >= 0:
+                self._latest_transport_queue_depth = depth
+                return depth
+        return self._latest_transport_queue_depth
 
     def _transport_clear_queue(self) -> None:
         if isinstance(self.transport, MockMcuTransport):
             self.transport.queue.clear()
 
     def _transport_last_queue_cleared(self) -> bool:
-        return self.transport.last_queue_cleared_observation()
+        if hasattr(self.transport, "last_queue_cleared_observation"):
+            observed = self.transport.last_queue_cleared_observation()
+            if isinstance(observed, bool):
+                self._latest_transport_queue_cleared = observed
+                return observed
+        return self._latest_transport_queue_cleared
 
     def _apply_protocol_queue_side_effects(self, queue_cleared: bool) -> None:
         if queue_cleared or self._transport_last_queue_cleared():

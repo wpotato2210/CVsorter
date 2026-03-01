@@ -88,6 +88,7 @@ class BenchRunner:
                     queue_depth=response.queue_depth,
                     scheduler_state=response.scheduler_state,
                     mode=response.mode,
+                    queue_cleared=response.queue_cleared,
                     protocol_round_trip_ms=response.round_trip_ms,
                     ack_code=response.ack_code,
                     ingest_latency_ms=ingest_latency_ms,
