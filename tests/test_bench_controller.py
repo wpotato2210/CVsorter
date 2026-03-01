@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from dataclasses import replace
 
 import pytest
 
@@ -11,6 +12,8 @@ except ImportError:  # pragma: no cover - environment dependent
     pytest.skip("PySide6 with system GL dependencies is required for GUI tests", allow_module_level=True)
 
 from coloursorter.bench import AckCode, BenchFrame, BenchLogEntry, FaultState
+from coloursorter.bench.types import TransportResponse
+from coloursorter.scheduler import ScheduledCommand
 from coloursorter.config import RuntimeConfig
 from gui.bench_app.app import BenchMainWindow, QueueState
 from gui.bench_app.controller import BenchAppController, ControllerState, OperatorMode
@@ -46,6 +49,38 @@ class _RecordingRunner:
     def run_cycle(self, **kwargs):
         self.calls.append(kwargs)
         return self.logs
+
+
+class _StubSerialTransport:
+    def __init__(self, *_args, **_kwargs) -> None:
+        self._fault_state = FaultState.NORMAL
+        self._queue_depth = 0
+        self._last_queue_cleared = False
+
+    def send(self, _command: ScheduledCommand) -> TransportResponse:
+        self._queue_depth = 2
+        self._last_queue_cleared = False
+        return TransportResponse(
+            ack_code=AckCode.ACK,
+            queue_depth=2,
+            round_trip_ms=4.0,
+            fault_state=FaultState.NORMAL,
+            scheduler_state="ACTIVE",
+            mode="AUTO",
+            queue_cleared=False,
+        )
+
+    def current_fault_state(self) -> FaultState:
+        return self._fault_state
+
+    def current_queue_depth(self) -> int:
+        return self._queue_depth
+
+    def last_queue_cleared_observation(self) -> bool:
+        return self._last_queue_cleared
+
+    def close(self) -> None:
+        return None
 
 
 @pytest.fixture(scope="module")
@@ -232,3 +267,21 @@ def test_safe_to_auto_transition_is_rejected_by_controller_policy(qapp: QApplica
     assert controller.recover_to_auto() is False
     assert controller.runtime_state.controller_state == ControllerState.SAFE
     assert controller.runtime_state.operator_mode == OperatorMode.SAFE
+
+
+def test_serial_transport_queue_depth_is_reflected_in_runtime_telemetry(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serial_runtime = replace(runtime_config, transport=replace(runtime_config.transport, kind="serial"))
+    monkeypatch.setattr("gui.bench_app.controller.SerialMcuTransport", _StubSerialTransport)
+    controller = BenchAppController(qapp, serial_runtime)
+    controller.bench_runner = _RecordingRunner(())
+
+    command = ScheduledCommand(lane=1, position_mm=200.0)
+    controller.transport.send(command)
+
+    queue_states: list[QueueState] = []
+    controller.queue_state_requested.connect(lambda state: queue_states.append(state))
+    controller._emit_runtime_state()
+
+    assert queue_states[-1].depth == 2

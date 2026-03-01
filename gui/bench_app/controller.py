@@ -416,16 +416,17 @@ class BenchAppController(QObject):
         return True
 
     def _transport_queue_depth(self) -> int:
-        if isinstance(self.transport, MockMcuTransport):
-            return len(self.transport.queue)
-        return 0
+        return self.transport.current_queue_depth()
 
     def _transport_clear_queue(self) -> None:
         if isinstance(self.transport, MockMcuTransport):
             self.transport.queue.clear()
 
+    def _transport_last_queue_cleared(self) -> bool:
+        return self.transport.last_queue_cleared_observation()
+
     def _apply_protocol_queue_side_effects(self, queue_cleared: bool) -> None:
-        if queue_cleared:
+        if queue_cleared or self._transport_last_queue_cleared():
             self._transport_clear_queue()
 
     def _protocol_set_mode(self, mode: str):
