@@ -122,6 +122,18 @@ def test_host_enforces_shared_mode_transition_policy() -> None:
     assert manual_to_auto.status == "ACK"
 
 
+@pytest.mark.parametrize("current_mode", ["AUTO", "MANUAL", "SAFE"])
+@pytest.mark.parametrize("target_mode", ["AUTO", "MANUAL", "SAFE"])
+def test_set_mode_results_match_policy_helper_for_every_mode_pair(current_mode: str, target_mode: str) -> None:
+    host = OpenSpecV3Host(max_queue_depth=2, mode=current_mode)
+
+    result = parse_ack_tokens(_response_tokens(host.handle_frame(f"<SET_MODE|{target_mode}>")))
+
+    expected_allowed = is_mode_transition_allowed(current_mode, target_mode)
+    expected_status = "ACK" if expected_allowed else "NACK"
+    assert result.status == expected_status
+
+
 @pytest.mark.parametrize(
     ("current_mode", "target_mode", "expected_status"),
     [
