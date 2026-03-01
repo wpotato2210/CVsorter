@@ -269,6 +269,22 @@ def test_safe_to_auto_transition_is_rejected_by_controller_policy(qapp: QApplica
     assert controller.runtime_state.operator_mode == OperatorMode.SAFE
 
 
+def test_mode_change_queue_clearing_updates_mock_transport_backing_host(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    controller.transport.send(ScheduledCommand(lane=1, position_mm=120.0))
+    assert controller.transport.current_queue_depth() == 1
+
+    ack = controller._set_protocol_mode(OperatorMode.MANUAL)
+
+    assert ack is not None
+    assert ack.queue_cleared is True
+    assert controller.transport.current_queue_depth() == 0
+    assert controller.runtime_state.scheduler_state == "IDLE"
+
+
 def test_mode_changed_signal_updates_home_button_label(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
 

@@ -30,7 +30,7 @@ from coloursorter.bench.serial_transport import SerialMcuTransport, SerialTransp
 from coloursorter.config import RuntimeConfig
 from coloursorter.deploy import OpenCvDetectionProvider, PipelineRunner
 from coloursorter.protocol import OpenSpecV3Host, is_mode_transition_allowed
-from coloursorter.serial_interface import parse_ack_tokens, parse_frame, serialize_packet
+from coloursorter.serial_interface import AckResponse, parse_ack_tokens, parse_frame, serialize_packet
 
 from .app import BenchMainWindow, QueueState
 
@@ -442,6 +442,27 @@ class BenchAppController(QObject):
             return
         self.transport.step_queue(items_to_consume=1)
 
+    def _send_protocol_command(self, command: str, args: tuple[object, ...] = ()) -> AckResponse | None:
+        if hasattr(self.transport, "send_command"):
+            sender = getattr(self.transport, "send_command")
+            if callable(sender):
+                ack = sender(command, args)
+                if isinstance(ack, AckResponse):
+                    return ack
+
+        response_frame = self._protocol_host.handle_frame(serialize_packet(command, args))
+        parsed_response = parse_frame(response_frame)
+        return parse_ack_tokens((parsed_response.command, *parsed_response.args))
+
+    def _reset_protocol_queue(self) -> AckResponse | None:
+        ack = self._send_protocol_command("RESET_QUEUE")
+        if ack is None or ack.status != "ACK":
+            return None
+        self.runtime_state.scheduler_state = ack.scheduler_state or "IDLE"
+        if ack.queue_cleared:
+            self._transport_clear_queue()
+        return ack
+
     def _publish_session_evaluation(self) -> None:
         evaluation = evaluate_logs(tuple(self._session_logs), self._selected_scenarios)
         result_line = "; ".join(f"{result.name}:{'PASS' if result.passed else 'FAIL'}" for result in evaluation.scenarios)
@@ -463,9 +484,9 @@ class BenchAppController(QObject):
         wanted_mode = GUI_TO_HOST_MODE[target_mode]
         if not is_mode_transition_allowed(current_mode, wanted_mode):
             return None
-        response_frame = self._protocol_host.handle_frame(serialize_packet("SET_MODE", (wanted_mode,)))
-        parsed_response = parse_frame(response_frame)
-        ack = parse_ack_tokens((parsed_response.command, *parsed_response.args))
+        ack = self._send_protocol_command("SET_MODE", (wanted_mode,))
+        if ack is None:
+            return None
         if ack.status != "ACK":
             return None
         self._set_operator_mode(target_mode)
@@ -524,6 +545,11 @@ class BenchAppController(QObject):
         return self._latest_transport_queue_depth
 
     def _transport_clear_queue(self) -> None:
+        if hasattr(self.transport, "clear_queue_state"):
+            clear_fn = getattr(self.transport, "clear_queue_state")
+            if callable(clear_fn):
+                clear_fn()
+                return
         if isinstance(self.transport, MockMcuTransport):
             self.transport.queue.clear()
 
@@ -567,7 +593,7 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
             self._publish_session_evaluation()
         self._cycle_timer.stop()
-        self._transport_clear_queue()
+        self._reset_protocol_queue()
         self._release_frame_source()
         self.runtime_state.previous_timestamp_s = 0.0
         self.runtime_state.fault_state = FaultState.NORMAL
