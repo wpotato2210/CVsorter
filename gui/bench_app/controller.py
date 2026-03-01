@@ -152,6 +152,7 @@ class BenchAppController(QObject):
     queue_state_requested = Signal(object)
     fault_state_requested = Signal(object)
     log_entry_requested = Signal(object)
+    mode_changed = Signal(object)
 
     def __init__(self, app: QApplication, runtime_config: RuntimeConfig) -> None:
         super().__init__()
@@ -238,6 +239,7 @@ class BenchAppController(QObject):
 
         self._connect_view_actions()
         self._connect_view_updates()
+        self.mode_changed.connect(self._on_mode_changed)
         self._on_controller_state_entered(ControllerState.IDLE)
 
     def start(self) -> int:
@@ -277,10 +279,31 @@ class BenchAppController(QObject):
         if not running and self._cycle_timer.isActive():
             self._cycle_timer.stop()
 
+        self._update_buttons_for_controller_state(state)
+        self._update_buttons_for_mode(self.runtime_state.operator_mode)
+        self._emit_runtime_state()
+
+    @Slot(object)
+    def _on_mode_changed(self, mode: OperatorMode) -> None:
+        self._update_buttons_for_mode(mode)
+        self._emit_runtime_state()
+
+    def _set_operator_mode(self, mode: OperatorMode) -> None:
+        if self.runtime_state.operator_mode == mode:
+            return
+        self.runtime_state.operator_mode = mode
+        self.mode_changed.emit(mode)
+
+    def _update_buttons_for_controller_state(self, state: ControllerState) -> None:
         self.window.replay_button.setEnabled(state == ControllerState.IDLE)
         self.window.live_button.setEnabled(state == ControllerState.IDLE)
         self.window.home_button.setEnabled(state != ControllerState.FAULTED)
-        self._emit_runtime_state()
+
+    def _update_buttons_for_mode(self, mode: OperatorMode) -> None:
+        if mode == OperatorMode.SAFE:
+            self.window.home_button.setText("Clear SAFE")
+        else:
+            self.window.home_button.setText("Home")
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
         if state == self.runtime_state.controller_state:
@@ -342,7 +365,7 @@ class BenchAppController(QObject):
         for log_entry in logs:
             self._session_logs.append(log_entry)
             self.runtime_state.scheduler_state = log_entry.scheduler_state
-            self.runtime_state.operator_mode = OperatorMode(log_entry.mode)
+            self._set_operator_mode(OperatorMode(log_entry.mode))
             self.log_entry_requested.emit(log_entry)
 
         self.runtime_state.previous_timestamp_s = frame.timestamp_s
@@ -433,7 +456,7 @@ class BenchAppController(QObject):
         ack = parse_ack_tokens((parsed_response.command, *parsed_response.args))
         if ack.status != "ACK":
             return None
-        self.runtime_state.operator_mode = target_mode
+        self._set_operator_mode(target_mode)
         self.runtime_state.scheduler_state = ack.scheduler_state
         self._apply_protocol_queue_side_effects(ack.queue_cleared)
         return ack
@@ -460,6 +483,8 @@ class BenchAppController(QObject):
         return True
 
     def recover_to_auto(self) -> bool:
+        if self.runtime_state.controller_state == ControllerState.SAFE:
+            return False
         ack = self._set_protocol_mode(OperatorMode.AUTO)
         if ack is None:
             return False

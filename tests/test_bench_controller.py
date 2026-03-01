@@ -225,8 +225,8 @@ def test_controller_cycle_uses_detector_output_for_runner(
 def test_safe_state_home_recovery_transitions_to_manual_only(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
     controller.runtime_state.fault_state = FaultState.SAFE
-    controller.runtime_state.operator_mode = OperatorMode.SAFE
-    controller._protocol_set_mode("SAFE")
+    controller._set_operator_mode(OperatorMode.SAFE)
+    controller._set_protocol_mode(OperatorMode.SAFE)
     controller._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
 
     controller.on_home_clicked()
@@ -239,8 +239,8 @@ def test_safe_state_home_recovery_transitions_to_manual_only(qapp: QApplication,
 def test_safe_state_can_recover_manual_then_auto(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
     controller.runtime_state.fault_state = FaultState.SAFE
-    controller.runtime_state.operator_mode = OperatorMode.SAFE
-    controller._protocol_set_mode("SAFE")
+    controller._set_operator_mode(OperatorMode.SAFE)
+    controller._set_protocol_mode(OperatorMode.SAFE)
     controller._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
 
     assert controller.recover_safe_to_manual() is True
@@ -260,14 +260,54 @@ def test_safe_recovery_calls_are_rejected_when_not_in_safe(qapp: QApplication, r
 def test_safe_to_auto_transition_is_rejected_by_controller_policy(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
     controller.runtime_state.fault_state = FaultState.SAFE
-    controller.runtime_state.operator_mode = OperatorMode.SAFE
-    controller._protocol_set_mode("SAFE")
+    controller._set_operator_mode(OperatorMode.SAFE)
+    controller._set_protocol_mode(OperatorMode.SAFE)
     controller._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
 
     assert controller.recover_to_auto() is False
     assert controller.runtime_state.controller_state == ControllerState.SAFE
     assert controller.runtime_state.operator_mode == OperatorMode.SAFE
 
+
+def test_mode_changed_signal_updates_home_button_label(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    controller._set_operator_mode(OperatorMode.SAFE)
+    assert controller.window.home_button.text() == "Clear SAFE"
+
+    controller._set_operator_mode(OperatorMode.MANUAL)
+    assert controller.window.home_button.text() == "Home"
+
+
+
+
+@pytest.mark.parametrize(
+    ("current_mode", "target_mode", "expected_allowed"),
+    [
+        (OperatorMode.AUTO, OperatorMode.AUTO, True),
+        (OperatorMode.AUTO, OperatorMode.MANUAL, True),
+        (OperatorMode.AUTO, OperatorMode.SAFE, True),
+        (OperatorMode.MANUAL, OperatorMode.AUTO, True),
+        (OperatorMode.MANUAL, OperatorMode.MANUAL, True),
+        (OperatorMode.MANUAL, OperatorMode.SAFE, True),
+        (OperatorMode.SAFE, OperatorMode.AUTO, False),
+        (OperatorMode.SAFE, OperatorMode.MANUAL, True),
+        (OperatorMode.SAFE, OperatorMode.SAFE, True),
+    ],
+)
+def test_controller_mode_transition_outcomes_match_protocol_contract(
+    qapp: QApplication,
+    runtime_config: RuntimeConfig,
+    current_mode: OperatorMode,
+    target_mode: OperatorMode,
+    expected_allowed: bool,
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller._set_operator_mode(current_mode)
+
+    ack = controller._set_protocol_mode(target_mode)
+
+    assert (ack is not None) is expected_allowed
 
 def test_serial_transport_queue_depth_is_reflected_in_runtime_telemetry(
     qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch

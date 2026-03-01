@@ -6,6 +6,16 @@
 - `SAFE`
 
 ## Transition rules
+### Mode transition contract (single source for host + GUI)
+
+| From \ To | AUTO | MANUAL | SAFE |
+| --- | --- | --- | --- |
+| AUTO | ✅ allowed | ✅ allowed | ✅ allowed |
+| MANUAL | ✅ allowed | ✅ allowed | ✅ allowed |
+| SAFE | ❌ rejected (`NACK|5|INVALID_MODE_TRANSITION`) | ✅ allowed | ✅ allowed |
+
+`recover_to_auto` is therefore only valid when controller mode is not `SAFE` (canonical path remains `SAFE -> MANUAL -> AUTO`).
+
 1. `SET_MODE` is the only command that changes controller mode.
 2. Mode authority is host-owned. GUI recovery actions are GUI-assisted command issuers only.
 3. Any accepted mode change clears queued scheduler entries before applying target mode.
