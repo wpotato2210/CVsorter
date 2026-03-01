@@ -44,6 +44,26 @@ def test_serial_transport_encodes_sched_and_parses_ack() -> None:
     assert response.mode == "AUTO"
     assert response.fault_state == FaultState.NORMAL
     assert transport.current_fault_state() == FaultState.NORMAL
+    assert transport.current_queue_depth() == 1
+    assert transport.last_queue_cleared_observation() is False
+
+
+def test_serial_transport_persists_latest_queue_state_from_ack() -> None:
+    fake = _FakeSerial([b"<ACK|AUTO|2|ACTIVE|false>\n", b"<ACK|AUTO|0|IDLE|true>\n"])
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: fake,
+    )
+
+    first = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
+    second = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
+
+    assert first.queue_depth == 2
+    assert first.queue_cleared is False
+    assert second.queue_depth == 0
+    assert second.queue_cleared is True
+    assert transport.current_queue_depth() == 0
+    assert transport.last_queue_cleared_observation() is True
 
 
 def test_serial_transport_maps_nack_busy() -> None:

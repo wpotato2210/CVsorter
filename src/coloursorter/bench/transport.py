@@ -13,3 +13,9 @@ class McuTransport(Protocol):
 
     def current_fault_state(self) -> FaultState:
         ...
+
+    def current_queue_depth(self) -> int:
+        ...
+
+    def last_queue_cleared_observation(self) -> bool:
+        ...

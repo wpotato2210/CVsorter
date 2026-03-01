@@ -19,8 +19,10 @@ class MockMcuTransport:
     config: MockTransportConfig
     fault_state: FaultState = FaultState.NORMAL
     queue: list[ScheduledCommand] = field(default_factory=list)
+    _last_queue_cleared: bool = False
 
     def send(self, command: ScheduledCommand) -> TransportResponse:
+        self._last_queue_cleared = False
         if self.fault_state == FaultState.SAFE:
             return TransportResponse(AckCode.NACK_SAFE, len(self.queue), self._round_trip_ms(), FaultState.SAFE, nack_code=5, nack_detail="SAFE")
         if self.fault_state == FaultState.WATCHDOG:
@@ -33,11 +35,19 @@ class MockMcuTransport:
 
     def step_queue(self, items_to_consume: int = 1) -> None:
         consume = max(0, min(items_to_consume, len(self.queue)))
+        self._last_queue_cleared = False
         if consume:
             del self.queue[:consume]
+            self._last_queue_cleared = len(self.queue) == 0
 
     def current_fault_state(self) -> FaultState:
         return self.fault_state
+
+    def current_queue_depth(self) -> int:
+        return len(self.queue)
+
+    def last_queue_cleared_observation(self) -> bool:
+        return self._last_queue_cleared
 
     def _round_trip_ms(self) -> float:
         return self.config.base_round_trip_ms + len(self.queue) * self.config.per_item_penalty_ms

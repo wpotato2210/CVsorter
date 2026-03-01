@@ -61,6 +61,8 @@ class SerialMcuTransport:
         self._serial_factory = serial_factory or _default_serial_factory
         self._serial = self._serial_factory(port=config.port, baudrate=config.baud, timeout=config.timeout_s)
         self._last_fault_state = FaultState.NORMAL
+        self._last_queue_depth = 0
+        self._last_queue_cleared = False
         self._sleep = sleep_fn or time.sleep
 
     def close(self) -> None:
@@ -69,6 +71,12 @@ class SerialMcuTransport:
 
     def current_fault_state(self) -> FaultState:
         return self._last_fault_state
+
+    def current_queue_depth(self) -> int:
+        return self._last_queue_depth
+
+    def last_queue_cleared_observation(self) -> bool:
+        return self._last_queue_cleared
 
     def send(self, command: ScheduledCommand) -> TransportResponse:
         payload = encode_schedule_command(command)
@@ -103,14 +111,16 @@ class SerialMcuTransport:
 
             ack_code, fault_state = _map_ack_to_bench_state(ack.status, ack.nack_code, ack.detail)
             self._last_fault_state = fault_state
+            self._last_queue_depth = ack.queue_depth or 0
+            self._last_queue_cleared = ack.queue_cleared
             return TransportResponse(
                 ack_code=ack_code,
-                queue_depth=ack.queue_depth or 0,
+                queue_depth=self._last_queue_depth,
                 round_trip_ms=round_trip_ms,
                 fault_state=fault_state,
                 scheduler_state=ack.scheduler_state or "UNKNOWN",
                 mode=ack.mode or "UNKNOWN",
-                queue_cleared=ack.queue_cleared,
+                queue_cleared=self._last_queue_cleared,
                 nack_code=ack.nack_code,
                 nack_detail=ack.detail,
             )
