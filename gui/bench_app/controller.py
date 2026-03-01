@@ -479,10 +479,9 @@ class BenchAppController(QObject):
         )
 
     def _set_protocol_mode(self, target_mode: OperatorMode):
-        current_mode = GUI_TO_HOST_MODE[self.runtime_state.operator_mode]
-        wanted_mode = GUI_TO_HOST_MODE[target_mode]
-        if not is_mode_transition_allowed(current_mode, wanted_mode):
+        if not self._is_mode_transition_allowed(self.runtime_state.operator_mode, target_mode):
             return None
+        wanted_mode = GUI_TO_HOST_MODE[target_mode]
         ack = self._send_protocol_command("SET_MODE", (wanted_mode,))
         if ack is None:
             return None
@@ -493,8 +492,14 @@ class BenchAppController(QObject):
         self._apply_protocol_queue_side_effects(ack.queue_cleared)
         return ack
 
+    @staticmethod
+    def _is_mode_transition_allowed(current_mode: OperatorMode, target_mode: OperatorMode) -> bool:
+        return is_mode_transition_allowed(GUI_TO_HOST_MODE[current_mode], GUI_TO_HOST_MODE[target_mode])
+
     def recover_safe_to_manual(self) -> bool:
         if self.runtime_state.controller_state != ControllerState.SAFE:
+            return False
+        if not self._is_mode_transition_allowed(self.runtime_state.operator_mode, OperatorMode.MANUAL):
             return False
         ack = self._set_protocol_mode(OperatorMode.MANUAL)
         if ack is None:
@@ -515,7 +520,9 @@ class BenchAppController(QObject):
         return True
 
     def recover_to_auto(self) -> bool:
-        if self.runtime_state.controller_state == ControllerState.SAFE:
+        if self.runtime_state.controller_state != ControllerState.IDLE:
+            return False
+        if not self._is_mode_transition_allowed(self.runtime_state.operator_mode, OperatorMode.AUTO):
             return False
         ack = self._set_protocol_mode(OperatorMode.AUTO)
         if ack is None:

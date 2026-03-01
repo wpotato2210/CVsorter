@@ -14,7 +14,7 @@
 | MANUAL | ✅ allowed | ✅ allowed | ✅ allowed |
 | SAFE | ❌ rejected (`NACK|5|INVALID_MODE_TRANSITION`) | ✅ allowed | ✅ allowed |
 
-`recover_to_auto` is therefore only valid when controller mode is not `SAFE` (canonical path remains `SAFE -> MANUAL -> AUTO`).
+`recover_to_auto` is therefore only valid when controller state is `IDLE` and the mode policy allows the transition (canonical SAFE path remains `SAFE -> MANUAL -> AUTO`).
 
 1. `SET_MODE` is the only command that changes controller mode.
 2. Mode authority is host-owned. GUI recovery actions are GUI-assisted command issuers only.
@@ -41,4 +41,6 @@
   - `SAFE -> MANUAL`: allowed through `SET_MODE|MANUAL`.
   - `SAFE -> AUTO`: forbidden (`NACK|5|INVALID_MODE_TRANSITION`).
   - `MANUAL -> AUTO`: allowed through `SET_MODE|AUTO`.
+- `Home` in SAFE is constrained to `recover_safe_to_manual()` only; it does not attempt AUTO promotion.
+- AUTO recovery controls are exposed only for `IDLE` states so replay/live runs cannot bypass transition guards.
 - Validation references: `tests/test_bench_controller.py` and `tests/test_protocol_compliance_v3.py`.

@@ -269,6 +269,19 @@ def test_safe_to_auto_transition_is_rejected_by_controller_policy(qapp: QApplica
     assert controller.runtime_state.operator_mode == OperatorMode.SAFE
 
 
+def test_recover_to_auto_requires_idle_controller_state(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller._set_operator_mode(OperatorMode.MANUAL)
+    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+
+    assert controller.recover_to_auto() is False
+    assert controller.runtime_state.operator_mode == OperatorMode.MANUAL
+
+    controller._transition_to(ControllerState.IDLE)
+    assert controller.recover_to_auto() is True
+    assert controller.runtime_state.operator_mode == OperatorMode.AUTO
+
+
 def test_mode_changed_signal_updates_home_button_label(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
 
