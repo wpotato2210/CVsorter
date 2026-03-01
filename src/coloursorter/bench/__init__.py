@@ -3,6 +3,7 @@ from .live_source import LiveConfig, LiveFrameSource
 from .mock_transport import MockMcuTransport, MockTransportConfig
 from .replay_source import ReplayConfig, ReplayFrameSource
 from .runner import BenchRunResult, BenchRunner
+from .evaluation import BenchEvaluation, evaluate_logs, write_artifacts
 from .serial_transport import SerialMcuTransport, SerialTransportConfig, SerialTransportError
 from .transport import McuTransport
 from .scenarios import BenchScenario, BenchSummary, ScenarioResult, default_scenarios
@@ -16,6 +17,7 @@ __all__ = [
     "BenchMode",
     "BenchRunResult",
     "BenchRunner",
+    "BenchEvaluation",
     "BenchScenario",
     "BenchSummary",
     "BenchFrameSource",
@@ -38,4 +40,6 @@ __all__ = [
     "TriggerEvent",
     "VirtualEncoder",
     "default_scenarios",
+    "evaluate_logs",
+    "write_artifacts",
 ]
