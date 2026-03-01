@@ -95,9 +95,12 @@ class SerialMcuTransport:
         self._last_fault_state = fault_state
         return TransportResponse(
             ack_code=ack_code,
-            queue_depth=0,
+            queue_depth=ack.queue_depth or 0,
             round_trip_ms=round_trip_ms,
             fault_state=fault_state,
+            scheduler_state=ack.scheduler_state or "UNKNOWN",
+            mode=ack.mode or "UNKNOWN",
+            queue_cleared=ack.queue_cleared,
         )
 
 
@@ -106,11 +109,11 @@ def _map_ack_to_bench_state(status: str, nack_code: int | None, detail: str | No
         return AckCode.ACK, FaultState.NORMAL
 
     normalized_detail = (detail or "").strip().upper()
-    if nack_code == 1 or normalized_detail == "QUEUE_FULL":
+    if nack_code == 6 or normalized_detail == "QUEUE_FULL":
         return AckCode.NACK_QUEUE_FULL, FaultState.NORMAL
-    if nack_code == 2 or normalized_detail == "SAFE":
+    if nack_code == 5 or normalized_detail == "SAFE":
         return AckCode.NACK_SAFE, FaultState.SAFE
-    if nack_code == 3 or normalized_detail == "WATCHDOG":
+    if nack_code == 7 or normalized_detail == "WATCHDOG":
         return AckCode.NACK_WATCHDOG, FaultState.WATCHDOG
     return AckCode.NACK_SAFE, FaultState.SAFE
 
