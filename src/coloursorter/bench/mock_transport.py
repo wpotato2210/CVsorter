@@ -22,14 +22,14 @@ class MockMcuTransport:
 
     def send(self, command: ScheduledCommand) -> TransportResponse:
         if self.fault_state == FaultState.SAFE:
-            return TransportResponse(AckCode.NACK_SAFE, len(self.queue), self._round_trip_ms())
+            return TransportResponse(AckCode.NACK_SAFE, len(self.queue), self._round_trip_ms(), FaultState.SAFE)
         if self.fault_state == FaultState.WATCHDOG:
-            return TransportResponse(AckCode.NACK_WATCHDOG, len(self.queue), self._round_trip_ms())
+            return TransportResponse(AckCode.NACK_WATCHDOG, len(self.queue), self._round_trip_ms(), FaultState.WATCHDOG)
         if len(self.queue) >= self.config.max_queue_depth:
-            return TransportResponse(AckCode.NACK_QUEUE_FULL, len(self.queue), self._round_trip_ms())
+            return TransportResponse(AckCode.NACK_QUEUE_FULL, len(self.queue), self._round_trip_ms(), FaultState.NORMAL)
 
         self.queue.append(command)
-        return TransportResponse(AckCode.ACK, len(self.queue), self._round_trip_ms())
+        return TransportResponse(AckCode.ACK, len(self.queue), self._round_trip_ms(), FaultState.NORMAL)
 
     def step_queue(self, items_to_consume: int = 1) -> None:
         consume = max(0, min(items_to_consume, len(self.queue)))
