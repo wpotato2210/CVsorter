@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from coloursorter.scheduler.output import MAX_TRIGGER_MM, MIN_TRIGGER_MM
 from coloursorter.serial_interface import FrameFormatError, parse_frame, serialize_packet
 
 
@@ -71,7 +72,7 @@ class OpenSpecV3Host:
 
         if lane < 0 or lane > 21:
             return self._nack(3, "ARG_RANGE_ERROR")
-        if trigger_mm < 0.0 or trigger_mm > 2000.0:
+        if trigger_mm < MIN_TRIGGER_MM or trigger_mm > MAX_TRIGGER_MM:
             return self._nack(3, "ARG_RANGE_ERROR")
         if len(self.queue) >= self.max_queue_depth:
             return self._nack(6, "QUEUE_FULL")

@@ -79,3 +79,11 @@ def test_compliance_matrix_artifact_is_present() -> None:
     content = matrix_path.read_text(encoding="utf-8")
     assert "OpenSpec v3 Protocol Compliance Matrix" in content
     assert "NACK-8 MALFORMED_FRAME" in content
+
+
+def test_scheduler_and_host_trigger_bounds_match() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2)
+
+    assert _response_tokens(host.handle_frame("<SCHED|2|0.0>"))[:1] == ["ACK"]
+    assert _response_tokens(host.handle_frame("<SCHED|2|2000.0>"))[:1] == ["ACK"]
+    assert _response_tokens(host.handle_frame("<SCHED|2|2000.001>"))[:2] == ["NACK", "3"]

@@ -62,3 +62,13 @@ def test_protocol_framing_rejects_malformed_frame() -> None:
 def test_wire_encoder_serializes_sched_command() -> None:
     payload = encode_schedule_command(ScheduledCommand(lane=9, position_mm=412.3456))
     assert payload == b"<SCHED|9|412.346>\n"
+
+
+def test_ack_metadata_rejects_negative_queue_depth() -> None:
+    with pytest.raises(PacketValidationError, match="queue_depth must be >= 0"):
+        parse_ack_tokens(["ACK", "AUTO", "-1", "ACTIVE", "false"])
+
+
+def test_ack_metadata_rejects_unknown_scheduler_state() -> None:
+    with pytest.raises(PacketValidationError, match="scheduler_state must be IDLE or ACTIVE"):
+        parse_ack_tokens(["ACK", "AUTO", "1", "PAUSED", "false"])

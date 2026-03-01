@@ -113,3 +113,58 @@ def test_queue_timing_behavior_under_sustained_load() -> None:
         round_trips.append(log.protocol_round_trip_ms)
 
     assert round_trips == sorted(round_trips)
+
+
+def test_stage_latency_fields_are_populated_for_each_log() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5)),
+        encoder=VirtualEncoder(EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0)),
+    )
+
+    logs = runner.run_cycle(
+        frame_id=9,
+        timestamp_s=0.9,
+        image_height_px=720,
+        image_width_px=1056,
+        detections=[_reject_detection()],
+        previous_timestamp_s=0.8,
+    )
+
+    log = logs[0]
+    assert log.ingest_latency_ms >= 0.0
+    assert log.decision_latency_ms >= 0.0
+    assert log.schedule_latency_ms >= 0.0
+    assert log.transport_latency_ms >= 0.0
+    assert log.cycle_latency_ms >= 0.0
+    assert log.cycle_latency_ms >= log.transport_latency_ms
+
+
+def test_encoder_dropout_ratio_quantization_behavior_is_deterministic() -> None:
+    encoder = VirtualEncoder(
+        EncoderConfig(
+            pulses_per_revolution=100,
+            belt_speed_mm_per_s=100.0,
+            pulley_circumference_mm=200.0,
+            dropout_ratio=0.25,
+        )
+    )
+
+    pulses = [encoder.pulses_between(i * 0.1, (i + 1) * 0.1) for i in range(20)]
+    assert sum(pulses) == 71
+    assert pulses.count(3) > 0
+    assert pulses.count(4) > 0
+
+
+def test_encoder_dropout_ratio_one_drops_all_pulses() -> None:
+    encoder = VirtualEncoder(
+        EncoderConfig(
+            pulses_per_revolution=100,
+            belt_speed_mm_per_s=100.0,
+            pulley_circumference_mm=200.0,
+            dropout_ratio=1.0,
+        )
+    )
+
+    pulses = [encoder.pulses_between(i * 0.1, (i + 1) * 0.1) for i in range(10)]
+    assert sum(pulses) == 0

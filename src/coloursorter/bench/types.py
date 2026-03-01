@@ -47,6 +47,8 @@ class TransportResponse:
     scheduler_state: str = "IDLE"
     mode: str = "AUTO"
     queue_cleared: bool = False
+    nack_code: int | None = None
+    nack_detail: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,7 +59,7 @@ class BenchLogEntry:
     decision: str
     rejection_reason: str | None
     protocol_round_trip_ms: float
-    ack_code: AckCode
+    ack_code: AckCode | str
     trigger_timestamp_s: float = 0.0
     trigger_mm: float = 0.0
     lane_index: int = -1
@@ -65,3 +67,10 @@ class BenchLogEntry:
     queue_depth: int = 0
     scheduler_state: str = "IDLE"
     mode: str = "AUTO"
+    ingest_latency_ms: float = 0.0
+    decision_latency_ms: float = 0.0
+    schedule_latency_ms: float = 0.0
+    transport_latency_ms: float = 0.0
+    cycle_latency_ms: float = 0.0
+    nack_code: int | None = None
+    nack_detail: str | None = None

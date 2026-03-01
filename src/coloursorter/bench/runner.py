@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 
 from coloursorter.deploy import PipelineRunner
 from coloursorter.model import FrameMetadata, ObjectDetection
@@ -37,6 +38,8 @@ class BenchRunner:
         detections: list[ObjectDetection],
         previous_timestamp_s: float,
     ) -> tuple[BenchLogEntry, ...]:
+        cycle_started = time.perf_counter()
+        ingest_started = cycle_started
         frame = FrameMetadata(
             frame_id=frame_id,
             timestamp_s=timestamp_s,
@@ -45,11 +48,22 @@ class BenchRunner:
         )
         pulses = self._encoder.pulses_between(previous_timestamp_s, timestamp_s)
         trigger_generation_s = timestamp_s if pulses > 0 else previous_timestamp_s
+        ingest_latency_ms = (time.perf_counter() - ingest_started) * 1000.0
+
+        decision_started = time.perf_counter()
         pipeline_result = self._pipeline.run(frame=frame, detections=detections)
+        decision_latency_ms = (time.perf_counter() - decision_started) * 1000.0
+
+        schedule_started = time.perf_counter()
+        scheduled_pairs = tuple(zip(pipeline_result.decisions, pipeline_result.schedule_commands))
+        schedule_latency_ms = (time.perf_counter() - schedule_started) * 1000.0
 
         logs: list[BenchLogEntry] = []
-        for decision, command in zip(pipeline_result.decisions, pipeline_result.schedule_commands):
+        for decision, command in scheduled_pairs:
+            transport_started = time.perf_counter()
             response = self._transport.send(command)
+            transport_latency_ms = (time.perf_counter() - transport_started) * 1000.0
+            cycle_latency_ms = (time.perf_counter() - cycle_started) * 1000.0
             logs.append(
                 BenchLogEntry(
                     frame_timestamp_s=timestamp_s,
@@ -66,6 +80,13 @@ class BenchRunner:
                     mode=response.mode,
                     protocol_round_trip_ms=response.round_trip_ms,
                     ack_code=response.ack_code,
+                    ingest_latency_ms=ingest_latency_ms,
+                    decision_latency_ms=decision_latency_ms,
+                    schedule_latency_ms=schedule_latency_ms,
+                    transport_latency_ms=transport_latency_ms,
+                    cycle_latency_ms=cycle_latency_ms,
+                    nack_code=response.nack_code,
+                    nack_detail=response.nack_detail,
                 )
             )
         return tuple(logs)

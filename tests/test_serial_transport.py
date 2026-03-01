@@ -57,6 +57,8 @@ def test_serial_transport_maps_nack_watchdog() -> None:
 
     assert response.ack_code == AckCode.NACK_WATCHDOG
     assert response.fault_state == FaultState.WATCHDOG
+    assert response.nack_code == 7
+    assert response.nack_detail == "WATCHDOG"
 
 
 @pytest.mark.parametrize(
@@ -159,3 +161,17 @@ def test_serial_transport_exhausts_retries_before_timeout_error() -> None:
 
     assert exc_info.value.category == "serial_timeout"
     assert slept == [0.0, 0.05, 0.1]
+
+
+def test_serial_transport_preserves_raw_nack_detail() -> None:
+    fake = _FakeSerial(b"<NACK|6|QUEUE_FULL>\n")
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: fake,
+    )
+
+    response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
+
+    assert response.ack_code == AckCode.NACK_QUEUE_FULL
+    assert response.nack_code == 6
+    assert response.nack_detail == "QUEUE_FULL"

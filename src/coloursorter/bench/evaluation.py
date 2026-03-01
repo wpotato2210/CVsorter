@@ -75,7 +75,14 @@ def write_artifacts(
                 "mode",
                 "decision",
                 "protocol_round_trip_ms",
+                "ingest_latency_ms",
+                "decision_latency_ms",
+                "schedule_latency_ms",
+                "transport_latency_ms",
+                "cycle_latency_ms",
                 "ack_code",
+                "nack_code",
+                "nack_detail",
             ]
         )
         for entry in logs:
@@ -93,7 +100,14 @@ def write_artifacts(
                     entry.mode,
                     entry.decision,
                     f"{entry.protocol_round_trip_ms:.3f}",
+                    f"{entry.ingest_latency_ms:.3f}",
+                    f"{entry.decision_latency_ms:.3f}",
+                    f"{entry.schedule_latency_ms:.3f}",
+                    f"{entry.transport_latency_ms:.3f}",
+                    f"{entry.cycle_latency_ms:.3f}",
                     ack_code,
+                    "" if entry.nack_code is None else entry.nack_code,
+                    entry.nack_detail or "",
                 ]
             )
 

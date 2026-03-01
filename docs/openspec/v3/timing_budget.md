@@ -18,3 +18,8 @@
 - Retry + timeout behavior: `tests/test_serial_transport.py`
 - Nominal RTT envelope and trigger timestamp flow: `tests/test_integration.py`
 - Deterministic encoder behavior: `tests/test_determinism_and_telemetry.py`
+
+
+## Stage observability
+- Ingest, decision, schedule, transport, and cycle timings are emitted per bench log entry.
+- Validation reference: `tests/test_determinism_and_telemetry.py::test_stage_latency_fields_are_populated_for_each_log`.

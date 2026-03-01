@@ -72,12 +72,19 @@ class ControllerState(str, Enum):
     SAFE = "safe"
 
 
+class OperatorMode(str, Enum):
+    AUTO = "AUTO"
+    MANUAL = "MANUAL"
+    SAFE = "SAFE"
+
+
 @dataclass
 class BenchRuntimeState:
     mode: BenchMode
     previous_timestamp_s: float
     fault_state: FaultState
     controller_state: ControllerState
+    operator_mode: OperatorMode
 
 
 class BenchAppController(QObject):
@@ -108,6 +115,7 @@ class BenchAppController(QObject):
             previous_timestamp_s=0.0,
             fault_state=FaultState.NORMAL,
             controller_state=ControllerState.IDLE,
+            operator_mode=OperatorMode.AUTO,
         )
         self.cycle_config = BenchCycleConfig(
             period_ms=runtime_config.cycle_timing.period_ms,
@@ -281,6 +289,7 @@ class BenchAppController(QObject):
         self.runtime_state.fault_state = self.transport.current_fault_state()
 
         if self.runtime_state.fault_state == FaultState.SAFE:
+            self.runtime_state.operator_mode = OperatorMode.SAFE
             self._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
             return
         if self.runtime_state.fault_state == FaultState.WATCHDOG:
@@ -353,6 +362,48 @@ class BenchAppController(QObject):
                 ack_code="-",
             )
         )
+
+    def recover_safe_to_manual(self) -> bool:
+        if self.runtime_state.controller_state != ControllerState.SAFE:
+            return False
+        self.runtime_state.fault_state = FaultState.NORMAL
+        self.runtime_state.operator_mode = OperatorMode.MANUAL
+        self._transport_clear_queue()
+        self._transition_to(ControllerState.IDLE, overlay_text="SAFE cleared; MANUAL mode")
+        self.log_entry_requested.emit(
+            BenchLogEntry(
+                frame_timestamp_s=self.runtime_state.previous_timestamp_s,
+                trigger_generation_s=self.runtime_state.previous_timestamp_s,
+                lane=-1,
+                decision="safe_recovery_manual",
+                rejection_reason=None,
+                protocol_round_trip_ms=0.0,
+                ack_code="-",
+            )
+        )
+        return True
+
+    def recover_to_auto(self) -> bool:
+        if self.runtime_state.operator_mode not in {OperatorMode.MANUAL, OperatorMode.SAFE}:
+            return False
+        if self.runtime_state.controller_state == ControllerState.SAFE:
+            self.runtime_state.fault_state = FaultState.NORMAL
+            self._transport_clear_queue()
+            self._transition_to(ControllerState.IDLE, overlay_text="SAFE cleared; AUTO mode")
+        self.runtime_state.operator_mode = OperatorMode.AUTO
+        self.log_entry_requested.emit(
+            BenchLogEntry(
+                frame_timestamp_s=self.runtime_state.previous_timestamp_s,
+                trigger_generation_s=self.runtime_state.previous_timestamp_s,
+                lane=-1,
+                decision="mode_auto",
+                rejection_reason=None,
+                protocol_round_trip_ms=0.0,
+                ack_code="-",
+            )
+        )
+        return True
+
     def _transport_queue_depth(self) -> int:
         if isinstance(self.transport, MockMcuTransport):
             return len(self.transport.queue)
@@ -385,6 +436,7 @@ class BenchAppController(QObject):
     @Slot()
     def on_home_clicked(self) -> None:
         if self.runtime_state.controller_state == ControllerState.SAFE:
+            self.recover_to_auto()
             return
         if self.runtime_state.controller_state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
             self._publish_session_evaluation()
