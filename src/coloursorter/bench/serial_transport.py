@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from coloursorter.scheduler import ScheduledCommand
+from coloursorter.protocol.constants import CMD_SCHED
 from coloursorter.protocol.nack_codes import (
     DETAIL_SAFE,
     DETAIL_WATCHDOG,
@@ -15,10 +16,11 @@ from coloursorter.protocol.nack_codes import (
 )
 
 from coloursorter.serial_interface import (
+    AckResponse,
     FrameFormatError,
     PacketValidationError,
     decode_packet_bytes,
-    encode_schedule_command,
+    encode_packet_bytes,
     parse_ack_tokens,
 )
 
@@ -88,7 +90,30 @@ class SerialMcuTransport:
         return self._last_queue_cleared
 
     def send(self, command: ScheduledCommand) -> TransportResponse:
-        payload = encode_schedule_command(command)
+        ack, round_trip_ms = self._send_frame(CMD_SCHED, (command.lane, f"{command.position_mm:.3f}"))
+
+        ack_code, fault_state = _map_ack_to_bench_state(ack.status, ack.nack_code, ack.detail)
+        self._last_fault_state = fault_state
+        self._last_queue_depth = ack.queue_depth or 0
+        self._last_queue_cleared = ack.queue_cleared
+        return TransportResponse(
+            ack_code=ack_code,
+            queue_depth=self._last_queue_depth,
+            round_trip_ms=round_trip_ms,
+            fault_state=fault_state,
+            scheduler_state=ack.scheduler_state or "UNKNOWN",
+            mode=ack.mode or "UNKNOWN",
+            queue_cleared=self._last_queue_cleared,
+            nack_code=ack.nack_code,
+            nack_detail=ack.detail,
+        )
+
+    def send_command(self, command: str, args: tuple[object, ...] = ()) -> AckResponse:
+        ack, _ = self._send_frame(command, args)
+        return ack
+
+    def _send_frame(self, command: str, args: tuple[object, ...] = ()) -> tuple[AckResponse, float]:
+        payload = encode_packet_bytes(command, args)
 
         for attempt in range(self._config.max_retries + 1):
             started = time.perf_counter()
@@ -118,21 +143,9 @@ class SerialMcuTransport:
                     fault_state=FaultState.SAFE,
                 ) from exc
 
-            ack_code, fault_state = _map_ack_to_bench_state(ack.status, ack.nack_code, ack.detail)
-            self._last_fault_state = fault_state
             self._last_queue_depth = ack.queue_depth or 0
             self._last_queue_cleared = ack.queue_cleared
-            return TransportResponse(
-                ack_code=ack_code,
-                queue_depth=self._last_queue_depth,
-                round_trip_ms=round_trip_ms,
-                fault_state=fault_state,
-                scheduler_state=ack.scheduler_state or "UNKNOWN",
-                mode=ack.mode or "UNKNOWN",
-                queue_cleared=self._last_queue_cleared,
-                nack_code=ack.nack_code,
-                nack_detail=ack.detail,
-            )
+            return ack, round_trip_ms
 
         raise AssertionError("unreachable")
 
