@@ -19,6 +19,7 @@ class AckCode(str, Enum):
     ACK = "ACK"
     NACK_QUEUE_FULL = "NACK_QUEUE_FULL"
     NACK_SAFE = "NACK_SAFE"
+    NACK_BUSY = "NACK_BUSY"
     NACK_WATCHDOG = "NACK_WATCHDOG"
 
 

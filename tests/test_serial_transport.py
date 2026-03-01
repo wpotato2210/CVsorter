@@ -46,8 +46,8 @@ def test_serial_transport_encodes_sched_and_parses_ack() -> None:
     assert transport.current_fault_state() == FaultState.NORMAL
 
 
-def test_serial_transport_maps_nack_watchdog() -> None:
-    fake = _FakeSerial(b"<NACK|7|WATCHDOG>\n")
+def test_serial_transport_maps_nack_busy() -> None:
+    fake = _FakeSerial(b"<NACK|7|BUSY>\n")
     transport = SerialMcuTransport(
         config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
         serial_factory=lambda **_: fake,
@@ -55,10 +55,10 @@ def test_serial_transport_maps_nack_watchdog() -> None:
 
     response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
 
-    assert response.ack_code == AckCode.NACK_WATCHDOG
-    assert response.fault_state == FaultState.WATCHDOG
+    assert response.ack_code == AckCode.NACK_BUSY
+    assert response.fault_state == FaultState.NORMAL
     assert response.nack_code == 7
-    assert response.nack_detail == "WATCHDOG"
+    assert response.nack_detail == "BUSY"
 
 
 @pytest.mark.parametrize(
@@ -67,7 +67,7 @@ def test_serial_transport_maps_nack_watchdog() -> None:
         (b"<ACK>\n", AckCode.ACK, FaultState.NORMAL),
         (b"<NACK|6|QUEUE_FULL>\n", AckCode.NACK_QUEUE_FULL, FaultState.NORMAL),
         (b"<NACK|5|SAFE>\n", AckCode.NACK_SAFE, FaultState.SAFE),
-        (b"<NACK|7|WATCHDOG>\n", AckCode.NACK_WATCHDOG, FaultState.WATCHDOG),
+        (b"<NACK|7|BUSY>\n", AckCode.NACK_BUSY, FaultState.NORMAL),
     ],
 )
 def test_serial_transport_contract_ack_nack_mapping(
