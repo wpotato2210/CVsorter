@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -45,8 +46,9 @@ class BenchMainWindow(QMainWindow):
         layout.addWidget(self._build_lane_overlay_panel(), 0, 1)
         layout.addWidget(self._build_queue_panel(), 1, 0)
         layout.addWidget(self._build_controls_panel(), 1, 1)
-        layout.addWidget(self._build_fault_panel(), 2, 0, 1, 2)
-        layout.addWidget(self._build_log_panel(), 3, 0, 1, 2)
+        layout.addWidget(self._build_poc_panel(), 2, 0, 1, 2)
+        layout.addWidget(self._build_fault_panel(), 3, 0, 1, 2)
+        layout.addWidget(self._build_log_panel(), 4, 0, 1, 2)
         self.statusBar().showMessage("Bench idle")
 
     def _build_live_preview_panel(self) -> QGroupBox:
@@ -96,6 +98,40 @@ class BenchMainWindow(QMainWindow):
         self.watchdog_label = QLabel("WATCHDOG: off")
         row.addWidget(self.safe_label)
         row.addWidget(self.watchdog_label)
+        return box
+
+    def _build_poc_panel(self) -> QGroupBox:
+        box = QGroupBox("POC Vertical Slice")
+        layout = QGridLayout(box)
+
+        self.serial_connect_button = QPushButton("Serial Connect")
+        self.serial_disconnect_button = QPushButton("Serial Disconnect")
+        self.fire_test_button = QPushButton("FIRE TEST")
+        self.serial_status_label = QLabel("Serial: disconnected")
+
+        self.trigger_threshold_input = QDoubleSpinBox()
+        self.trigger_threshold_input.setRange(0.0, 1.0)
+        self.trigger_threshold_input.setSingleStep(0.05)
+        self.trigger_threshold_input.setValue(0.5)
+        self.trigger_threshold_input.setDecimals(2)
+
+        self.belt_speed_input = QDoubleSpinBox()
+        self.belt_speed_input.setRange(1.0, 5000.0)
+        self.belt_speed_input.setSingleStep(10.0)
+        self.belt_speed_input.setValue(140.0)
+        self.belt_speed_input.setDecimals(1)
+
+        self.last_command_label = QLabel("Last command: -")
+
+        layout.addWidget(self.serial_connect_button, 0, 0)
+        layout.addWidget(self.serial_disconnect_button, 0, 1)
+        layout.addWidget(self.fire_test_button, 0, 2)
+        layout.addWidget(self.serial_status_label, 0, 3)
+        layout.addWidget(QLabel("Trigger threshold"), 1, 0)
+        layout.addWidget(self.trigger_threshold_input, 1, 1)
+        layout.addWidget(QLabel("belt_speed_mm_s"), 1, 2)
+        layout.addWidget(self.belt_speed_input, 1, 3)
+        layout.addWidget(self.last_command_label, 2, 0, 1, 4)
         return box
 
     def _build_log_panel(self) -> QGroupBox:
@@ -148,6 +184,9 @@ class BenchMainWindow(QMainWindow):
         ]
         for index, text in enumerate(cells):
             self.log_table.setItem(row, index, QTableWidgetItem(text))
+
+    def set_last_command_status(self, message: str) -> None:
+        self.last_command_label.setText(f"Last command: {message}")
 
 
 def run(argv: list[str] | None = None) -> int:
