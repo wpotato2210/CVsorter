@@ -23,6 +23,8 @@ from coloursorter.bench import (
     ReplayConfig,
     ReplayFrameSource,
     VirtualEncoder,
+    default_scenarios,
+    evaluate_logs,
 )
 from coloursorter.deploy import PipelineRunner
 from coloursorter.config import RuntimeConfig
@@ -149,6 +151,8 @@ class BenchAppController(QObject):
             )
         )
         self.bench_runner = BenchRunner(self.pipeline, self.transport, self.encoder)
+        self._selected_scenarios = tuple(s for s in default_scenarios() if s.name == "nominal")
+        self._session_logs: list[BenchLogEntry] = []
         self._frame_source: BenchFrameSource | None = None
         self._cycle_timer = QTimer(self)
         self._cycle_timer.setInterval(self.cycle_config.period_ms)
@@ -240,6 +244,7 @@ class BenchAppController(QObject):
             return
 
         if frame is None:
+            self._publish_session_evaluation()
             self._release_frame_source()
             self._transition_to(ControllerState.IDLE, overlay_text="Replay complete")
             return
@@ -258,6 +263,7 @@ class BenchAppController(QObject):
         self._step_transport_queue()
 
         for log_entry in logs:
+            self._session_logs.append(log_entry)
             self.log_entry_requested.emit(log_entry)
 
         self.runtime_state.previous_timestamp_s = frame.timestamp_s
@@ -319,6 +325,23 @@ class BenchAppController(QObject):
             return
         self.transport.step_queue(items_to_consume=1)
 
+    def _publish_session_evaluation(self) -> None:
+        evaluation = evaluate_logs(tuple(self._session_logs), self._selected_scenarios)
+        result_line = "; ".join(
+            f"{result.name}:{'PASS' if result.passed else 'FAIL'}" for result in evaluation.scenarios
+        )
+        self.lane_overlay_requested.emit(f"Scenario result {result_line} | overall={'PASS' if evaluation.passed else 'FAIL'}")
+        self.log_entry_requested.emit(
+            BenchLogEntry(
+                frame_timestamp_s=self.runtime_state.previous_timestamp_s,
+                trigger_generation_s=self.runtime_state.previous_timestamp_s,
+                lane=-1,
+                decision=f"scenario_eval overall={'PASS' if evaluation.passed else 'FAIL'}",
+                rejection_reason=result_line,
+                protocol_round_trip_ms=float(evaluation.summary["avg_round_trip_ms"]),
+                ack_code="-",
+            )
+        )
     def _transport_queue_depth(self) -> int:
         if isinstance(self.transport, MockMcuTransport):
             return len(self.transport.queue)
@@ -333,6 +356,7 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state != ControllerState.IDLE:
             return
         self.runtime_state.mode = BenchMode.REPLAY
+        self._session_logs.clear()
         if not self._activate_frame_source(BenchMode.REPLAY):
             return
         self._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
@@ -342,6 +366,7 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state != ControllerState.IDLE:
             return
         self.runtime_state.mode = BenchMode.LIVE
+        self._session_logs.clear()
         if not self._activate_frame_source(BenchMode.LIVE):
             return
         self._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
@@ -350,6 +375,8 @@ class BenchAppController(QObject):
     def on_home_clicked(self) -> None:
         if self.runtime_state.controller_state == ControllerState.SAFE:
             return
+        if self.runtime_state.controller_state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
+            self._publish_session_evaluation()
         self._cycle_timer.stop()
         self._transport_clear_queue()
         self._release_frame_source()
