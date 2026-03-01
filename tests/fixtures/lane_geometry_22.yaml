@@ -1,0 +1,7 @@
+lane_count: 22
+lane_boundaries_px: [0, 48, 96, 144, 192, 240, 288, 336, 384, 432, 480,
+                     528, 576, 624, 672, 720, 768, 816, 864, 912, 960,
+                     1008, 1056]
+belt_direction_axis: vertical
+mm_per_pixel: 0.123456789012
+camera_to_reject_mm: 275.0
