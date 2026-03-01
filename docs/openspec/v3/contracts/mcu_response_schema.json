@@ -1,11 +1,48 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
     "command": {
       "type": "string"
     },
     "status": {
+      "type": "string",
+      "enum": [
+        "ACK",
+        "NACK"
+      ]
+    },
+    "nack_code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "detail": {
       "type": "string"
+    },
+    "queue_depth": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "queue_cleared": {
+      "type": "boolean"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "AUTO",
+        "MANUAL",
+        "SAFE"
+      ]
+    },
+    "scheduler_state": {
+      "type": "string",
+      "enum": [
+        "IDLE",
+        "ARMED",
+        "FIRING",
+        "SAFE"
+      ]
     },
     "message": {
       "type": "string"
@@ -14,5 +51,21 @@
   "required": [
     "command",
     "status"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "NACK"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "nack_code"
+        ]
+      }
+    }
   ]
 }
