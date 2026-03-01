@@ -1,0 +1,10 @@
+{
+  "train": [
+    "data/train_0001.jpg",
+    "data/train_0002.jpg"
+  ],
+  "eval": [
+    "data/eval_0001.jpg",
+    "data/eval_0002.jpg"
+  ]
+}

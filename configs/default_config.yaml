@@ -1,0 +1,9 @@
+belt_speed_mm_s: 1000
+camera_to_reject_mm: 500
+defect_thresholds:
+  curve_score: 0.7
+  infection_score: 0.5
+  size_mm: 3
+  snapped_score: 0.6
+mode: ENCODER
+homing: DISABLED

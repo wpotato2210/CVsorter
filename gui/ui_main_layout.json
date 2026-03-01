@@ -1,0 +1,33 @@
+{
+  "widgets": [
+    {
+      "type": "button",
+      "id": "btn_encoder",
+      "text": "Encoder Mode"
+    },
+    {
+      "type": "button",
+      "id": "btn_time",
+      "text": "Time Mode"
+    },
+    {
+      "type": "button",
+      "id": "btn_manual",
+      "text": "Manual Mode"
+    },
+    {
+      "type": "button",
+      "id": "btn_homing_toggle",
+      "text": "Toggle Homing"
+    },
+    {
+      "type": "video_view",
+      "id": "vid_camera"
+    },
+    {
+      "type": "label",
+      "id": "lbl_status",
+      "text": "Status: READY"
+    }
+  ]
+}
