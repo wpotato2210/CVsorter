@@ -1,0 +1,26 @@
+name: Hardware Readiness Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  hardware-readiness:
+    name: Hardware readiness strict report
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run hardware readiness report (strict)
+        run: python tools/hardware_readiness_report.py --strict

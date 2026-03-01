@@ -1,0 +1,14 @@
+# Bench protocol interoperability trace
+session_id=bench-2026-02-24T10:12:11Z
+transport=mock_serial avg_rtt_ms=8 peak_rtt_ms=17
+TX > [SET_MODE MANUAL]
+RX < [ACK mode=MANUAL queue_depth=0 scheduler_state=IDLE queue_cleared=true]
+TX > [SCHED lane=3 trigger_mm=120.0]
+RX < [ACK mode=MANUAL queue_depth=1 scheduler_state=QUEUED]
+TX > [GET_STATE]
+RX < [ACK mode=MANUAL queue_depth=1 scheduler_state=QUEUED]
+TX > [RESET_QUEUE]
+RX < [ACK mode=MANUAL queue_depth=0 scheduler_state=IDLE queue_cleared=true]
+TX > [SET_MODE AUTO]
+RX < [ACK mode=AUTO queue_depth=0 scheduler_state=RUNNING queue_cleared=true]
+summary required_commands=4 passed=4 unsupported_frames=0 nack_required=0

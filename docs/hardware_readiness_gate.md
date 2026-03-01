@@ -22,3 +22,4 @@ This checklist defines the minimum evidence required before declaring a release 
 
 - Non-blocking summary: `python tools/hardware_readiness_report.py`
 - Blocking gate: `python tools/hardware_readiness_report.py --strict`
+- CI/release blocking workflow: `.github/workflows/hardware-readiness-gate.yml` runs `python tools/hardware_readiness_report.py --strict` on pull requests, `main` pushes, and published releases.
