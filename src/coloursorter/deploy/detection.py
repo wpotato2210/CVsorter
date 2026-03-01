@@ -1,13 +1,37 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import cv2
+import numpy as np
 
 from coloursorter.model import ObjectDetection
 
+DETECTION_PROVIDER_VALUES = ("opencv_basic", "opencv_calibrated")
+DETECTION_LABEL_VALUES = ("accept", "reject")
 
-class DetectionProvider:
+
+class DetectionError(ValueError):
+    """Raised when detection cannot execute due to invalid frame or provider configuration."""
+
+
+class DetectionProvider(ABC):
+    """Provider contract for deploy-time object detection.
+
+    Input frame contract:
+    - frame_bgr must be a numpy ndarray with shape (height, width, 3)
+    - channel order must be BGR, uint8 values in [0, 255]
+
+    Output contract:
+    - returns list[ObjectDetection]
+    - object_id must be unique per frame
+    - centroid_x_px and centroid_y_px must be finite pixel coordinates
+    - classification must be one of DETECTION_LABEL_VALUES
+    - infection_score is interpreted as classification confidence in [0.0, 1.0]
+    """
+
+    @abstractmethod
     def detect(self, frame_bgr: object) -> list[ObjectDetection]:
         raise NotImplementedError
 
@@ -18,15 +42,48 @@ class OpenCvDetectionConfig:
     reject_red_threshold: int = 140
 
 
+@dataclass(frozen=True)
+class CalibratedOpenCvDetectionConfig:
+    min_area_px: int = 120
+    reject_hue_min: int = 0
+    reject_hue_max: int = 12
+    reject_saturation_min: int = 90
+    reject_value_min: int = 90
+
+
+def _validate_frame(frame_bgr: object) -> np.ndarray:
+    if frame_bgr is None:
+        raise DetectionError("frame_bgr is required")
+    if not isinstance(frame_bgr, np.ndarray):
+        raise DetectionError("frame_bgr must be a numpy.ndarray")
+    if frame_bgr.ndim != 3 or frame_bgr.shape[2] != 3:
+        raise DetectionError("frame_bgr must have shape (height, width, 3)")
+    return frame_bgr
+
+
+def _validate_detection_output(detections: list[ObjectDetection]) -> list[ObjectDetection]:
+    seen_ids: set[str] = set()
+    for detection in detections:
+        if detection.object_id in seen_ids:
+            raise DetectionError(f"duplicate object_id: {detection.object_id}")
+        seen_ids.add(detection.object_id)
+        if detection.classification not in DETECTION_LABEL_VALUES:
+            raise DetectionError(
+                f"classification must be one of {DETECTION_LABEL_VALUES}; got {detection.classification!r}"
+            )
+        if not (0.0 <= detection.infection_score <= 1.0):
+            raise DetectionError("infection_score must be within [0.0, 1.0]")
+    return detections
+
+
 class OpenCvDetectionProvider(DetectionProvider):
     def __init__(self, config: OpenCvDetectionConfig | None = None) -> None:
         self._config = config or OpenCvDetectionConfig()
 
     def detect(self, frame_bgr: object) -> list[ObjectDetection]:
-        if frame_bgr is None:
-            return []
+        frame = _validate_frame(frame_bgr)
 
-        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
         contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -43,9 +100,11 @@ class OpenCvDetectionProvider(DetectionProvider):
             centroid_y = float(moments["m01"] / moments["m00"])
 
             x, y, w, h = cv2.boundingRect(contour)
-            roi = frame_bgr[y : y + h, x : x + w]
+            roi = frame[y : y + h, x : x + w]
             mean_bgr = cv2.mean(roi)
-            classification = "reject" if mean_bgr[2] >= self._config.reject_red_threshold else "accept"
+            red_level = float(mean_bgr[2])
+            classification = "reject" if red_level >= self._config.reject_red_threshold else "accept"
+            confidence = min(1.0, abs(red_level - self._config.reject_red_threshold) / 255.0)
 
             detections.append(
                 ObjectDetection(
@@ -53,7 +112,78 @@ class OpenCvDetectionProvider(DetectionProvider):
                     centroid_x_px=centroid_x,
                     centroid_y_px=centroid_y,
                     classification=classification,
+                    infection_score=confidence,
                 )
             )
 
-        return sorted(detections, key=lambda item: item.object_id)
+        return _validate_detection_output(sorted(detections, key=lambda item: item.object_id))
+
+
+class CalibratedOpenCvDetectionProvider(DetectionProvider):
+    def __init__(self, config: CalibratedOpenCvDetectionConfig | None = None) -> None:
+        self._config = config or CalibratedOpenCvDetectionConfig()
+
+    def detect(self, frame_bgr: object) -> list[ObjectDetection]:
+        frame = _validate_frame(frame_bgr)
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        detections: list[ObjectDetection] = []
+        for index, contour in enumerate(contours):
+            area = cv2.contourArea(contour)
+            if area < self._config.min_area_px:
+                continue
+
+            moments = cv2.moments(contour)
+            if moments["m00"] <= 0:
+                continue
+
+            centroid_x = float(moments["m10"] / moments["m00"])
+            centroid_y = float(moments["m01"] / moments["m00"])
+
+            x, y, w, h = cv2.boundingRect(contour)
+            hsv_roi = hsv[y : y + h, x : x + w]
+            mean_hsv = cv2.mean(hsv_roi)
+            mean_hue = float(mean_hsv[0])
+            mean_sat = float(mean_hsv[1])
+            mean_val = float(mean_hsv[2])
+
+            is_reject = (
+                self._config.reject_hue_min <= mean_hue <= self._config.reject_hue_max
+                and mean_sat >= self._config.reject_saturation_min
+                and mean_val >= self._config.reject_value_min
+            )
+            classification = "reject" if is_reject else "accept"
+            hue_range = max(1.0, float(self._config.reject_hue_max - self._config.reject_hue_min + 1))
+            hue_center = (self._config.reject_hue_min + self._config.reject_hue_max) / 2.0
+            hue_confidence = max(0.0, 1.0 - abs(mean_hue - hue_center) / hue_range)
+            sat_confidence = min(1.0, mean_sat / 255.0)
+            val_confidence = min(1.0, mean_val / 255.0)
+            confidence = max(0.0, min(1.0, 0.5 * hue_confidence + 0.25 * sat_confidence + 0.25 * val_confidence))
+
+            detections.append(
+                ObjectDetection(
+                    object_id=f"det-{index}",
+                    centroid_x_px=centroid_x,
+                    centroid_y_px=centroid_y,
+                    classification=classification,
+                    infection_score=confidence,
+                )
+            )
+
+        return _validate_detection_output(sorted(detections, key=lambda item: item.object_id))
+
+
+def build_detection_provider(
+    provider_name: str,
+    basic_config: OpenCvDetectionConfig | None = None,
+    calibrated_config: CalibratedOpenCvDetectionConfig | None = None,
+) -> DetectionProvider:
+    if provider_name == "opencv_basic":
+        return OpenCvDetectionProvider(config=basic_config)
+    if provider_name == "opencv_calibrated":
+        return CalibratedOpenCvDetectionProvider(config=calibrated_config)
+    raise DetectionError(f"Unsupported detection provider: {provider_name}")

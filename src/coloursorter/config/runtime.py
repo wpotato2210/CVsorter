@@ -11,6 +11,7 @@ from coloursorter.config.enums import (
     MOTION_MODE,
     MOTION_MODE_VALUES,
 )
+from coloursorter.deploy import DETECTION_PROVIDER_VALUES
 
 
 class ConfigValidationError(ValueError):
@@ -67,6 +68,28 @@ class ScenarioThresholdsConfig:
 
 
 @dataclass(frozen=True)
+class OpenCvBasicDetectionConfig:
+    min_area_px: int
+    reject_red_threshold: int
+
+
+@dataclass(frozen=True)
+class OpenCvCalibratedDetectionConfig:
+    min_area_px: int
+    reject_hue_min: int
+    reject_hue_max: int
+    reject_saturation_min: int
+    reject_value_min: int
+
+
+@dataclass(frozen=True)
+class DetectionConfig:
+    provider: str
+    opencv_basic: OpenCvBasicDetectionConfig
+    opencv_calibrated: OpenCvCalibratedDetectionConfig
+
+
+@dataclass(frozen=True)
 class RuntimeConfig:
     motion_mode: str
     homing_mode: str
@@ -75,6 +98,7 @@ class RuntimeConfig:
     transport: TransportConfig
     cycle_timing: CycleTimingConfig
     scenario_thresholds: ScenarioThresholdsConfig
+    detection: DetectionConfig
 
     @classmethod
     def from_text(cls, raw_text: str) -> "RuntimeConfig":
@@ -142,6 +166,36 @@ class RuntimeConfig:
         _validate_range("scenario_thresholds.fault_max_avg_rtt_ms", scenario_thresholds.fault_max_avg_rtt_ms, min_value=0.0)
         _validate_range("scenario_thresholds.fault_max_peak_rtt_ms", scenario_thresholds.fault_max_peak_rtt_ms, min_value=0.0)
 
+        detection_payload = _required_map(payload, "detection")
+        provider = _required_str(detection_payload, "provider")
+        _validate_enum("detection.provider", provider, DETECTION_PROVIDER_VALUES)
+
+        basic_payload = _required_map(detection_payload, "opencv_basic")
+        basic = OpenCvBasicDetectionConfig(
+            min_area_px=_required_int(basic_payload, "min_area_px"),
+            reject_red_threshold=_required_int(basic_payload, "reject_red_threshold"),
+        )
+        _validate_range("detection.opencv_basic.min_area_px", basic.min_area_px, min_value=1)
+        _validate_range("detection.opencv_basic.reject_red_threshold", basic.reject_red_threshold, min_value=0, max_value=255)
+
+        calibrated_payload = _required_map(detection_payload, "opencv_calibrated")
+        calibrated = OpenCvCalibratedDetectionConfig(
+            min_area_px=_required_int(calibrated_payload, "min_area_px"),
+            reject_hue_min=_required_int(calibrated_payload, "reject_hue_min"),
+            reject_hue_max=_required_int(calibrated_payload, "reject_hue_max"),
+            reject_saturation_min=_required_int(calibrated_payload, "reject_saturation_min"),
+            reject_value_min=_required_int(calibrated_payload, "reject_value_min"),
+        )
+        _validate_range("detection.opencv_calibrated.min_area_px", calibrated.min_area_px, min_value=1)
+        _validate_range("detection.opencv_calibrated.reject_hue_min", calibrated.reject_hue_min, min_value=0, max_value=179)
+        _validate_range("detection.opencv_calibrated.reject_hue_max", calibrated.reject_hue_max, min_value=0, max_value=179)
+        if calibrated.reject_hue_min > calibrated.reject_hue_max:
+            raise ConfigValidationError("detection.opencv_calibrated.reject_hue_min must be <= reject_hue_max")
+        _validate_range(
+            "detection.opencv_calibrated.reject_saturation_min", calibrated.reject_saturation_min, min_value=0, max_value=255
+        )
+        _validate_range("detection.opencv_calibrated.reject_value_min", calibrated.reject_value_min, min_value=0, max_value=255)
+
         return cls(
             motion_mode=motion_mode,
             homing_mode=homing_mode,
@@ -162,6 +216,11 @@ class RuntimeConfig:
             ),
             cycle_timing=CycleTimingConfig(period_ms=period_ms, queue_consumption_policy=queue_consumption_policy),
             scenario_thresholds=scenario_thresholds,
+            detection=DetectionConfig(
+                provider=provider,
+                opencv_basic=basic,
+                opencv_calibrated=calibrated,
+            ),
         )
 
     @classmethod
@@ -182,6 +241,7 @@ class RuntimeConfig:
             transport=self.transport,
             cycle_timing=self.cycle_timing,
             scenario_thresholds=self.scenario_thresholds,
+            detection=self.detection,
         )
 
 

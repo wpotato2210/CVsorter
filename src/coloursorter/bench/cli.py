@@ -22,7 +22,12 @@ from coloursorter.bench import (
 )
 from coloursorter.bench.evaluation import evaluate_logs, write_artifacts
 from coloursorter.config import RuntimeConfig
-from coloursorter.deploy import OpenCvDetectionProvider, PipelineRunner
+from coloursorter.deploy import (
+    CalibratedOpenCvDetectionConfig,
+    OpenCvDetectionConfig,
+    PipelineRunner,
+    build_detection_provider,
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -41,16 +46,21 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_available_scenarios(runtime_config_path: str | Path):
+def _load_runtime_config(runtime_config_path: str | Path) -> RuntimeConfig | None:
     config_path = Path(runtime_config_path)
     if not config_path.exists():
+        return None
+    return RuntimeConfig.load_startup(config_path)
+
+
+def _load_available_scenarios(runtime_config: RuntimeConfig | None):
+    if runtime_config is None:
         return default_scenarios()
-    runtime_config = RuntimeConfig.load_startup(config_path)
     return scenarios_from_thresholds(runtime_config.scenario_thresholds)
 
 
-def _select_scenarios(names: list[str], runtime_config_path: str | Path):
-    available = {scenario.name: scenario for scenario in _load_available_scenarios(runtime_config_path)}
+def _select_scenarios(names: list[str], runtime_config: RuntimeConfig | None):
+    available = {scenario.name: scenario for scenario in _load_available_scenarios(runtime_config)}
     selected_names = names or ["nominal"]
     missing = [name for name in selected_names if name not in available]
     if missing:
@@ -58,7 +68,29 @@ def _select_scenarios(names: list[str], runtime_config_path: str | Path):
     return tuple(available[name] for name in selected_names)
 
 
-def _run_cycles(args: argparse.Namespace, runner: BenchRunner) -> tuple[BenchLogEntry, ...]:
+def _build_detector(runtime_config: RuntimeConfig | None):
+    if runtime_config is None:
+        return build_detection_provider("opencv_basic")
+
+    basic = OpenCvDetectionConfig(
+        min_area_px=runtime_config.detection.opencv_basic.min_area_px,
+        reject_red_threshold=runtime_config.detection.opencv_basic.reject_red_threshold,
+    )
+    calibrated = CalibratedOpenCvDetectionConfig(
+        min_area_px=runtime_config.detection.opencv_calibrated.min_area_px,
+        reject_hue_min=runtime_config.detection.opencv_calibrated.reject_hue_min,
+        reject_hue_max=runtime_config.detection.opencv_calibrated.reject_hue_max,
+        reject_saturation_min=runtime_config.detection.opencv_calibrated.reject_saturation_min,
+        reject_value_min=runtime_config.detection.opencv_calibrated.reject_value_min,
+    )
+    return build_detection_provider(
+        runtime_config.detection.provider,
+        basic_config=basic,
+        calibrated_config=calibrated,
+    )
+
+
+def _run_cycles(args: argparse.Namespace, runner: BenchRunner, runtime_config: RuntimeConfig | None) -> tuple[BenchLogEntry, ...]:
     mode = BenchMode(args.mode)
     frame_source = (
         ReplayFrameSource(args.source, ReplayConfig(frame_period_s=args.frame_period_s))
@@ -66,7 +98,7 @@ def _run_cycles(args: argparse.Namespace, runner: BenchRunner) -> tuple[BenchLog
         else LiveFrameSource(LiveConfig(camera_index=args.camera_index, frame_period_s=args.frame_period_s))
     )
     frame_source.open()
-    detector = OpenCvDetectionProvider()
+    detector = _build_detector(runtime_config)
     logs: list[BenchLogEntry] = []
     previous_timestamp_s = 0.0
     try:
@@ -93,7 +125,8 @@ def _run_cycles(args: argparse.Namespace, runner: BenchRunner) -> tuple[BenchLog
 
 def main() -> int:
     args = _parse_args()
-    scenarios = _select_scenarios(args.scenario, args.runtime_config)
+    runtime_config = _load_runtime_config(args.runtime_config)
+    scenarios = _select_scenarios(args.scenario, runtime_config)
     pipeline = PipelineRunner(lane_config_path=Path(args.lane_config), calibration_path=Path(args.calibration))
     transport = MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.8))
     encoder = EncoderConfig(
@@ -104,7 +137,7 @@ def main() -> int:
     )
     runner = BenchRunner(pipeline=pipeline, transport=transport, encoder=VirtualEncoder(encoder))
 
-    logs = _run_cycles(args, runner)
+    logs = _run_cycles(args, runner, runtime_config)
     evaluation = evaluate_logs(logs=logs, scenarios=scenarios)
     artifact_dir = write_artifacts(
         logs=logs,
