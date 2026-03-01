@@ -3,6 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
+from coloursorter.protocol.constants import (
+    ACK_TOKEN,
+    ALLOWED_MODES,
+    ALLOWED_SCHEDULER_STATES,
+    NACK_CODE_MAX,
+    NACK_CODE_MIN,
+    NACK_TOKEN,
+    QUEUE_DEPTH_MIN,
+)
+
 FRAME_START = "<"
 FRAME_END = ">"
 FRAME_DELIMITER = "|"
@@ -99,34 +109,34 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
         raise PacketValidationError("ACK/NACK token list is empty")
 
     status = token_list[0].upper()
-    if status == "ACK":
+    if status == ACK_TOKEN:
         if len(token_list) == 1:
-            return AckResponse(status="ACK")
+            return AckResponse(status=ACK_TOKEN)
         if len(token_list) != 5:
             raise PacketValidationError("ACK metadata must be mode|queue_depth|scheduler_state|queue_cleared")
         mode = token_list[1].strip().upper()
-        if mode not in {"AUTO", "MANUAL", "SAFE"}:
+        if mode not in ALLOWED_MODES:
             raise PacketValidationError("ACK mode must be AUTO, MANUAL, or SAFE")
         try:
             queue_depth = int(token_list[2])
         except ValueError as exc:
             raise PacketValidationError("ACK queue_depth must be an integer") from exc
-        if queue_depth < 0:
-            raise PacketValidationError("ACK queue_depth must be >= 0")
+        if queue_depth < QUEUE_DEPTH_MIN:
+            raise PacketValidationError(f"ACK queue_depth must be >= {QUEUE_DEPTH_MIN}")
         scheduler_state = token_list[3].strip().upper()
-        if scheduler_state not in {"IDLE", "ACTIVE"}:
+        if scheduler_state not in ALLOWED_SCHEDULER_STATES:
             raise PacketValidationError("ACK scheduler_state must be IDLE or ACTIVE")
         raw_queue_cleared = token_list[4].strip().lower()
         if raw_queue_cleared not in {"true", "false"}:
             raise PacketValidationError("ACK queue_cleared must be true or false")
         return AckResponse(
-            status="ACK",
+            status=ACK_TOKEN,
             mode=mode,
             queue_depth=queue_depth,
             scheduler_state=scheduler_state,
             queue_cleared=raw_queue_cleared == "true",
         )
-    if status != "NACK":
+    if status != NACK_TOKEN:
         raise PacketValidationError("response must start with ACK or NACK")
 
     if len(token_list) < 2:
@@ -135,8 +145,8 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
         nack_code = int(token_list[1])
     except ValueError as exc:
         raise PacketValidationError("nack_code must be an integer") from exc
-    if nack_code < 1 or nack_code > 8:
-        raise PacketValidationError("nack_code must be in the OpenSpec range 1..8")
+    if nack_code < NACK_CODE_MIN or nack_code > NACK_CODE_MAX:
+        raise PacketValidationError(f"nack_code must be in the OpenSpec range {NACK_CODE_MIN}..{NACK_CODE_MAX}")
 
     detail = token_list[2] if len(token_list) > 2 else None
-    return AckResponse(status="NACK", nack_code=nack_code, detail=detail)
+    return AckResponse(status=NACK_TOKEN, nack_code=nack_code, detail=detail)
