@@ -27,6 +27,8 @@ from coloursorter.bench import (
     evaluate_logs,
 )
 from coloursorter.deploy import PipelineRunner
+from coloursorter.config import RuntimeConfig
+from coloursorter.bench.serial_transport import SerialMcuTransport, SerialTransportConfig
 
 from .app import BenchMainWindow, QueueState
 
@@ -81,12 +83,16 @@ class BenchAppController(QObject):
     fault_state_requested = Signal(object)
     log_entry_requested = Signal(object)
 
-    def __init__(self, app: QApplication) -> None:
+    def __init__(self, app: QApplication, runtime_config: RuntimeConfig) -> None:
         super().__init__()
         self._app = app
         self.window = BenchMainWindow()
 
-        self.transport_config = BenchTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.8)
+        self.transport_config = BenchTransportConfig(
+            max_queue_depth=runtime_config.transport.max_queue_depth,
+            base_round_trip_ms=runtime_config.transport.base_round_trip_ms,
+            per_item_penalty_ms=runtime_config.transport.per_item_penalty_ms,
+        )
         self.encoder_config = BenchEncoderConfig(
             pulses_per_revolution=2048,
             belt_speed_mm_per_s=140.0,
@@ -94,27 +100,48 @@ class BenchAppController(QObject):
             dropout_ratio=0.0,
         )
         self.runtime_state = BenchRuntimeState(
-            mode=BenchMode.REPLAY,
+            mode=BenchMode(runtime_config.frame_source.mode),
             previous_timestamp_s=0.0,
             fault_state=FaultState.NORMAL,
             controller_state=ControllerState.IDLE,
         )
-        self.cycle_config = BenchCycleConfig(period_ms=33, queue_consumption_policy=QueueConsumptionPolicy.ONE_PER_TICK)
+        self.cycle_config = BenchCycleConfig(
+            period_ms=runtime_config.cycle_timing.period_ms,
+            queue_consumption_policy=QueueConsumptionPolicy(runtime_config.cycle_timing.queue_consumption_policy),
+        )
 
         project_root = Path(__file__).resolve().parents[2]
-        self.replay_source = ReplayFrameSource(project_root / "data", ReplayConfig(frame_period_s=1.0 / 30.0))
-        self.live_config = LiveConfig(camera_index=0, frame_period_s=1.0 / 30.0)
+        replay_path = Path(runtime_config.frame_source.replay_path)
+        if not replay_path.is_absolute():
+            replay_path = project_root / replay_path
+        self.replay_source = ReplayFrameSource(
+            replay_path,
+            ReplayConfig(frame_period_s=runtime_config.frame_source.replay_frame_period_s),
+        )
+        self.live_config = LiveConfig(
+            camera_index=runtime_config.camera.camera_index,
+            frame_period_s=runtime_config.camera.frame_period_s,
+        )
         self.pipeline = PipelineRunner(
             lane_config_path=project_root / "configs" / "lane_geometry.yaml",
             calibration_path=project_root / "configs" / "calibration.json",
         )
-        self.transport = MockMcuTransport(
-            config=MockTransportConfig(
-                max_queue_depth=self.transport_config.max_queue_depth,
-                base_round_trip_ms=self.transport_config.base_round_trip_ms,
-                per_item_penalty_ms=self.transport_config.per_item_penalty_ms,
+        if runtime_config.transport.kind == "serial":
+            self.transport = SerialMcuTransport(
+                config=SerialTransportConfig(
+                    port=runtime_config.transport.serial_port,
+                    baud=runtime_config.transport.serial_baud,
+                    timeout_s=runtime_config.transport.serial_timeout_s,
+                )
             )
-        )
+        else:
+            self.transport = MockMcuTransport(
+                config=MockTransportConfig(
+                    max_queue_depth=self.transport_config.max_queue_depth,
+                    base_round_trip_ms=self.transport_config.base_round_trip_ms,
+                    per_item_penalty_ms=self.transport_config.per_item_penalty_ms,
+                )
+            )
         self.encoder = VirtualEncoder(
             EncoderConfig(
                 pulses_per_revolution=self.encoder_config.pulses_per_revolution,
@@ -155,7 +182,7 @@ class BenchAppController(QObject):
     def _emit_runtime_state(self) -> None:
         self.queue_state_requested.emit(
             QueueState(
-                depth=len(self.transport.queue),
+                depth=self._transport_queue_depth(),
                 capacity=self.transport_config.max_queue_depth,
                 state=self.runtime_state.controller_state.value,
             )
@@ -288,6 +315,8 @@ class BenchAppController(QObject):
         )
 
     def _step_transport_queue(self) -> None:
+        if not isinstance(self.transport, MockMcuTransport):
+            return
         if self.cycle_config.queue_consumption_policy == QueueConsumptionPolicy.NONE:
             self.transport.step_queue(items_to_consume=0)
             return
@@ -313,6 +342,14 @@ class BenchAppController(QObject):
                 ack_code="-",
             )
         )
+    def _transport_queue_depth(self) -> int:
+        if isinstance(self.transport, MockMcuTransport):
+            return len(self.transport.queue)
+        return 0
+
+    def _transport_clear_queue(self) -> None:
+        if isinstance(self.transport, MockMcuTransport):
+            self.transport.queue.clear()
 
     @Slot()
     def on_replay_clicked(self) -> None:
@@ -341,7 +378,7 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
             self._publish_session_evaluation()
         self._cycle_timer.stop()
-        self.transport.queue.clear()
+        self._transport_clear_queue()
         self._release_frame_source()
         self.runtime_state.previous_timestamp_s = 0.0
         self.runtime_state.fault_state = FaultState.NORMAL

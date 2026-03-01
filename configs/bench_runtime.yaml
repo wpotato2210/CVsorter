@@ -1,0 +1,33 @@
+motion_mode: FOLLOW_BELT
+homing_mode: SKIP_HOME
+
+frame_source:
+  mode: replay
+  replay_path: data
+  replay_frame_period_s: 0.033333333
+
+camera:
+  index: 0
+  frame_period_s: 0.033333333
+
+transport:
+  kind: mock
+  max_queue_depth: 8
+  base_round_trip_ms: 2.0
+  per_item_penalty_ms: 0.8
+  serial:
+    port: /dev/ttyACM0
+    baud: 115200
+    timeout_s: 0.1
+
+cycle_timing:
+  period_ms: 33
+  queue_consumption_policy: one_per_tick
+
+scenario_thresholds:
+  nominal_max_avg_rtt_ms: 12.0
+  nominal_max_peak_rtt_ms: 25.0
+  stress_max_avg_rtt_ms: 25.0
+  stress_max_peak_rtt_ms: 60.0
+  fault_max_avg_rtt_ms: 40.0
+  fault_max_peak_rtt_ms: 80.0

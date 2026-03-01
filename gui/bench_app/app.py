@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
@@ -19,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from coloursorter.bench import AckCode, BenchLogEntry, FaultState
+from coloursorter.config import RuntimeConfig
 
 
 @dataclass(frozen=True)
@@ -135,11 +138,20 @@ class BenchMainWindow(QMainWindow):
             self.log_table.setItem(row, index, QTableWidgetItem(text))
 
 
-def run() -> int:
+def run(argv: list[str] | None = None) -> int:
     from .controller import BenchAppController
 
+    parser = argparse.ArgumentParser(description="ColourSorter bench app")
+    parser.add_argument(
+        "--config",
+        default=str(Path(__file__).resolve().parents[2] / "configs" / "bench_runtime.yaml"),
+        help="Path to runtime YAML config",
+    )
+    args = parser.parse_args(argv)
+
+    runtime_config = RuntimeConfig.load_startup(args.config)
     app = QApplication([])
-    controller = BenchAppController(app)
+    controller = BenchAppController(app, runtime_config=runtime_config)
     return controller.start()
 
 

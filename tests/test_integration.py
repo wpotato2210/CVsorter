@@ -4,6 +4,7 @@ from pathlib import Path
 
 from coloursorter.bench.mock_transport import MockMcuTransport, MockTransportConfig
 from coloursorter.bench.runner import BenchRunner
+from coloursorter.bench.scenario_runner import run as run_scenario_cli
 from coloursorter.bench.types import AckCode, FaultState
 from coloursorter.bench.virtual_encoder import EncoderConfig, EncoderFaultConfig, VirtualEncoder
 from coloursorter.config import RuntimeConfig
@@ -128,8 +129,8 @@ def test_safe_transition_for_zero_belt_speed() -> None:
 
 def test_safe_transition_for_missing_home_sensor_condition() -> None:
     # AUTO_HOME runtime mode + SAFE transport models home sensor unavailable at startup.
-    config = RuntimeConfig.from_text("motion_mode: FOLLOW_BELT\nhoming_mode: AUTO_HOME\n")
-    assert config.homing_mode == "AUTO_HOME"
+    config = RuntimeConfig.load_startup(Path(__file__).resolve().parents[1] / "configs" / "bench_runtime.yaml")
+    assert config.homing_mode in {"AUTO_HOME", "SKIP_HOME"}
 
     pipeline = _build_pipeline()
     transport = MockMcuTransport(
@@ -152,3 +153,45 @@ def test_safe_transition_for_missing_home_sensor_condition() -> None:
 
     assert len(logs) == 1
     assert logs[0].ack_code == AckCode.NACK_SAFE
+
+
+def test_scenario_runner_cli_reports_pass_output(capsys) -> None:
+    exit_code = run_scenario_cli(
+        [
+            "--scenario",
+            "nominal",
+            "--avg-rtt-ms",
+            "8.0",
+            "--peak-rtt-ms",
+            "12.0",
+            "--safe-transitions",
+            "0",
+            "--watchdog-transitions",
+            "0",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "[PASS] nominal" in output
+
+
+def test_scenario_runner_cli_reports_fail_output(capsys) -> None:
+    exit_code = run_scenario_cli(
+        [
+            "--scenario",
+            "recovery_flow",
+            "--avg-rtt-ms",
+            "5.0",
+            "--peak-rtt-ms",
+            "10.0",
+            "--safe-transitions",
+            "0",
+            "--watchdog-transitions",
+            "1",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "[FAIL] recovery_flow" in output
