@@ -230,6 +230,55 @@ def test_encoder_dropout_ratio_one_drops_all_pulses() -> None:
     assert sum(pulses) == 0
 
 
+def test_projected_trigger_timestamp_is_deterministic_at_low_speed() -> None:
+    encoder = VirtualEncoder(
+        EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=20.0, pulley_circumference_mm=200.0)
+    )
+
+    projected = encoder.project_trigger_timestamp(
+        trigger_generation_s=1.0,
+        trigger_distance_mm=300.0,
+        schedule_time_s=0.01,
+    )
+
+    assert projected == 16.01
+
+
+def test_projected_trigger_timestamp_stops_advancing_under_zero_speed_fault() -> None:
+    encoder = VirtualEncoder(
+        EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0),
+        fault_config=EncoderFaultConfig(force_zero_speed=True),
+    )
+
+    projected = encoder.project_trigger_timestamp(
+        trigger_generation_s=2.0,
+        trigger_distance_mm=150.0,
+        schedule_time_s=0.02,
+    )
+
+    assert projected == 2.0
+
+
+def test_trigger_generation_timestamp_uses_previous_pulse_when_dropout_hides_current_interval() -> None:
+    encoder = VirtualEncoder(
+        EncoderConfig(
+            pulses_per_revolution=100,
+            belt_speed_mm_per_s=100.0,
+            pulley_circumference_mm=200.0,
+            dropout_ratio=0.95,
+        )
+    )
+
+    encoder.pulses_between(0.0, 0.5)
+    first_generation = encoder.resolve_trigger_generation_timestamp(0.0)
+
+    encoder.pulses_between(0.5, 0.6)
+    second_generation = encoder.resolve_trigger_generation_timestamp(0.5)
+
+    assert first_generation == 0.5
+    assert second_generation == first_generation
+
+
 def test_watchdog_summary_counts_ack_code_not_nack_code_aliases() -> None:
     runner = BenchRunner(
         pipeline=_build_pipeline(),
