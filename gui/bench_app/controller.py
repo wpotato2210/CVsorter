@@ -158,7 +158,11 @@ class BenchAppController(QObject):
     def __init__(self, app: QApplication, runtime_config: RuntimeConfig) -> None:
         super().__init__()
         self._app = app
+        self._runtime_config = runtime_config
         self.window = BenchMainWindow()
+        self.trigger_threshold = 0.5
+        self.belt_speed_mm_s = 140.0
+        self._serial_connected = False
 
         self.transport_config = BenchTransportConfig(
             max_queue_depth=runtime_config.transport.max_queue_depth,
@@ -207,6 +211,7 @@ class BenchAppController(QObject):
                     timeout_s=runtime_config.transport.serial_timeout_s,
                 )
             )
+            self._serial_connected = True
         else:
             self.transport = MockMcuTransport(
                 config=MockTransportConfig(
@@ -244,6 +249,7 @@ class BenchAppController(QObject):
         self._connect_view_updates()
         self.mode_changed.connect(self._on_mode_changed)
         self.transport_response_received.connect(self._on_transport_response_received)
+        self._set_serial_status(self._serial_connected)
         self._on_controller_state_entered(ControllerState.IDLE)
 
     def start(self) -> int:
@@ -255,6 +261,11 @@ class BenchAppController(QObject):
         self.window.replay_button.clicked.connect(self.on_replay_clicked)
         self.window.live_button.clicked.connect(self.on_live_clicked)
         self.window.home_button.clicked.connect(self.on_home_clicked)
+        self.window.serial_connect_button.clicked.connect(self.on_serial_connect_clicked)
+        self.window.serial_disconnect_button.clicked.connect(self.on_serial_disconnect_clicked)
+        self.window.fire_test_button.clicked.connect(self.on_fire_test_clicked)
+        self.window.trigger_threshold_input.valueChanged.connect(self.on_trigger_threshold_changed)
+        self.window.belt_speed_input.valueChanged.connect(self.on_belt_speed_changed)
 
     def _connect_view_updates(self) -> None:
         self.frame_preview_requested.connect(self.window.update_frame_preview)
@@ -262,6 +273,14 @@ class BenchAppController(QObject):
         self.queue_state_requested.connect(self.window.set_queue_state)
         self.fault_state_requested.connect(self.window.set_fault_state)
         self.log_entry_requested.connect(self.window.append_log_entry)
+
+    def _set_last_command_status(self, status: str) -> None:
+        self.window.set_last_command_status(status)
+
+    def _set_serial_status(self, connected: bool, detail: str = "") -> None:
+        label = "connected" if connected else "disconnected"
+        suffix = f" ({detail})" if detail else ""
+        self.window.serial_status_label.setText(f"Serial: {label}{suffix}")
 
     def _emit_runtime_state(self) -> None:
         self.queue_state_requested.emit(
@@ -358,6 +377,8 @@ class BenchAppController(QObject):
         self.frame_preview_requested.emit(frame_rgb.tobytes(), frame_rgb.shape[1], frame_rgb.shape[0])
 
         detections = self._detector.detect(frame.image_bgr)
+        if any(detection.infection_score >= self.trigger_threshold for detection in detections):
+            self._send_poc_fire_command(reason="auto_detect")
         try:
             logs = self.bench_runner.run_cycle(
                 frame_id=frame.frame_id,
@@ -452,6 +473,18 @@ class BenchAppController(QObject):
         response_frame = self._protocol_host.handle_frame(serialize_packet(command, args))
         parsed_response = parse_frame(response_frame)
         return parse_ack_tokens((parsed_response.command, *parsed_response.args))
+
+    def _send_poc_fire_command(self, reason: str) -> AckResponse | None:
+        ack = self._send_protocol_command("SCHED", (0, 100))
+        if ack is None:
+            self._set_last_command_status(f"<SCHED|0|100> ({reason}) -> no response")
+            return None
+        if ack.status == "ACK":
+            self._set_last_command_status(f"<SCHED|0|100> ({reason}) -> ACK")
+        else:
+            detail = f"NACK({ack.nack_code})"
+            self._set_last_command_status(f"<SCHED|0|100> ({reason}) -> {detail}")
+        return ack
 
     def _reset_protocol_queue(self) -> AckResponse | None:
         ack = self._send_protocol_command("RESET_QUEUE")
@@ -623,3 +656,43 @@ class BenchAppController(QObject):
                 ack_code="-",
             )
         )
+
+    @Slot(float)
+    def on_trigger_threshold_changed(self, value: float) -> None:
+        self.trigger_threshold = value
+
+    @Slot(float)
+    def on_belt_speed_changed(self, value: float) -> None:
+        self.belt_speed_mm_s = value
+
+    @Slot()
+    def on_fire_test_clicked(self) -> None:
+        self._send_poc_fire_command(reason="manual_fire_test")
+
+    @Slot()
+    def on_serial_connect_clicked(self) -> None:
+        if self._runtime_config.transport.kind != "serial":
+            self._set_serial_status(False, "mock transport")
+            return
+        if self._serial_connected:
+            self._set_serial_status(True)
+            return
+        try:
+            self.transport = SerialMcuTransport(
+                config=SerialTransportConfig(
+                    port=self._runtime_config.transport.serial_port,
+                    baud=self._runtime_config.transport.serial_baud,
+                    timeout_s=self._runtime_config.transport.serial_timeout_s,
+                )
+            )
+            self._serial_connected = True
+            self._set_serial_status(True)
+        except RuntimeError as exc:
+            self._set_serial_status(False, str(exc))
+
+    @Slot()
+    def on_serial_disconnect_clicked(self) -> None:
+        if hasattr(self.transport, "close") and callable(self.transport.close):
+            self.transport.close()
+        self._serial_connected = False
+        self._set_serial_status(False)
