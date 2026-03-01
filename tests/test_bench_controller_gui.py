@@ -122,6 +122,59 @@ def test_serial_queue_depth_is_exposed_in_gui_state(
     assert controller.window.queue_depth_label.text() == "Depth: 2/8"
 
 
+
+
+def test_transport_response_signal_refreshes_queue_widgets_for_mock_path(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.1,
+            trigger_generation_s=0.1,
+            lane=1,
+            decision="accept",
+            rejection_reason=None,
+            protocol_round_trip_ms=4.0,
+            ack_code=AckCode.ACK,
+            queue_depth=4,
+            scheduler_state="ACTIVE",
+            mode="MANUAL",
+            queue_cleared=False,
+        )
+    )
+
+    assert controller.window.queue_depth_label.text() == "Depth: 4/8"
+    assert controller.window.scheduler_state_label.text() == "Scheduler: ACTIVE"
+    assert controller.window.mode_label.text() == "Mode: MANUAL"
+
+
+def test_queue_depth_falls_back_to_latest_transport_response_when_transport_has_no_depth_api(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    controller.transport = object()
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.2,
+            trigger_generation_s=0.2,
+            lane=2,
+            decision="reject",
+            rejection_reason="rule",
+            protocol_round_trip_ms=5.0,
+            ack_code=AckCode.ACK,
+            queue_depth=3,
+            scheduler_state="ACTIVE",
+            mode="AUTO",
+            queue_cleared=False,
+        )
+    )
+
+    assert controller.window.queue_depth_label.text() == "Depth: 3/8"
+
+
 def test_safe_entry_updates_overlay_fault_and_mode(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
 
@@ -136,26 +189,26 @@ def test_safe_entry_updates_overlay_fault_and_mode(qapp: QApplication, runtime_c
 
 def test_log_mode_updates_runtime_mode_from_transport_feedback(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
-    log_entry = BenchLogEntry(
-        frame_timestamp_s=0.1,
-        trigger_generation_s=0.1,
-        lane=1,
-        decision="accept",
-        rejection_reason=None,
-        protocol_round_trip_ms=4.0,
-        ack_code=AckCode.ACK,
-        scheduler_state="ACTIVE",
-        mode="MANUAL",
-    )
 
     controller.runtime_state.controller_state = ControllerState.REPLAY_RUNNING
     controller.runtime_state.scheduler_state = "IDLE"
     controller.runtime_state.operator_mode = OperatorMode.AUTO
 
-    controller._session_logs.append(log_entry)
-    controller.runtime_state.scheduler_state = log_entry.scheduler_state
-    controller.runtime_state.operator_mode = OperatorMode(log_entry.mode)
-    controller._emit_runtime_state()
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.1,
+            trigger_generation_s=0.1,
+            lane=1,
+            decision="accept",
+            rejection_reason=None,
+            protocol_round_trip_ms=4.0,
+            ack_code=AckCode.ACK,
+            scheduler_state="ACTIVE",
+            mode="MANUAL",
+            queue_depth=2,
+            queue_cleared=False,
+        )
+    )
 
     assert controller.window.scheduler_state_label.text() == "Scheduler: ACTIVE"
     assert controller.window.mode_label.text() == "Mode: MANUAL"

@@ -70,7 +70,7 @@ def test_telemetry_csv_includes_required_openspec_v3_fields(tmp_path: Path) -> N
     artifact_dir = write_artifacts(logs, evaluation, tmp_path, include_text_report=False)
     header = (artifact_dir / "telemetry.csv").read_text(encoding="utf-8").splitlines()[0].split(",")
 
-    assert header[:10] == [
+    assert header[:11] == [
         "frame_timestamp",
         "trigger_generation_timestamp",
         "trigger_timestamp",
@@ -81,6 +81,7 @@ def test_telemetry_csv_includes_required_openspec_v3_fields(tmp_path: Path) -> N
         "queue_depth",
         "scheduler_state",
         "mode",
+        "queue_cleared",
     ]
 
 
