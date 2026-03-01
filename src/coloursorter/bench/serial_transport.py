@@ -132,7 +132,9 @@ def _map_ack_to_bench_state(status: str, nack_code: int | None, detail: str | No
         return AckCode.NACK_QUEUE_FULL, FaultState.NORMAL
     if nack_code == 5 or normalized_detail == "SAFE":
         return AckCode.NACK_SAFE, FaultState.SAFE
-    if nack_code == 7 or normalized_detail == "WATCHDOG":
+    if nack_code == 7 or normalized_detail == "BUSY":
+        return AckCode.NACK_BUSY, FaultState.NORMAL
+    if normalized_detail == "WATCHDOG":
         return AckCode.NACK_WATCHDOG, FaultState.WATCHDOG
     return AckCode.NACK_SAFE, FaultState.SAFE
 
