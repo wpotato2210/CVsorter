@@ -39,6 +39,12 @@ flowchart LR
     F --> G[serial_interface/wire\nO: wire command string]
 ```
 
+
+## Documentation upkeep
+- Keep top-level docs cross-linked through `README.md` and `docs/openspec/README.md`.
+- When runtime commands or config keys change, update docs in the same commit.
+- Prefer command examples that are executable as-written from repository root.
+
 ## Contribution checks (static + runtime)
 - Keep type hints on public functions/classes.
 - Add essential runtime checks at boundaries (config load, protocol parse, payload shape).

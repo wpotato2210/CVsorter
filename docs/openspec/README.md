@@ -4,10 +4,9 @@ This directory consolidates OpenSpec v3 artifacts that were previously stored ac
 
 ## Branch verification and diff status
 
-- Target remote branch: `OpenSpec-import`.
-- Verification command used: `git ls-remote --heads origin OpenSpec-import`.
-- Result: no `origin` remote is configured in this repository, so remote verification and branch fetch could not be completed in this environment.
-- Fallback used for this import pass: import all OpenSpec-like artifacts currently present on `work` into `docs/openspec/v3/` with commit provenance.
+- Canonical branch target for import history: `OpenSpec-import`.
+- Verification command: `git ls-remote --heads <remote> OpenSpec-import`.
+- If no remote is configured, treat this directory as source-of-truth and preserve provenance in the table below.
 
 ## v3 spec-to-implementation mapping
 
@@ -45,3 +44,12 @@ Source commit for all files imported in this pass: `01cf4bd17fb56664efe11f0ca67d
 - Interface Control Document: `docs/openspec/icd.md`.
 - Protocol matrix: `docs/openspec/v3/protocol_compliance_matrix.md`.
 - System matrix (state/timing/telemetry): `docs/openspec/v3/system_compliance_matrix.md`.
+
+## Recommended maintenance flow
+
+1. Update artifacts under `docs/openspec/v3/`.
+2. Refresh matrix files when behavior or contracts change.
+3. Run protocol and artifact checks:
+   - `pytest -q tests/test_protocol_compliance_v3.py`
+   - `pytest -q tests/test_openspec_artifacts.py`
+4. Record provenance updates in this file.
