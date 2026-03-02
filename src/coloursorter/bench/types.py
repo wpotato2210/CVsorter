@@ -76,3 +76,15 @@ class BenchLogEntry:
     cycle_latency_ms: float = 0.0
     nack_code: int | None = None
     nack_detail: str | None = None
+    run_id: str = "default-run"
+    test_batch_id: str = "default-batch"
+    event_timestamp_utc: str = ""
+    frame_id: int = -1
+    object_id: str = ""
+    prediction_label: str = ""
+    confidence: float = 0.0
+    actuator_command_issued: bool = False
+    actuator_command_payload: str = ""
+    frame_snapshot_path: str = ""
+    ground_truth_label: str = ""
+    decision_reason: str = ""

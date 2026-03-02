@@ -199,3 +199,30 @@ def test_scenario_runner_cli_reports_fail_output(capsys) -> None:
     output = capsys.readouterr().out
     assert exit_code == 1
     assert "[FAIL] recovery_flow" in output
+
+
+def test_mixed_detections_only_rejects_issue_commands() -> None:
+    pipeline = _build_pipeline()
+    transport = MockMcuTransport(config=MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5))
+    encoder = VirtualEncoder(config=EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0))
+    runner = BenchRunner(pipeline=pipeline, transport=transport, encoder=encoder)
+
+    detections = [
+        ObjectDetection(object_id="obj-accept", centroid_x_px=120.0, centroid_y_px=220.0, classification="accept", infection_score=0.2),
+        ObjectDetection(object_id="obj-reject", centroid_x_px=120.0, centroid_y_px=240.0, classification="reject", infection_score=0.9),
+    ]
+
+    logs = runner.run_cycle(
+        frame_id=77,
+        timestamp_s=1.2,
+        image_height_px=720,
+        image_width_px=1056,
+        detections=detections,
+        previous_timestamp_s=1.0,
+    )
+
+    assert len(logs) == 2
+    by_id = {log.object_id: log for log in logs}
+    assert by_id["obj-accept"].actuator_command_issued is False
+    assert by_id["obj-reject"].actuator_command_issued is True
+    assert by_id["obj-reject"].actuator_command_payload.startswith("lane=")

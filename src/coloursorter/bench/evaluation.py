@@ -39,12 +39,14 @@ def write_artifacts(
     evaluation: BenchEvaluation,
     output_root: str | Path,
     include_text_report: bool,
+    config_snapshot: dict[str, object] | None = None,
 ) -> Path:
     artifact_dir = Path(output_root) / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     artifact_dir.mkdir(parents=True, exist_ok=False)
 
     summary_path = artifact_dir / "summary.json"
     telemetry_path = artifact_dir / "telemetry.csv"
+    events_path = artifact_dir / "events.jsonl"
 
     summary_payload = {
         "passed": evaluation.passed,
@@ -60,16 +62,60 @@ def write_artifacts(
     }
     summary_path.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
 
+    with events_path.open("w", encoding="utf-8") as handle:
+        for entry in logs:
+            ack_code = entry.ack_code.value if isinstance(entry.ack_code, AckCode) else str(entry.ack_code)
+            payload = {
+                "run_id": entry.run_id,
+                "test_batch_id": entry.test_batch_id,
+                "event_timestamp_utc": entry.event_timestamp_utc,
+                "frame_id": entry.frame_id,
+                "object_id": entry.object_id,
+                "prediction_label": entry.prediction_label,
+                "confidence": entry.confidence,
+                "decision_label": entry.decision,
+                "decision_reason": entry.decision_reason,
+                "lane_index": entry.lane_index,
+                "trigger_mm": entry.trigger_mm,
+                "trigger_timestamp_s": entry.trigger_timestamp_s,
+                "actuator_command_issued": entry.actuator_command_issued,
+                "actuator_command_payload": entry.actuator_command_payload,
+                "transport_ack_code": ack_code,
+                "transport_nack_code": "" if entry.nack_code is None else entry.nack_code,
+                "transport_nack_detail": entry.nack_detail or "",
+                "queue_depth": entry.queue_depth,
+                "ingest_latency_ms": entry.ingest_latency_ms,
+                "decision_latency_ms": entry.decision_latency_ms,
+                "schedule_latency_ms": entry.schedule_latency_ms,
+                "transport_latency_ms": entry.transport_latency_ms,
+                "cycle_latency_ms": entry.cycle_latency_ms,
+                "frame_snapshot_path": entry.frame_snapshot_path,
+                "ground_truth_label": entry.ground_truth_label,
+            }
+            handle.write(json.dumps(payload) + "\n")
+
     with telemetry_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(
             [
+                "run_id",
+                "test_batch_id",
+                "event_timestamp_utc",
                 "frame_timestamp",
+                "frame_id",
+                "object_id",
                 "trigger_generation_timestamp",
                 "trigger_timestamp",
                 "trigger_mm",
                 "lane_index",
                 "rejection_reason",
+                "decision_reason",
+                "prediction_label",
+                "confidence",
+                "actuator_command_issued",
+                "actuator_command_payload",
+                "frame_snapshot_path",
+                "ground_truth_label",
                 "belt_speed_mm_s",
                 "queue_depth",
                 "scheduler_state",
@@ -91,12 +137,24 @@ def write_artifacts(
             ack_code = entry.ack_code.value if isinstance(entry.ack_code, AckCode) else str(entry.ack_code)
             writer.writerow(
                 [
+                    entry.run_id,
+                    entry.test_batch_id,
+                    entry.event_timestamp_utc,
                     f"{entry.frame_timestamp_s:.6f}",
+                    entry.frame_id,
+                    entry.object_id,
                     f"{entry.trigger_generation_s:.6f}",
                     f"{entry.trigger_timestamp_s:.6f}",
                     f"{entry.trigger_mm:.6f}",
                     entry.lane_index,
                     entry.rejection_reason or "",
+                    entry.decision_reason,
+                    entry.prediction_label,
+                    f"{entry.confidence:.3f}",
+                    str(entry.actuator_command_issued).lower(),
+                    entry.actuator_command_payload,
+                    entry.frame_snapshot_path,
+                    entry.ground_truth_label,
                     f"{entry.belt_speed_mm_s:.6f}",
                     entry.queue_depth,
                     entry.scheduler_state,
@@ -114,6 +172,9 @@ def write_artifacts(
                     entry.nack_detail or "",
                 ]
             )
+
+    if config_snapshot is not None:
+        (artifact_dir / "config_snapshot.json").write_text(json.dumps(config_snapshot, indent=2), encoding="utf-8")
 
     if include_text_report:
         report_lines = [

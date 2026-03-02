@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Callable
 
 import cv2
 import numpy as np
 
 from coloursorter.model import ObjectDetection
 
-DETECTION_PROVIDER_VALUES = ("opencv_basic", "opencv_calibrated")
+DETECTION_PROVIDER_VALUES = ("opencv_basic", "opencv_calibrated", "model_stub")
 DETECTION_LABEL_VALUES = ("accept", "reject")
 
 
@@ -177,13 +178,67 @@ class CalibratedOpenCvDetectionProvider(DetectionProvider):
         return _validate_detection_output(sorted(detections, key=lambda item: item.object_id))
 
 
+@dataclass(frozen=True)
+class ModelStubDetectionConfig:
+    reject_threshold: float = 0.5
+
+
+class ModelStubDetectionProvider(DetectionProvider):
+    """Simple model-adapter provider for baseline wiring tests.
+
+    The adapter expects a callable with signature `predict(frame_bgr) -> list[dict]`
+    where each dict contains object_id, centroid_x_px, centroid_y_px, label, confidence.
+    """
+
+    def __init__(self, predictor: Callable[[np.ndarray], list[dict[str, float | str]]] | None = None, config: ModelStubDetectionConfig | None = None) -> None:
+        self._config = config or ModelStubDetectionConfig()
+        self._predictor = predictor or self._default_predictor
+
+    @staticmethod
+    def _default_predictor(frame_bgr: np.ndarray) -> list[dict[str, float | str]]:
+        height, width = frame_bgr.shape[:2]
+        if height == 0 or width == 0:
+            return []
+        return [
+            {
+                "object_id": "det-0",
+                "centroid_x_px": float(width / 2.0),
+                "centroid_y_px": float(height / 2.0),
+                "label": "accept",
+                "confidence": 0.51,
+            }
+        ]
+
+    def detect(self, frame_bgr: object) -> list[ObjectDetection]:
+        frame = _validate_frame(frame_bgr)
+        raw = self._predictor(frame)
+        detections: list[ObjectDetection] = []
+        for index, item in enumerate(raw):
+            confidence = float(item.get("confidence", 0.0))
+            label = str(item.get("label", "accept"))
+            classification = "reject" if (label == "reject" and confidence >= self._config.reject_threshold) else "accept"
+            detections.append(
+                ObjectDetection(
+                    object_id=str(item.get("object_id", f"det-{index}")),
+                    centroid_x_px=float(item.get("centroid_x_px", 0.0)),
+                    centroid_y_px=float(item.get("centroid_y_px", 0.0)),
+                    classification=classification,
+                    infection_score=max(0.0, min(1.0, confidence)),
+                )
+            )
+        return _validate_detection_output(detections)
+
+
 def build_detection_provider(
     provider_name: str,
     basic_config: OpenCvDetectionConfig | None = None,
     calibrated_config: CalibratedOpenCvDetectionConfig | None = None,
+    model_stub_config: ModelStubDetectionConfig | None = None,
 ) -> DetectionProvider:
     if provider_name == "opencv_basic":
         return OpenCvDetectionProvider(config=basic_config)
     if provider_name == "opencv_calibrated":
         return CalibratedOpenCvDetectionProvider(config=calibrated_config)
+    if provider_name == "model_stub":
+        return ModelStubDetectionProvider(config=model_stub_config)
     raise DetectionError(f"Unsupported detection provider: {provider_name}")

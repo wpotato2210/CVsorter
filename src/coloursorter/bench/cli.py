@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import cv2
@@ -24,6 +25,7 @@ from coloursorter.bench.evaluation import evaluate_logs, write_artifacts
 from coloursorter.config import RuntimeConfig
 from coloursorter.deploy import (
     CalibratedOpenCvDetectionConfig,
+    ModelStubDetectionConfig,
     OpenCvDetectionConfig,
     PipelineRunner,
     build_detection_provider,
@@ -43,6 +45,13 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--lane-config", default="configs/lane_geometry.yaml")
     parser.add_argument("--calibration", default="configs/calibration.json")
     parser.add_argument("--runtime-config", default="configs/bench_runtime.yaml")
+    parser.add_argument("--run-id", default="baseline-run")
+    parser.add_argument("--test-batch-id", default="batch-001")
+    parser.add_argument("--enable-snapshots", action="store_true")
+    parser.add_argument("--ground-truth-manifest", default="")
+    parser.add_argument("--detector-provider", default="")
+    parser.add_argument("--detector-threshold", type=float, default=-1.0)
+    parser.add_argument("--calibration-mode", choices=["fixed", "adaptive"], default="fixed")
     return parser.parse_args()
 
 
@@ -51,6 +60,12 @@ def _load_runtime_config(runtime_config_path: str | Path) -> RuntimeConfig | Non
     if not config_path.exists():
         return None
     return RuntimeConfig.load_startup(config_path)
+
+
+def _load_ground_truth(path: str) -> dict[str, str]:
+    if not path:
+        return {}
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def _load_available_scenarios(runtime_config: RuntimeConfig | None):
@@ -68,9 +83,10 @@ def _select_scenarios(names: list[str], runtime_config: RuntimeConfig | None):
     return tuple(available[name] for name in selected_names)
 
 
-def _build_detector(runtime_config: RuntimeConfig | None):
+def _build_detector(runtime_config: RuntimeConfig | None, provider_override: str, threshold_override: float):
     if runtime_config is None:
-        return build_detection_provider("opencv_basic")
+        provider = provider_override or "opencv_basic"
+        return build_detection_provider(provider)
 
     basic = OpenCvDetectionConfig(
         min_area_px=runtime_config.detection.opencv_basic.min_area_px,
@@ -83,14 +99,34 @@ def _build_detector(runtime_config: RuntimeConfig | None):
         reject_saturation_min=runtime_config.detection.opencv_calibrated.reject_saturation_min,
         reject_value_min=runtime_config.detection.opencv_calibrated.reject_value_min,
     )
+    threshold = runtime_config.detection.model_stub.reject_threshold if threshold_override < 0.0 else threshold_override
+    model_stub = ModelStubDetectionConfig(reject_threshold=threshold)
+    provider = provider_override or runtime_config.detection.provider
     return build_detection_provider(
-        runtime_config.detection.provider,
+        provider,
         basic_config=basic,
         calibrated_config=calibrated,
+        model_stub_config=model_stub,
     )
 
 
-def _run_cycles(args: argparse.Namespace, runner: BenchRunner, runtime_config: RuntimeConfig | None) -> tuple[BenchLogEntry, ...]:
+def _snapshot_frame(frame_bgr: object, output_root: Path, frame_id: int, enabled: bool) -> str:
+    if not enabled:
+        return ""
+    frames_dir = output_root / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    path = frames_dir / f"frame_{frame_id:06d}.png"
+    cv2.imwrite(str(path), frame_bgr)
+    return str(path)
+
+
+def _run_cycles(
+    args: argparse.Namespace,
+    runner: BenchRunner,
+    runtime_config: RuntimeConfig | None,
+    artifact_root: Path,
+    ground_truth_by_object_id: dict[str, str],
+) -> tuple[BenchLogEntry, ...]:
     mode = BenchMode(args.mode)
     frame_source = (
         ReplayFrameSource(args.source, ReplayConfig(frame_period_s=args.frame_period_s))
@@ -98,7 +134,7 @@ def _run_cycles(args: argparse.Namespace, runner: BenchRunner, runtime_config: R
         else LiveFrameSource(LiveConfig(camera_index=args.camera_index, frame_period_s=args.frame_period_s))
     )
     frame_source.open()
-    detector = _build_detector(runtime_config)
+    detector = _build_detector(runtime_config, args.detector_provider, args.detector_threshold)
     logs: list[BenchLogEntry] = []
     previous_timestamp_s = 0.0
     try:
@@ -108,6 +144,7 @@ def _run_cycles(args: argparse.Namespace, runner: BenchRunner, runtime_config: R
                 break
             frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
             detections = detector.detect(frame.image_bgr)
+            snapshot_path = _snapshot_frame(frame.image_bgr, artifact_root, frame.frame_id, args.enable_snapshots)
             cycle_logs = runner.run_cycle(
                 frame_id=frame.frame_id,
                 timestamp_s=frame.timestamp_s,
@@ -115,6 +152,10 @@ def _run_cycles(args: argparse.Namespace, runner: BenchRunner, runtime_config: R
                 image_width_px=frame_rgb.shape[1],
                 detections=detections,
                 previous_timestamp_s=previous_timestamp_s,
+                run_id=args.run_id,
+                test_batch_id=args.test_batch_id,
+                frame_snapshot_path=snapshot_path,
+                ground_truth_by_object_id=ground_truth_by_object_id,
             )
             logs.extend(cycle_logs)
             previous_timestamp_s = frame.timestamp_s
@@ -137,13 +178,16 @@ def main() -> int:
     )
     runner = BenchRunner(pipeline=pipeline, transport=transport, encoder=VirtualEncoder(encoder))
 
-    logs = _run_cycles(args, runner, runtime_config)
+    ground_truth_by_object_id = _load_ground_truth(args.ground_truth_manifest)
+    logs = _run_cycles(args, runner, runtime_config, Path(args.artifact_root), ground_truth_by_object_id)
     evaluation = evaluate_logs(logs=logs, scenarios=scenarios)
+    config_snapshot = vars(args)
     artifact_dir = write_artifacts(
         logs=logs,
         evaluation=evaluation,
         output_root=args.artifact_root,
         include_text_report=args.text_report,
+        config_snapshot=config_snapshot,
     )
     print(f"artifact_dir={artifact_dir}")
     print(f"overall={'PASS' if evaluation.passed else 'FAIL'}")

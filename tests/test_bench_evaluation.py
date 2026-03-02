@@ -7,10 +7,31 @@ from coloursorter.bench import AckCode, BenchLogEntry, BenchScenario
 from coloursorter.bench.evaluation import evaluate_logs, write_artifacts
 
 
+def _entry(**overrides: object) -> BenchLogEntry:
+    payload: dict[str, object] = {
+        "run_id": "r1",
+        "test_batch_id": "b1",
+        "event_timestamp_utc": "2024-01-01T00:00:00+00:00",
+        "frame_timestamp_s": 0.0,
+        "frame_id": 1,
+        "object_id": "obj-1",
+        "trigger_generation_s": 0.0,
+        "lane": 0,
+        "decision": "accept",
+        "prediction_label": "accept",
+        "confidence": 0.5,
+        "rejection_reason": None,
+        "protocol_round_trip_ms": 10.0,
+        "ack_code": AckCode.ACK,
+    }
+    payload.update(overrides)
+    return BenchLogEntry(**payload)
+
+
 def test_evaluate_logs_applies_scenarios() -> None:
     logs = (
-        BenchLogEntry(0.0, 0.0, 0, "accept", None, 10.0, AckCode.ACK),
-        BenchLogEntry(0.1, 0.1, 0, "accept", None, 12.0, AckCode.ACK),
+        _entry(frame_timestamp_s=0.0, protocol_round_trip_ms=10.0),
+        _entry(frame_timestamp_s=0.1, frame_id=2, object_id="obj-2", protocol_round_trip_ms=12.0),
     )
     scenarios = (
         BenchScenario("tight", max_avg_rtt_ms=11.0, max_peak_rtt_ms=15.0, require_safe_transition=False, require_recovery=False),
@@ -25,14 +46,14 @@ def test_evaluate_logs_applies_scenarios() -> None:
 
 def test_write_artifacts_writes_summary_and_telemetry(tmp_path: Path) -> None:
     logs = (
-        BenchLogEntry(0.0, 0.0, 1, "reject", "rule", 6.5, AckCode.NACK_SAFE),
+        _entry(decision="reject", prediction_label="reject", rejection_reason="rule", protocol_round_trip_ms=6.5, ack_code=AckCode.NACK_SAFE),
     )
     scenarios = (
         BenchScenario("fault", max_avg_rtt_ms=8.0, max_peak_rtt_ms=10.0, require_safe_transition=True, require_recovery=False),
     )
     evaluation = evaluate_logs(logs, scenarios)
 
-    artifact_dir = write_artifacts(logs, evaluation, tmp_path, include_text_report=True)
+    artifact_dir = write_artifacts(logs, evaluation, tmp_path, include_text_report=True, config_snapshot={"a": 1})
 
     summary_payload = json.loads((artifact_dir / "summary.json").read_text(encoding="utf-8"))
     telemetry_lines = (artifact_dir / "telemetry.csv").read_text(encoding="utf-8").strip().splitlines()
@@ -41,15 +62,18 @@ def test_write_artifacts_writes_summary_and_telemetry(tmp_path: Path) -> None:
     assert summary_payload["scenarios"][0]["name"] == "fault"
     assert len(telemetry_lines) == 2
     assert (artifact_dir / "report.txt").exists()
+    assert (artifact_dir / "events.jsonl").exists()
+    assert (artifact_dir / "config_snapshot.json").exists()
 
 
 def test_telemetry_csv_includes_required_openspec_v3_fields(tmp_path: Path) -> None:
     logs = (
-        BenchLogEntry(
+        _entry(
             frame_timestamp_s=0.2,
             trigger_generation_s=0.2,
             lane=2,
             decision="reject",
+            prediction_label="reject",
             rejection_reason="classified_reject",
             protocol_round_trip_ms=5.0,
             ack_code=AckCode.ACK,
@@ -70,28 +94,24 @@ def test_telemetry_csv_includes_required_openspec_v3_fields(tmp_path: Path) -> N
     artifact_dir = write_artifacts(logs, evaluation, tmp_path, include_text_report=False)
     header = (artifact_dir / "telemetry.csv").read_text(encoding="utf-8").splitlines()[0].split(",")
 
-    assert header[:11] == [
+    assert header[:6] == [
+        "run_id",
+        "test_batch_id",
+        "event_timestamp_utc",
         "frame_timestamp",
-        "trigger_generation_timestamp",
-        "trigger_timestamp",
-        "trigger_mm",
-        "lane_index",
-        "rejection_reason",
-        "belt_speed_mm_s",
-        "queue_depth",
-        "scheduler_state",
-        "mode",
-        "queue_cleared",
+        "frame_id",
+        "object_id",
     ]
 
 
 def test_telemetry_csv_preserves_nack_detail_and_stage_latency_fields(tmp_path: Path) -> None:
     logs = (
-        BenchLogEntry(
+        _entry(
             frame_timestamp_s=0.2,
             trigger_generation_s=0.2,
             lane=2,
             decision="reject",
+            prediction_label="reject",
             rejection_reason="classified_reject",
             protocol_round_trip_ms=5.0,
             ack_code=AckCode.NACK_SAFE,
