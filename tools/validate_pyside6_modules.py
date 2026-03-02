@@ -91,8 +91,8 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 def _ensure_python_architecture() -> list[str]:
     errors: list[str] = []
-    if sys.version_info < (3, 9):
-        errors.append(f"Python 3.9+ is required; detected {sys.version.split()[0]}.")
+    if sys.version_info < (3, 10):
+        errors.append(f"Python 3.10+ is required; detected {sys.version.split()[0]}.")
     if struct.calcsize("P") * 8 < 64:
         errors.append("64-bit Python runtime is required for CI and PySide6 compatibility.")
     return errors
