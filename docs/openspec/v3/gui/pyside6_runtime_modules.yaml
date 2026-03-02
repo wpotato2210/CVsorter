@@ -1,25 +1,24 @@
-schema_version: 1
-runtime_dependencies:
+# OpenSpec v3: PySide6 runtime module validation contract
+# Schema notes:
+# - runtime.required_modules: mandatory Python dotted import paths (CI must fail if missing).
+# - runtime.optional_modules: dotted import paths checked when present in the installed Qt build.
+# - runtime.version_window: supported dependency range for PySide6 and PySide6-Addons alignment.
+# - components.*.owners: optional ownership map for maintainers and dependency tracing.
+schema_version: 3
+runtime:
   package: PySide6
-  min_version: "6.6"
-  max_version_exclusive: "7.0"
+  version_window:
+    min_inclusive: "6.6.0"
+    max_exclusive: "7.0.0"
   required_modules:
     - PySide6.QtCore
     - PySide6.QtGui
     - PySide6.QtWidgets
+    - PySide6.QtStateMachine
+  optional_modules:
+    - PySide6.Qt3DCore
+
 components:
-  bench_controller_state_machine:
-    owners:
-      - gui/bench_app/controller.py
-    required_modules:
-      - PySide6.QtStateMachine
-      - PySide6.QtCore
-      - PySide6.QtWidgets
-    symbols:
-      - QState
-      - QStateMachine
-      - QObject
-      - QTimer
   bench_main_window:
     owners:
       - gui/bench_app/app.py
@@ -27,19 +26,14 @@ components:
       - PySide6.QtWidgets
       - PySide6.QtGui
       - PySide6.QtCore
-    symbols:
-      - QApplication
-      - QMainWindow
-      - QImage
-      - QPixmap
-  ui_loader:
+  bench_controller_state_machine:
     owners:
-      - gui/bench_app/load_ui_main_layout.py
+      - gui/bench_app/controller.py
     required_modules:
-      - PySide6.QtUiTools
-      - PySide6.QtWidgets
+      - PySide6.QtStateMachine
       - PySide6.QtCore
-    symbols:
-      - QUiLoader
-      - QMainWindow
-      - QFile
+  runtime_3d_extension:
+    owners:
+      - gui/bench_app/app.py
+    optional_modules:
+      - PySide6.Qt3DCore
