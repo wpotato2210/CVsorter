@@ -8,6 +8,12 @@ Colour sorter project beginning with ChatGPT generated OpenSpec.
 python -m pip install -e .
 ```
 
+For serial hardware mode:
+
+```bash
+python -m pip install -e .[serial]
+```
+
 For test/lint tooling:
 
 ```bash
@@ -37,7 +43,7 @@ Reference: `qtcreator/README.md`.
 
 ## Bench bring-up
 
-1. Install project dependencies: `python -m pip install -e .`.
+1. Install project dependencies: `python -m pip install -e .` (or `python -m pip install -e .[serial]` for serial hardware mode).
 2. Validate bench scenarios quickly: `coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20`.
 3. Start the GUI bench app with canonical runtime config: `coloursorter-bench-gui --config configs/bench_runtime.yaml`.
 
