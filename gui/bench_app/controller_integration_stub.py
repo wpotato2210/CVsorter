@@ -1,23 +1,20 @@
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 from typing import Protocol
 
 import cv2
 import numpy as np
 from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QApplication, QLabel
-
-from coloursorter.config import RuntimeConfig
-
-from .controller import BenchAppController
+from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 
 class BenchController(Protocol):
     """Minimal controller surface needed by the POC stub."""
 
-    def _next_frame(self): ...  # noqa: ANN202 - frame type stays flexible for POC usage
+    def _next_frame(self) -> np.ndarray | None: ...
 
     def _send_serial_command(self, cmd: str) -> None: ...
 
@@ -26,93 +23,117 @@ class BenchGUI(Protocol):
     """Minimal GUI surface needed by the POC stub."""
 
     status_label: QLabel
+    camera_preview_label: QLabel
 
 
 class OverlayMixin:
-    """Frame overlay helper for bench preview labels."""
+    """Frame overlay helper for preview labels."""
 
     _gui: BenchGUI
 
-    def _get_preview_label(self) -> QLabel | None:
-        if hasattr(self._gui, "camera_preview_label") and isinstance(self._gui.camera_preview_label, QLabel):
-            return self._gui.camera_preview_label
-        if hasattr(self._gui, "preview_label") and isinstance(self._gui.preview_label, QLabel):
-            self._gui.camera_preview_label = self._gui.preview_label
-            return self._gui.camera_preview_label
-        if hasattr(self._gui, "status_label") and isinstance(self._gui.status_label, QLabel):
-            self._gui.camera_preview_label = QLabel("Waiting for frame...", self._gui.status_label.parentWidget())
-            return self._gui.camera_preview_label
-        return None
-
-    def show_frame_overlay(self, frame, detected: bool) -> None:
-        preview_label = self._get_preview_label()
-        if preview_label is None:
+    def show_frame_overlay(self, frame: np.ndarray, detected: bool) -> None:
+        if not isinstance(frame, np.ndarray) or frame.ndim != 3:
             return
 
-        image_bgr = frame if isinstance(frame, np.ndarray) else getattr(frame, "image_bgr", None)
-        if not isinstance(image_bgr, np.ndarray) or image_bgr.ndim != 3:
-            return
-
-        overlay = image_bgr.copy()
+        overlay = frame.copy()
         if detected:
-            # Keep this drawing section localized so it can be swapped with real CV boxes later.
+            # Placeholder overlay box/text; replace with model-provided bounding boxes later.
             height, width = overlay.shape[:2]
-            margin_x = max(20, width // 10)
-            margin_y = max(20, height // 10)
+            margin_x = max(20, width // 8)
+            margin_y = max(20, height // 8)
             cv2.rectangle(overlay, (margin_x, margin_y), (width - margin_x, height - margin_y), (0, 255, 0), 2)
-            cv2.putText(overlay, "DETECTED", (margin_x, margin_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+            cv2.putText(
+                overlay,
+                "DETECTED",
+                (margin_x, max(25, margin_y - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9,
+                (0, 255, 0),
+                2,
+            )
 
-        frame_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
-        image = QImage(
-            frame_rgb.data,
-            frame_rgb.shape[1],
-            frame_rgb.shape[0],
-            frame_rgb.strides[0],
-            QImage.Format.Format_RGB888,
+        rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+        image = QImage(rgb.data, rgb.shape[1], rgb.shape[0], rgb.strides[0], QImage.Format.Format_RGB888)
+        pixmap = QPixmap.fromImage(image)
+        self._gui.camera_preview_label.setPixmap(
+            pixmap.scaled(self._gui.camera_preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         )
-        preview_label.setPixmap(QPixmap.fromImage(image).scaled(preview_label.size(), Qt.KeepAspectRatio))
+
+
+@dataclass
+class CameraConfig:
+    camera_index: int = 0
+    frame_width: int = 640
+    frame_height: int = 480
 
 
 class POCIntegration(QObject, OverlayMixin):
-    """POC glue: simulated detection -> serial command -> GUI status updates.
-
-    This class is intentionally small and event-loop safe. It uses a QTimer tick
-    so the GUI remains responsive while periodically polling frames.
-    """
+    """QTimer-driven integration stub with webcam + simulated fallback."""
 
     def __init__(
         self,
         controller: BenchController,
         gui: BenchGUI,
         tick_ms: int = 100,
+        camera_index: int = 0,
         enable_logging: bool = False,
     ) -> None:
         super().__init__()
         self._controller = controller
         self._gui = gui
         self.enable_logging = enable_logging
-        self._frame_index = 0
+
+        self._frame_index: int = 0
         self.command_log: list[str] = []
+
+        self._camera_config = CameraConfig(camera_index=camera_index)
+        self._capture: cv2.VideoCapture | None = None
+        self._simulated_frame_id = 0
+
         self._timer = QTimer(self)
         self._timer.setInterval(tick_ms)
         self._timer.timeout.connect(self._tick)
 
     def start(self) -> None:
-        """Start periodic processing ticks."""
+        self._set_status("POC start")
         self._timer.start()
 
     def stop(self) -> None:
-        """Stop periodic processing ticks."""
         self._timer.stop()
+        if self._capture is not None:
+            self._capture.release()
+            self._capture = None
+        self._set_status("POC stopped")
+
+    def _next_frame(self) -> np.ndarray:
+        """Return a webcam frame (BGR) or a simulated fallback frame (BGR)."""
+        if self._capture is None:
+            capture = cv2.VideoCapture(self._camera_config.camera_index)
+            if capture.isOpened():
+                capture.set(cv2.CAP_PROP_FRAME_WIDTH, self._camera_config.frame_width)
+                capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self._camera_config.frame_height)
+                self._capture = capture
+            else:
+                capture.release()
+
+        if self._capture is not None:
+            ok, frame = self._capture.read()
+            if ok and isinstance(frame, np.ndarray):
+                return frame
+
+        return self._build_simulated_frame()
+
+    def _build_simulated_frame(self) -> np.ndarray:
+        height, width = self._camera_config.frame_height, self._camera_config.frame_width
+        frame = np.zeros((height, width, 3), dtype=np.uint8)
+        x = 40 + (self._simulated_frame_id * 12) % (width - 80)
+        cv2.circle(frame, (x, height // 2), 28, (0, 255, 255), -1)
+        self._simulated_frame_id += 1
+        return frame
 
     def _tick(self) -> None:
-        """Advance one integration step without blocking the GUI thread."""
         self._frame_index += 1
-        frame = self._controller._next_frame()
-        if frame is None:
-            self._set_status(f"[{self._frame_index}] waiting for frame")
-            return
-
+        frame = self._next_frame()
         detected = self._simple_detection(frame)
         self.show_frame_overlay(frame, detected)
 
@@ -120,63 +141,91 @@ class POCIntegration(QObject, OverlayMixin):
             self._set_status(f"[{self._frame_index}] detection=none")
             return
 
-        # For the POC we use a simple textual command; replace with your real
-        # protocol payload when integrating with MCU command contracts.
-        command = "FIRE_TEST"
+        cmd = "FIRE_TEST"
+        self._controller._send_serial_command(cmd)
 
-        # Prefer the dedicated serial helper if present; otherwise fall back to
-        # existing protocol command pathways in BenchAppController.
-        if hasattr(self._controller, "_send_serial_command"):
-            self._controller._send_serial_command(command)
-        elif hasattr(self._controller, "_send_protocol_command"):
-            self._controller._send_protocol_command("SCHED", (0, 100))
-
-        # Replace this with real servo/MCU acknowledgement telemetry once available.
-        servo_feedback = self._mock_servo_feedback(command)
-        log_entry = f"[{self._frame_index}] detection=hit cmd={command} feedback={servo_feedback}"
-        self.command_log.append(log_entry)
-        self._set_status(log_entry)
+        # Replace with parsed MCU ACK + telemetry packet handling when available.
+        telemetry = self._mock_servo_feedback(cmd)
+        entry = f"[{self._frame_index}] detection=hit cmd={cmd} feedback={telemetry}"
+        self.command_log.append(entry)
+        self._set_status(entry)
 
         if self.enable_logging:
-            print(f"[POC] {log_entry}")
+            print(entry)
 
-    def _simple_detection(self, frame: object) -> bool:  # noqa: ARG002 - placeholder for future CV
-        """POC detection stub: random trigger at ~20% per frame.
-
-        Swap this with your CV detector output threshold check in production.
+    def _simple_detection(self, frame: np.ndarray) -> bool:
         """
-        return random.random() < 0.20
+        Placeholder CV bean detection using HSV threshold + contour area.
+        Returns True if any contour passes minimal area threshold.
+        """
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        lower_hsv = np.array([20, 100, 100])
+        upper_hsv = np.array([30, 255, 255])
+        mask = cv2.inRange(hsv, lower_hsv, upper_hsv)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    def _set_status(self, text: str) -> None:
-        if hasattr(self._gui, "status_label") and isinstance(self._gui.status_label, QLabel):
-            self._gui.status_label.setText(text)
-            return
-        if hasattr(self._gui, "last_command_label") and isinstance(self._gui.last_command_label, QLabel):
-            self._gui.last_command_label.setText(f"Last command: {text}")
-            return
+        min_area = 100
+        for cnt in contours:
+            if cv2.contourArea(cnt) >= min_area:
+                return True
+        return False
 
     def _mock_servo_feedback(self, cmd: str) -> str:
-        # `cmd` is currently only used for tagging; wire into real transport IDs later.
-        position_deg = random.randint(10, 170)
-        duty_pct = random.randint(35, 85)
-        return f"servo=OK cmd={cmd} pos={position_deg}deg duty={duty_pct}%"
+        pos = random.randint(15, 165)
+        duty = random.randint(35, 90)
+        latency_ms = random.randint(12, 65)
+        return f"servo=OK cmd={cmd} pos={pos}deg duty={duty}% latency={latency_ms}ms"
+
+    def _set_status(self, text: str) -> None:
+        self._gui.status_label.setText(text)
+
+
+class DemoController:
+    """Bench-only demo controller with minimal serial command handler."""
+
+    def __init__(self) -> None:
+        self.sent_commands: list[str] = []
+
+    def _next_frame(self) -> np.ndarray | None:
+        return None
+
+    def _send_serial_command(self, cmd: str) -> None:
+        # Replace with actual serial transport (USB/UART) in hardware integration.
+        self.sent_commands.append(cmd)
+
+
+class DemoWindow(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("POC Integration Stub")
+
+        self.status_label = QLabel("Idle")
+        self.camera_preview_label = QLabel("Waiting for frame")
+        self.camera_preview_label.setMinimumSize(640, 480)
+        self.camera_preview_label.setAlignment(Qt.AlignCenter)
+        self.camera_preview_label.setStyleSheet("background: #101010; color: #d0d0d0;")
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.camera_preview_label)
+        layout.addWidget(self.status_label)
 
 
 if __name__ == "__main__":
-    # Bench-only runnable demo: no camera required.
-    # The controller already falls back to simulated frames when LIVE camera open fails.
-    runtime_config = RuntimeConfig.load_startup("configs/bench_runtime.yaml")
     app = QApplication([])
-    controller = BenchAppController(app, runtime_config=runtime_config)
 
-    # Keep a `status_label` attribute on the GUI for this integration stub contract.
-    if not hasattr(controller.window, "status_label"):
-        controller.window.status_label = controller.window.last_command_label
+    window = DemoWindow()
+    controller = DemoController()
+    integration = POCIntegration(
+        controller=controller,
+        gui=window,
+        tick_ms=100,
+        camera_index=0,
+        enable_logging=True,
+    )
 
-    integration = POCIntegration(controller=controller, gui=controller.window, tick_ms=100, enable_logging=True)
-
-    # Start a live run and integration once the event loop starts.
-    QTimer.singleShot(0, controller.on_live_clicked)
+    window.show()
     QTimer.singleShot(0, integration.start)
+    app.aboutToQuit.connect(integration.stop)
 
-    raise SystemExit(controller.start())
+    # Bench-only mode: if no webcam opens, simulated frames are used automatically.
+    raise SystemExit(app.exec())
