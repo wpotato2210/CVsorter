@@ -24,6 +24,17 @@ coloursorter-bench-gui --config configs/bench_runtime.yaml
 coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
+## Open in Qt Creator
+
+1. Open `ColourSorter.pro` in Qt Creator.
+2. Select any Desktop kit (no C++ build is required).
+3. Add a **Custom Executable** run configuration:
+   - Executable: `qtcreator/run_bench_gui.sh`
+   - Working directory: repository root
+4. Run the configuration.
+
+Reference: `qtcreator/README.md`.
+
 ## Bench bring-up
 
 1. Install project dependencies: `python -m pip install -e .`.

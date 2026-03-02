@@ -8,8 +8,12 @@ INCLUDEPATH += \
     $$PROJECT_ROOT/gui
 
 DISTFILES += \
+    $$PROJECT_ROOT/README.md \
+    $$PROJECT_ROOT/qtcreator/README.md \
     $$files($$PROJECT_ROOT/src/*.py, true) \
     $$files($$PROJECT_ROOT/gui/*.py, true) \
+    $$files($$PROJECT_ROOT/gui/*.ui, true) \
+    $$files($$PROJECT_ROOT/gui/*.json, true) \
     $$files($$PROJECT_ROOT/configs/*.yaml, true) \
     $$files($$PROJECT_ROOT/configs/*.json, true) \
     $$files($$PROJECT_ROOT/contracts/*.json, true) \
