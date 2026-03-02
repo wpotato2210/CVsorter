@@ -22,6 +22,7 @@ Source index: `docs/openspec/README.md`.
 | Calibration config | `docs/openspec/v3/configs/calibration.json` | `configs/calibration.json` |
 | Lane geometry config | `docs/openspec/v3/configs/lane_geometry.yaml` | `configs/lane_geometry.yaml` |
 | GUI layout | `docs/openspec/v3/gui/ui_main_layout.json` | `gui/ui_main_layout.json` |
+| GUI runtime module dependencies | `docs/openspec/v3/gui/pyside6_runtime_modules.yaml` | `gui/bench_app/*.py` |
 
 ## Spec-to-module mapping
 | Spec concern | Primary modules |

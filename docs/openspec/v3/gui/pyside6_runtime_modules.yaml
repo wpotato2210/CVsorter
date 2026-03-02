@@ -1,0 +1,45 @@
+schema_version: 1
+runtime_dependencies:
+  package: PySide6
+  min_version: "6.6"
+  max_version_exclusive: "7.0"
+  required_modules:
+    - PySide6.QtCore
+    - PySide6.QtGui
+    - PySide6.QtWidgets
+components:
+  bench_controller_state_machine:
+    owners:
+      - gui/bench_app/controller.py
+    required_modules:
+      - PySide6.QtStateMachine
+      - PySide6.QtCore
+      - PySide6.QtWidgets
+    symbols:
+      - QState
+      - QStateMachine
+      - QObject
+      - QTimer
+  bench_main_window:
+    owners:
+      - gui/bench_app/app.py
+    required_modules:
+      - PySide6.QtWidgets
+      - PySide6.QtGui
+      - PySide6.QtCore
+    symbols:
+      - QApplication
+      - QMainWindow
+      - QImage
+      - QPixmap
+  ui_loader:
+    owners:
+      - gui/bench_app/load_ui_main_layout.py
+    required_modules:
+      - PySide6.QtUiTools
+      - PySide6.QtWidgets
+      - PySide6.QtCore
+    symbols:
+      - QUiLoader
+      - QMainWindow
+      - QFile

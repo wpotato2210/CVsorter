@@ -6,7 +6,8 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PySide6.QtCore import QObject, QState, QStateMachine, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
+from PySide6.QtStateMachine import QState, QStateMachine
 from PySide6.QtWidgets import QApplication
 
 from coloursorter.bench import (
