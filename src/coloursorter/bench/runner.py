@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import time
 
-from coloursorter.deploy import PipelineRunner
+from coloursorter.deploy import ActuatorTimingCalibrator, PipelineRunner
 from coloursorter.model import FrameMetadata, ObjectDetection
 
 from .transport import McuTransport
@@ -24,10 +25,13 @@ class BenchRunner:
         pipeline: PipelineRunner,
         transport: McuTransport,
         encoder: VirtualEncoder,
+        calibrator: ActuatorTimingCalibrator | None = None,
     ) -> None:
         self._pipeline = pipeline
         self._transport = transport
         self._encoder = encoder
+        self._calibrator = calibrator or ActuatorTimingCalibrator()
+        self._latency_samples_ms: list[float] = []
 
     def run_cycle(
         self,
@@ -37,6 +41,10 @@ class BenchRunner:
         image_width_px: int,
         detections: list[ObjectDetection],
         previous_timestamp_s: float,
+        run_id: str = "default-run",
+        test_batch_id: str = "default-batch",
+        frame_snapshot_path: str = "",
+        ground_truth_by_object_id: dict[str, str] | None = None,
     ) -> tuple[BenchLogEntry, ...]:
         cycle_started = time.perf_counter()
         ingest_started = cycle_started
@@ -55,33 +63,70 @@ class BenchRunner:
         decision_latency_ms = (time.perf_counter() - decision_started) * 1000.0
 
         schedule_started = time.perf_counter()
-        scheduled_pairs = tuple(zip(pipeline_result.decisions, pipeline_result.schedule_commands))
         schedule_latency_ms = (time.perf_counter() - schedule_started) * 1000.0
+        self._latency_samples_ms.append(decision_latency_ms + schedule_latency_ms)
+        calibration = self._calibrator.calibrate(self._latency_samples_ms[-100:], self._encoder.belt_speed_mm_per_s)
 
         logs: list[BenchLogEntry] = []
-        for decision, command in scheduled_pairs:
+        decision_by_object_id = {decision.object_id: decision for decision in pipeline_result.decisions}
+        command_by_object_id = {event.object_id: event.command for event in pipeline_result.scheduled_events}
+
+        for detection in detections:
+            decision = decision_by_object_id[detection.object_id]
+            command = command_by_object_id.get(detection.object_id)
+            if command is not None:
+                command_position_mm = max(0.0, command.position_mm - calibration.offset_mm)
+                actuator_command_payload = f"lane={command.lane};position_mm={command_position_mm:.3f}"
+            else:
+                command_position_mm = 0.0
+                actuator_command_payload = ""
+
             belt_speed_mm_s = self._encoder.belt_speed_mm_per_s
             decision_schedule_time_s = (decision_latency_ms + schedule_latency_ms) / 1000.0
             projected_trigger_timestamp_s = self._encoder.project_trigger_timestamp(
                 trigger_generation_s=trigger_generation_s,
-                trigger_distance_mm=command.position_mm,
+                trigger_distance_mm=command_position_mm,
                 schedule_time_s=decision_schedule_time_s,
             )
 
-            transport_started = time.perf_counter()
-            response = self._transport.send(command)
-            transport_latency_ms = (time.perf_counter() - transport_started) * 1000.0
+            if command is not None:
+                transport_started = time.perf_counter()
+                response = self._transport.send(command)
+                transport_latency_ms = (time.perf_counter() - transport_started) * 1000.0
+                actuator_issued = True
+            else:
+                transport_latency_ms = 0.0
+                actuator_issued = False
+                response = type("_Resp", (), {
+                    "queue_depth": 0,
+                    "scheduler_state": "SKIPPED",
+                    "mode": "AUTO",
+                    "queue_cleared": False,
+                    "round_trip_ms": 0.0,
+                    "ack_code": AckCode.ACK,
+                    "nack_code": None,
+                    "nack_detail": None,
+                })()
+
             cycle_latency_ms = (time.perf_counter() - cycle_started) * 1000.0
             logs.append(
                 BenchLogEntry(
+                    run_id=run_id,
+                    test_batch_id=test_batch_id,
+                    event_timestamp_utc=datetime.now(timezone.utc).isoformat(),
                     frame_timestamp_s=timestamp_s,
+                    frame_id=frame_id,
+                    object_id=detection.object_id,
                     trigger_generation_s=trigger_generation_s,
                     trigger_timestamp_s=projected_trigger_timestamp_s,
-                    trigger_mm=command.position_mm,
+                    trigger_mm=command_position_mm,
                     lane=decision.lane,
                     lane_index=decision.lane,
                     decision=decision.classification,
+                    prediction_label=detection.classification,
+                    confidence=detection.infection_score,
                     rejection_reason=decision.rejection_reason,
+                    decision_reason=decision.rejection_reason or "accepted",
                     belt_speed_mm_s=belt_speed_mm_s,
                     queue_depth=response.queue_depth,
                     scheduler_state=response.scheduler_state,
@@ -96,6 +141,10 @@ class BenchRunner:
                     cycle_latency_ms=cycle_latency_ms,
                     nack_code=response.nack_code,
                     nack_detail=response.nack_detail,
+                    actuator_command_issued=actuator_issued,
+                    actuator_command_payload=actuator_command_payload,
+                    frame_snapshot_path=frame_snapshot_path,
+                    ground_truth_label=(ground_truth_by_object_id or {}).get(detection.object_id, ""),
                 )
             )
         return tuple(logs)

@@ -12,6 +12,7 @@ from coloursorter.deploy import (
     DetectionError,
     OpenCvDetectionConfig,
     OpenCvDetectionProvider,
+    ModelStubDetectionProvider,
     PipelineRunner,
     build_detection_provider,
 )
@@ -118,6 +119,7 @@ def _patch_detection_cv2(monkeypatch: pytest.MonkeyPatch) -> None:
     [
         ("opencv_basic", OpenCvDetectionProvider),
         ("opencv_calibrated", CalibratedOpenCvDetectionProvider),
+        ("model_stub", ModelStubDetectionProvider),
     ],
 )
 def test_provider_selection_returns_expected_implementation(provider_name: str, expected_type: type) -> None:
@@ -166,3 +168,10 @@ def test_detection_fails_fast_for_invalid_frame_shape() -> None:
     provider = OpenCvDetectionProvider()
     with pytest.raises(DetectionError, match="shape"):
         provider.detect(np.zeros((64, 64), dtype=np.uint8))
+
+
+def test_model_stub_detection_provider_maps_reject_threshold() -> None:
+    provider = build_detection_provider("model_stub")
+    detections = provider.detect(_sample_frame())
+    assert len(detections) == 1
+    assert detections[0].classification in {"accept", "reject"}

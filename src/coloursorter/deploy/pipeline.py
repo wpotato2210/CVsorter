@@ -14,6 +14,14 @@ from coloursorter.scheduler import ScheduledCommand, build_scheduled_command
 class PipelineResult:
     decisions: tuple[DecisionPayload, ...]
     schedule_commands: tuple[ScheduledCommand, ...]
+    scheduled_events: tuple["ScheduledDecision", ...] = ()
+
+
+@dataclass(frozen=True)
+class ScheduledDecision:
+    object_id: str
+    decision: DecisionPayload
+    command: ScheduledCommand
 
 
 class PipelineRunner:
@@ -35,6 +43,8 @@ class PipelineRunner:
         except CalibrationError as exc:
             calibration = None
             calibration_error = str(exc)
+
+        scheduled_events: list[ScheduledDecision] = []
 
         for detection in detections:
             lane = lane_for_x_px(detection.centroid_x_px, self._geometry)
@@ -67,6 +77,12 @@ class PipelineRunner:
             decisions.append(decision)
 
             if lane is not None and reason is not None and reason != calibration_error:
-                commands.append(build_scheduled_command(lane, trigger_mm))
+                command = build_scheduled_command(lane, trigger_mm)
+                commands.append(command)
+                scheduled_events.append(ScheduledDecision(object_id=detection.object_id, decision=decision, command=command))
 
-        return PipelineResult(decisions=tuple(decisions), schedule_commands=tuple(commands))
+        return PipelineResult(
+            decisions=tuple(decisions),
+            schedule_commands=tuple(commands),
+            scheduled_events=tuple(scheduled_events),
+        )

@@ -43,3 +43,36 @@ A release is only considered finished after the hardware readiness gate passes.
 1. Ensure required evidence is checked into `docs/artifacts/hardware_readiness/` per `docs/hardware_readiness_gate.md`.
 2. Run `python tools/hardware_readiness_report.py --strict`.
 3. Declare release complete only when the report returns `Overall status: PASS`.
+
+## Baseline bean-sorting run (logged artifacts)
+
+Run the baseline pipeline in replay mode with explicit run metadata:
+
+```bash
+PYTHONPATH=src python -m coloursorter.bench.cli \
+  --mode replay \
+  --source data \
+  --max-cycles 100 \
+  --run-id baseline-001 \
+  --test-batch-id batch-a \
+  --artifact-root artifacts/baseline \
+  --enable-snapshots \
+  --detector-provider opencv_basic \
+  --detector-threshold 0.5 \
+  --calibration-mode fixed \
+  --text-report
+```
+
+Artifacts generated per run include:
+- `summary.json`
+- `events.jsonl`
+- `telemetry.csv`
+- `config_snapshot.json`
+- `frames/` (if `--enable-snapshots`)
+
+### Threshold tuning and retraining
+
+- Start with conservative reject threshold (`--detector-threshold` near `0.5` or higher).
+- Inspect confidence distribution in `events.jsonl` before adjusting thresholds.
+- Tune one variable at a time: threshold, provider mapping, calibration mode.
+- For retraining preparation, use deterministic augmentation in `coloursorter.train.augment_dataset(...)` and record train artifact metadata with `coloursorter.train.run_baseline_training(...)`.

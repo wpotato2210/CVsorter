@@ -83,10 +83,22 @@ class OpenCvCalibratedDetectionConfig:
 
 
 @dataclass(frozen=True)
+class ModelStubProviderConfig:
+    reject_threshold: float
+
+
+@dataclass(frozen=True)
 class DetectionConfig:
     provider: str
     opencv_basic: OpenCvBasicDetectionConfig
     opencv_calibrated: OpenCvCalibratedDetectionConfig
+    model_stub: ModelStubProviderConfig
+
+
+@dataclass(frozen=True)
+class BaselineRunConfig:
+    detector_threshold: float
+    calibration_mode: str
 
 
 @dataclass(frozen=True)
@@ -99,6 +111,7 @@ class RuntimeConfig:
     cycle_timing: CycleTimingConfig
     scenario_thresholds: ScenarioThresholdsConfig
     detection: DetectionConfig
+    baseline_run: BaselineRunConfig
 
     @classmethod
     def from_text(cls, raw_text: str) -> "RuntimeConfig":
@@ -196,6 +209,17 @@ class RuntimeConfig:
         )
         _validate_range("detection.opencv_calibrated.reject_value_min", calibrated.reject_value_min, min_value=0, max_value=255)
 
+
+        model_stub_payload = _required_map(detection_payload, "model_stub")
+        model_stub = ModelStubProviderConfig(reject_threshold=_required_float(model_stub_payload, "reject_threshold"))
+        _validate_range("detection.model_stub.reject_threshold", model_stub.reject_threshold, min_value=0.0, max_value=1.0)
+
+        baseline_payload = _required_map(payload, "baseline_run")
+        detector_threshold = _required_float(baseline_payload, "detector_threshold")
+        _validate_range("baseline_run.detector_threshold", detector_threshold, min_value=0.0, max_value=1.0)
+        calibration_mode = _required_str(baseline_payload, "calibration_mode")
+        _validate_enum("baseline_run.calibration_mode", calibration_mode, ("fixed", "adaptive"))
+
         return cls(
             motion_mode=motion_mode,
             homing_mode=homing_mode,
@@ -220,6 +244,11 @@ class RuntimeConfig:
                 provider=provider,
                 opencv_basic=basic,
                 opencv_calibrated=calibrated,
+                model_stub=model_stub,
+            ),
+            baseline_run=BaselineRunConfig(
+                detector_threshold=detector_threshold,
+                calibration_mode=calibration_mode,
             ),
         )
 
@@ -242,6 +271,7 @@ class RuntimeConfig:
             cycle_timing=self.cycle_timing,
             scenario_thresholds=self.scenario_thresholds,
             detection=self.detection,
+            baseline_run=self.baseline_run,
         )
 
 

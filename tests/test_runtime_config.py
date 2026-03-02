@@ -46,6 +46,12 @@ detection:
     reject_hue_max: 12
     reject_saturation_min: 90
     reject_value_min: 90
+
+  model_stub:
+    reject_threshold: 0.5
+baseline_run:
+  detector_threshold: 0.5
+  calibration_mode: fixed
 """
 
 
@@ -64,6 +70,7 @@ def test_startup_config_accepts_canonical_values() -> None:
     assert config.transport.serial_baud == 230400
     assert config.transport.serial_timeout_s == 0.25
     assert config.detection.provider == "opencv_basic"
+    assert config.baseline_run.calibration_mode == "fixed"
 
 
 def test_live_update_rejects_unknown_homing_mode() -> None:

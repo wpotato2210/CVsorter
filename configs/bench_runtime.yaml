@@ -43,3 +43,9 @@ detection:
     reject_hue_max: 12
     reject_saturation_min: 90
     reject_value_min: 90
+  model_stub:
+    reject_threshold: 0.5
+
+baseline_run:
+  detector_threshold: 0.5
+  calibration_mode: fixed
