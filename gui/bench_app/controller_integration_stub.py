@@ -80,10 +80,19 @@ class POCIntegration(QObject, OverlayMixin):
     so the GUI remains responsive while periodically polling frames.
     """
 
-    def __init__(self, controller: BenchController, gui: BenchGUI, tick_ms: int = 100) -> None:
+    def __init__(
+        self,
+        controller: BenchController,
+        gui: BenchGUI,
+        tick_ms: int = 100,
+        enable_logging: bool = False,
+    ) -> None:
         super().__init__()
         self._controller = controller
         self._gui = gui
+        self._enable_logging = enable_logging
+        self._frame_index = 0
+        self.command_log: list[tuple[int, str]] = []
         self._timer = QTimer(self)
         self._timer.setInterval(tick_ms)
         self._timer.timeout.connect(self._tick)
@@ -98,16 +107,17 @@ class POCIntegration(QObject, OverlayMixin):
 
     def _tick(self) -> None:
         """Advance one integration step without blocking the GUI thread."""
+        self._frame_index += 1
         frame = self._controller._next_frame()
         if frame is None:
-            self._set_status("Waiting for frame...")
+            self._set_status(f"Frame {self._frame_index}: waiting for frame...")
             return
 
         detected = self._simple_detection(frame)
         self.show_frame_overlay(frame, detected)
 
         if not detected:
-            self._set_status(f"Frame {getattr(frame, 'frame_id', '?')}: no detection")
+            self._set_status(f"Frame {self._frame_index}: no detection")
             return
 
         # For the POC we use a simple textual command; replace with your real
@@ -121,7 +131,12 @@ class POCIntegration(QObject, OverlayMixin):
         elif hasattr(self._controller, "_send_protocol_command"):
             self._controller._send_protocol_command("SCHED", (0, 100))
 
-        self._set_status(f"Frame {getattr(frame, 'frame_id', '?')}: sent {command}")
+        servo_feedback = self._mock_servo_feedback()
+        self.command_log.append((self._frame_index, command))
+        self._set_status(f"Frame {self._frame_index}: sent {command} | {servo_feedback}")
+
+        if self._enable_logging:
+            print(f"[POC] frame={self._frame_index} detected=1 cmd={command} {servo_feedback}")
 
     def _simple_detection(self, frame: object) -> bool:  # noqa: ARG002 - placeholder for future CV
         """POC detection stub: random trigger at ~20% per frame.
@@ -138,6 +153,11 @@ class POCIntegration(QObject, OverlayMixin):
             self._gui.last_command_label.setText(f"Last command: {text}")
             return
 
+    def _mock_servo_feedback(self) -> str:
+        position_deg = random.randint(10, 170)
+        duty_pct = random.randint(35, 85)
+        return f"servo=OK pos={position_deg}deg duty={duty_pct}%"
+
 
 if __name__ == "__main__":
     # Bench-only runnable demo: no camera required.
@@ -150,7 +170,7 @@ if __name__ == "__main__":
     if not hasattr(controller.window, "status_label"):
         controller.window.status_label = controller.window.last_command_label
 
-    integration = POCIntegration(controller=controller, gui=controller.window, tick_ms=100)
+    integration = POCIntegration(controller=controller, gui=controller.window, tick_ms=100, enable_logging=True)
 
     # Start a live run and integration once the event loop starts.
     QTimer.singleShot(0, controller.on_live_clicked)
