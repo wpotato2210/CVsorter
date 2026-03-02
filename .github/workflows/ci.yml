@@ -27,5 +27,8 @@ jobs:
       - name: Install project
         run: pip install -e .
 
-      - name: Validate declared runtime dependencies
-        run: python tools/validate_pyside6_modules.py --verbose
+      - name: Validate PySide6 runtime modules
+        run: python tools/validate_pyside6_modules.py --spec docs/openspec/v3/gui/pyside6_runtime_modules.yaml
+
+      - name: Run unit tests
+        run: pytest
