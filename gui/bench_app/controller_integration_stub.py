@@ -3,7 +3,10 @@ from __future__ import annotations
 import random
 from typing import Protocol
 
-from PySide6.QtCore import QObject, QTimer
+import cv2
+import numpy as np
+from PySide6.QtCore import QObject, Qt, QTimer
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QApplication, QLabel
 
 from coloursorter.config import RuntimeConfig
@@ -25,7 +28,52 @@ class BenchGUI(Protocol):
     status_label: QLabel
 
 
-class POCIntegration(QObject):
+class OverlayMixin:
+    """Frame overlay helper for bench preview labels."""
+
+    _gui: BenchGUI
+
+    def _get_preview_label(self) -> QLabel | None:
+        if hasattr(self._gui, "camera_preview_label") and isinstance(self._gui.camera_preview_label, QLabel):
+            return self._gui.camera_preview_label
+        if hasattr(self._gui, "preview_label") and isinstance(self._gui.preview_label, QLabel):
+            self._gui.camera_preview_label = self._gui.preview_label
+            return self._gui.camera_preview_label
+        if hasattr(self._gui, "status_label") and isinstance(self._gui.status_label, QLabel):
+            self._gui.camera_preview_label = QLabel("Waiting for frame...", self._gui.status_label.parentWidget())
+            return self._gui.camera_preview_label
+        return None
+
+    def show_frame_overlay(self, frame, detected: bool) -> None:
+        preview_label = self._get_preview_label()
+        if preview_label is None:
+            return
+
+        image_bgr = frame if isinstance(frame, np.ndarray) else getattr(frame, "image_bgr", None)
+        if not isinstance(image_bgr, np.ndarray) or image_bgr.ndim != 3:
+            return
+
+        overlay = image_bgr.copy()
+        if detected:
+            # Keep this drawing section localized so it can be swapped with real CV boxes later.
+            height, width = overlay.shape[:2]
+            margin_x = max(20, width // 10)
+            margin_y = max(20, height // 10)
+            cv2.rectangle(overlay, (margin_x, margin_y), (width - margin_x, height - margin_y), (0, 255, 0), 2)
+            cv2.putText(overlay, "DETECTED", (margin_x, margin_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+        frame_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+        image = QImage(
+            frame_rgb.data,
+            frame_rgb.shape[1],
+            frame_rgb.shape[0],
+            frame_rgb.strides[0],
+            QImage.Format.Format_RGB888,
+        )
+        preview_label.setPixmap(QPixmap.fromImage(image).scaled(preview_label.size(), Qt.KeepAspectRatio))
+
+
+class POCIntegration(QObject, OverlayMixin):
     """POC glue: simulated detection -> serial command -> GUI status updates.
 
     This class is intentionally small and event-loop safe. It uses a QTimer tick
@@ -55,7 +103,10 @@ class POCIntegration(QObject):
             self._set_status("Waiting for frame...")
             return
 
-        if not self._simple_detection(frame):
+        detected = self._simple_detection(frame)
+        self.show_frame_overlay(frame, detected)
+
+        if not detected:
             self._set_status(f"Frame {getattr(frame, 'frame_id', '?')}: no detection")
             return
 
