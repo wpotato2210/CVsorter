@@ -1,6 +1,12 @@
-# ColourSorter
+# Computer Vision Sorter
 
-Colour sorter project beginning with ChatGPT generated OpenSpec.
+Computer vision sorter project beginning with ChatGPT generated OpenSpec.
+
+## Scope statement
+
+- Product scope is a **computer vision sorter** with deterministic lane scheduling and actuation.
+- Runtime namespace and CLI retain legacy `coloursorter` names for compatibility in this release.
+- Frozen I/O contracts, dependencies, and named variables are unchanged.
 
 ## Installation
 
@@ -61,7 +67,7 @@ A release is only considered finished after the hardware readiness gate passes.
 2. Run `python tools/hardware_readiness_report.py --strict`.
 3. Declare release complete only when the report returns `Overall status: PASS`.
 
-## Baseline bean-sorting run (logged artifacts)
+## Baseline CV sorting run (logged artifacts)
 
 Run the baseline pipeline in replay mode with explicit run metadata:
 

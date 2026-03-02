@@ -1,5 +1,11 @@
 ## ESP32 Multi-Lane CV Sorting Upgrade Assessment
 
+## Scope statement
+
+- This OpenSpec targets a **computer vision sorter** for multi-lane detection, classification, scheduling, and actuation.
+- Model outputs are CV-classification decisions (not color-only constraints).
+- Runtime package/CLI naming remains `coloursorter` for backward compatibility in this version.
+
 ### Suitability Summary
 - Suitable for production deployment **if** deterministic state handling, per-lane isolation, watchdog enforcement, and measured timing margins are validated.
 
@@ -54,7 +60,7 @@
 | Operator misuse | Unauthorized maintenance action | Unsafe state/config change | RBAC + command authorization logs | Role-restricted GUI | Reject + log |
 | Operator misuse | Wrong-lane ambiguous clear | Mis-sort risk | Lane-scoped UI action checks | Lane ID confirmation + active-lane interlock | Re-hold/reclassify |
 | Environmental | Lighting drift | Classification drift | Confidence trend monitoring | Controlled lighting + calibration profiles | Ambiguity rate alert |
-| Environmental | Leaves/non-bean objects | False class | Unknown/outlier detection | Route to ambiguous/manual handling policy | Manual review |
+| Environmental | Non-target objects | False class | Unknown/outlier detection | Route to ambiguous/manual handling policy | Manual review |
 | Mechanical | Dirt/jam | Throughput loss; mistiming | Jam heuristics/current proxy/timing anomalies | Cleaning schedule + jam SOP | Lane stop + maintenance |
 | Power | Mid-cycle power loss | Unknown in-flight actions | Brownout interrupt + persisted recovery record | Safe restart; stale trigger invalidation | No auto-actuation on reboot |
 
