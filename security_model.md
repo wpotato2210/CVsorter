@@ -13,6 +13,10 @@ Define practical security controls for protocol parsing, mode protection, and op
   - SAFE mode enforcement policy under suspicious/fault conditions.
   - Auditable security-relevant event logging requirements.
 
+## Terminology Alignment (protocol + architecture)
+- Security controls preserve protocol frame grammar and command whitelist semantics; they do not redefine command behavior.
+- Security event provenance uses architecture stage labels so abuse can be localized (ingest, parser, scheduler admission, transport).
+
 ## States
 - Trust state: `normal | suspicious | restricted`.
 - Mode safety state: `AUTO | MANUAL | SAFE` with SAFE as protective state.
@@ -35,6 +39,7 @@ Define practical security controls for protocol parsing, mode protection, and op
 - `threading_model.md` must define synchronized abuse counters under concurrent handlers.
 - `deployment.md` must implement host hardening (device permissions, service account scope, log retention).
 - `testing_strategy.md` should include malformed-frame flood and retry-abuse scenarios.
+- `data_model.md` should define retained security-event fields needed for auditability.
 
 ## Performance / Concurrency Notes
 - Excessive validation logging on malformed frame floods can degrade throughput.
@@ -45,6 +50,7 @@ Define practical security controls for protocol parsing, mode protection, and op
 - Authentication/authorization model for command producers (none, shared secret, RBAC, physical link trust).
 - Exact response policy to malformed-frame floods (drop, throttle, temporary lockout, SAFE transition).
 - Whether SAFE mode and communications lockdown are coupled or independently controlled.
+- Throttle policy ownership and limits (per command producer, per transport link, or global).
 
 ## Conflicts / Missing Links
 - No explicit secret or credential management guidance exists for production deployments.
