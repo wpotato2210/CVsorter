@@ -20,6 +20,7 @@ Define deployment topology and operational procedures that carry bench-validated
 ## Dependencies
 - `architecture.md` runtime component map.
 - `protocol.md` timeout/retry and mode transition behavior.
+- `threading_model.md` for runtime serialization assumptions.
 - `security_model.md` controls for parser hardening and host access.
 
 ## Key Behaviors / Invariants
@@ -28,6 +29,16 @@ Define deployment topology and operational procedures that carry bench-validated
 - SAFE mode is always available as operator-visible and scriptable fail-safe action.
 - Deployment-specific config overrides must not change protocol contract semantics.
 - Recovery after transport loss must preserve deterministic queue/state behavior.
+
+## Cross-layer dependency notes
+- Bench promotion to staging/production should be gated by `testing_strategy.md` criteria and protocol/state conformance.
+- Error escalation behavior must remain aligned with `error_model.md` and `security_model.md`.
+- Persisted telemetry expectations should match `data_model.md` schema/retention choices.
+
+## Open questions (requires input)
+- Production MCU timing budgets and trigger mapping tolerances relative to bench are not fully defined.
+- Rollback/maintenance lifecycle (release approval, canary strategy, rollback criteria) is not documented.
+- SAFE mode enforcement differences across staging vs production are unspecified.
 
 ## Performance / Concurrency Risks
 - Production transport latency variance can exceed bench assumptions and stress retry policy.

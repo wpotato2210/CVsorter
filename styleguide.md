@@ -17,6 +17,7 @@ Define deterministic naming, structure, and documentation conventions so CV pipe
 ## Dependencies
 - `agents.md` deterministic naming section.
 - `protocol.md` canonical command and frame terminology.
+- `architecture.md` module boundaries and CV pipeline labels.
 - Existing project layout under `src/coloursorter/*`, `configs/*`, `contracts/*`.
 
 ## Key Behaviors / Invariants
@@ -25,6 +26,16 @@ Define deterministic naming, structure, and documentation conventions so CV pipe
 - Keep config and contract filenames canonical and stable.
 - Public module boundaries should expose explicit typed inputs/outputs at pipeline stages.
 - Documentation terms should align with CV pipeline and MCU wire contract vocabulary.
+
+## Cross-layer dependency notes
+- `constraints.md` and `state_model.md` depend on stable names for mode/queue/scheduler telemetry fields.
+- `data_model.md` schema naming depends on shared canonical field/contract names.
+- `testing_strategy.md` test IDs/assertions should mirror protocol and state term spelling exactly.
+
+## Open questions (requires input)
+- GUI object naming convention is not explicit (should GUI IDs follow module naming conventions or UI-framework defaults?).
+- Cross-language style guidance (Python host ↔ C++/ESP32 firmware naming/types/error conventions) is undefined.
+- Required automated style/lint enforcement matrix (ruff/black/mypy/clang-format/etc.) is not declared.
 
 ## Performance / Concurrency Risks
 - Inconsistent naming of queue/scheduler fields can cause incorrect telemetry joins across CLI/GUI.

@@ -21,6 +21,7 @@ Define canonical runtime and persisted data entities for frame processing, sched
 ## Dependencies
 - `contracts/frame_schema.json`, `contracts/sched_schema.json`, `contracts/mcu_response_schema.json`.
 - `data/manifest.json`.
+- `protocol.md` canonical field and enum values.
 - Model/deploy/scheduler/protocol runtime modules.
 
 ## Key Behaviors / Invariants
@@ -28,6 +29,16 @@ Define canonical runtime and persisted data entities for frame processing, sched
 - Protocol emission uses canonical `SCHED:<lane>:<position_mm>` projection from structured scheduler data.
 - ACK/NACK telemetry records preserve code/detail and correlation to originating frame/trigger where available.
 - Schema evolution must be additive or accompanied by explicit migration notes.
+
+## Cross-layer dependency notes
+- `constraints.md` defines valid numeric ranges and queue semantics that telemetry must represent faithfully.
+- `state_model.md` defines state enums and transition events that should be represented as canonical fields.
+- `deployment.md` determines retention/rollover requirements for persisted telemetry.
+
+## Open questions (requires input)
+- Canonical schema for runtime telemetry, queue logs, and manifests is incomplete beyond current OpenSpec contracts.
+- Persistence scope is not defined (full frame history vs sampled/aggregate summaries).
+- Schema versioning/evolution governance (compatibility windows, migration tooling, deprecation policy) is not formalized.
 
 ## Performance / Concurrency Risks
 - High-frequency frame telemetry can create storage pressure without retention limits.
@@ -40,5 +51,4 @@ Define canonical runtime and persisted data entities for frame processing, sched
 - Bench CLI/GUI telemetry consumers and reporting tools.
 
 ## Conflicts / Missing Links
-- Canonical field-level schemas for internal telemetry objects are not yet documented.
 - Data retention and archival policy is currently unspecified.

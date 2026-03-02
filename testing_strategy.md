@@ -21,6 +21,7 @@ Define layered test coverage that verifies correctness of frame processing, queu
 - `tests/` suite and fixtures.
 - `protocol.md` ACK/NACK behavior and transition policy.
 - `architecture.md` pipeline ordering and module boundaries.
+- `constraints.md`, `error_model.md`, and `state_model.md` as executable requirements.
 
 ## Key Behaviors / Invariants
 - Unit tests validate deterministic transforms from frame input to decision payload.
@@ -28,6 +29,16 @@ Define layered test coverage that verifies correctness of frame processing, queu
 - State tests assert `SAFE -> AUTO` rejection and queue-clear side effects on mode change/`RESET_QUEUE`.
 - Scheduler/serial integration tests assert canonical `SCHED:<lane>:<position_mm>` emission.
 - Retry tests assert timeout/retry/backoff behavior (`100 ms`, max `3`).
+
+## Cross-layer dependency notes
+- Must validate that state transitions in `state_model.md` and `protocol.md` stay aligned.
+- Must validate `security_model.md` flood/malformed behavior and escalation hooks.
+- Must validate `deployment.md` bench-to-production parity gates once formalized.
+
+## Open questions (requires input)
+- Minimum coverage targets per subsystem (CV, scheduler, transport, protocol parser) are not defined.
+- Requirement for max-load simulation (queue saturation + command bursts + frame bursts) is not explicit.
+- Requirement for long-running stress and concurrency edge-case tests is not formalized.
 
 ## Performance / Concurrency Risks
 - Insufficient stress tests can hide queue contention and BUSY behavior under burst triggers.
@@ -40,5 +51,4 @@ Define layered test coverage that verifies correctness of frame processing, queu
 - OpenSpec parity checks against runtime contract mirrors.
 
 ## Conflicts / Missing Links
-- Required minimum coverage thresholds are not yet formalized.
 - Hardware-in-the-loop tests for MCU and servo timing are not yet defined.

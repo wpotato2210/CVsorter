@@ -20,8 +20,9 @@ Define canonical error categories, NACK mappings, and recovery behavior for CV p
 
 ## Dependencies
 - `protocol.md` canonical NACK codes (1..8) and retry policy.
+- `state_model.md` for mode/scheduler transition side effects.
+- `security_model.md` for suspicious/flood escalation behavior.
 - Scheduler and serial_interface runtime modules.
-- Bench surfaces that render mode/queue/error telemetry.
 
 ## Key Behaviors / Invariants
 - Every rejected command/frame must map to one canonical NACK code and detail.
@@ -29,6 +30,16 @@ Define canonical error categories, NACK mappings, and recovery behavior for CV p
 - Retry is bounded (timeout `100 ms`, max retries `3`) and must not duplicate semantic side effects.
 - Invalid mode transitions preserve current mode and queue safety invariants.
 - Escalation path for repeated transport failures should prefer SAFE mode over undefined operation.
+
+## Cross-layer dependency notes
+- `constraints.md` validation limits are upstream of most recoverable error paths.
+- `deployment.md` should define production-safe handling and alerting thresholds for error bursts.
+- `testing_strategy.md` must pin code/detail mappings and recovery transitions as regression checks.
+
+## Open questions (requires input)
+- Full internal-exception → external NACK mapping table is not enumerated.
+- Bench vs production differences for error propagation/reporting are not explicitly documented.
+- Whether SAFE mode is mandatory automatic action for all critical faults (or policy-driven) is unspecified.
 
 ## Performance / Concurrency Risks
 - Concurrent requesters can induce conflicting retries and duplicate `SCHED` submissions without host-side serialization.
@@ -41,5 +52,4 @@ Define canonical error categories, NACK mappings, and recovery behavior for CV p
 - Bench telemetry aggregation and operator alerts.
 
 ## Conflicts / Missing Links
-- Canonical mapping from non-protocol internal exceptions to external NACK codes is not yet enumerated.
 - No documented dead-letter strategy for repeatedly failing triggers.

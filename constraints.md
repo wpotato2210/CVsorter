@@ -15,12 +15,13 @@ Define authoritative correctness constraints for the ColourSorter CV pipeline, s
 ## States
 - Mode state: `AUTO | MANUAL | SAFE`.
 - Scheduler state: `IDLE | ACTIVE`.
-- Queue state: `0..8` entries.
+- Queue state: `0..8` entries per `protocol.md` default host contract.
 - Frame validation state: `valid | rejected` with deterministic reason.
 
 ## Dependencies
 - `protocol.md` for command validation ranges and transition policy.
 - `architecture.md` for CV pipeline ordering and scheduler handoff.
+- `threading_model.md` for synchronization/serialization assumptions.
 - Contract/schema assets under `contracts/` and `protocol/commands.json`.
 
 ## Key Behaviors / Invariants
@@ -31,15 +32,20 @@ Define authoritative correctness constraints for the ColourSorter CV pipeline, s
 - All frame and command validation failures map to canonical NACK codes.
 
 ## Performance / Concurrency Risks
-- High frame rate plus frequent triggers can saturate queue depth `8` and increase `QUEUE_FULL` events.
+- High frame rate plus frequent triggers can saturate queue depth and increase `QUEUE_FULL` events.
 - Validation split across modules can drift and produce inconsistent NACK behavior if constraints are not treated as canonical.
 - Parallel producers must not bypass queue-cap checks.
 
-## Integration Points
-- `src/coloursorter/deploy/pipeline.py` and `src/coloursorter/eval/rules.py` for frame-level acceptance.
-- `src/coloursorter/scheduler/output.py` for trigger enqueue policy.
-- `src/coloursorter/serial_interface/*` and protocol parser for frame integrity checks.
+## Cross-layer dependency notes
+- `state_model.md` transition definitions are the source for mode/scheduler state legality.
+- `error_model.md` must remain consistent with the same NACK mapping and recovery assumptions.
+- `testing_strategy.md` should encode these constraints as executable assertions.
+
+## Open questions (requires input)
+- Max/min queue depth differs across artifacts (`8` in host defaults vs `16` in hardware readiness stress checks): which depth is authoritative per mode/environment?
+- Required frame-to-trigger latency budget per mode (`AUTO`, `MANUAL`, `SAFE`) is not explicitly defined.
+- Constraints on parallel frame processing / parallel command handling throughput are not specified.
+- Servo timing constraints (actuation delay, minimum pulse interval, jitter limits) are not codified.
 
 ## Conflicts / Missing Links
-- Servo timing budget and trigger jitter bounds are still unspecified.
 - No explicit conformance gate currently guarantees spec/runtime parity for constraints.
