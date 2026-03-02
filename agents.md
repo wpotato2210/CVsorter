@@ -4,7 +4,7 @@
 Working guide for contributors and automation agents in `ColourSorter`.
 
 ## Current system scope
-- Bench-first pipeline for colour sorting validation.
+- Bench-first pipeline for computer vision sorting validation.
 - Core modules already present:
   - `src/coloursorter/preprocess` (lane segmentation)
   - `src/coloursorter/model` (types/contracts)
