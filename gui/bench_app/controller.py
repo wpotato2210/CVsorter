@@ -498,6 +498,19 @@ class BenchAppController(QObject):
         parsed_response = parse_frame(response_frame)
         return parse_ack_tokens((parsed_response.command, *parsed_response.args))
 
+    def _send_serial_command(self, command: str) -> AckResponse | None:
+        """POC-friendly serial command wrapper used by integration stubs.
+
+        The current bench scaffold routes commands through the protocol host,
+        so this helper keeps that behavior while exposing a simple string API.
+        """
+        tokens = tuple(part for part in command.split("|") if part)
+        if not tokens:
+            return None
+        packet_command = tokens[0]
+        packet_args: tuple[object, ...] = tuple(tokens[1:])
+        return self._send_protocol_command(packet_command, packet_args)
+
     def _send_poc_fire_command(self, reason: str) -> AckResponse | None:
         ack = self._send_protocol_command("SCHED", (0, 100))
         if ack is None:
