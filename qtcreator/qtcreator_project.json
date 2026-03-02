@@ -1,0 +1,47 @@
+{
+  "name": "ColourSorter",
+  "projectFile": "ColourSorter.pro",
+  "pythonPath": [
+    "src",
+    "gui"
+  ],
+  "runConfigurations": [
+    {
+      "name": "Bench GUI",
+      "interpreter": "python",
+      "script": "gui/bench_app/app.py",
+      "arguments": [
+        "--config",
+        "configs/bench_runtime.yaml"
+      ],
+      "workingDirectory": ".",
+      "environment": {
+        "PYTHONPATH": "src:gui",
+        "QT_QPA_PLATFORM": "${QT_QPA_PLATFORM}"
+      },
+      "wrapperScript": "qtcreator/run_bench_gui.sh"
+    },
+    {
+      "name": "Webcam POC",
+      "interpreter": "python",
+      "script": "gui/bench_app/controller_integration_stub.py",
+      "arguments": [],
+      "workingDirectory": ".",
+      "environment": {
+        "PYTHONPATH": "src:gui",
+        "QT_QPA_PLATFORM": "${QT_QPA_PLATFORM}"
+      },
+      "wrapperScript": "qtcreator/run_webcam_poc.sh"
+    }
+  ],
+  "runtimeAssets": [
+    "configs/*.yaml",
+    "configs/*.json",
+    "contracts/*.json",
+    "protocol/*.json"
+  ],
+  "blockers": [
+    "libGL.so.1 must be present for OpenCV webcam capture and Qt rendering paths.",
+    "pyserial is optional; serial functionality is unavailable when pyserial is not installed."
+  ]
+}
