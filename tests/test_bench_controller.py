@@ -242,6 +242,12 @@ def test_safe_state_home_recovery_transitions_to_manual_only(qapp: QApplication,
     assert controller.runtime_state.operator_mode == OperatorMode.MANUAL
 
 
+def test_serial_connect_error_detail_maps_missing_pyserial_message(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    detail = controller._serial_connect_error_detail(RuntimeError("pyserial is required for SerialMcuTransport"))
+    assert detail == "pyserial missing; install with: python -m pip install -e .[serial]"
+
+
 def test_safe_state_can_recover_manual_then_auto(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
     controller.runtime_state.fault_state = FaultState.SAFE

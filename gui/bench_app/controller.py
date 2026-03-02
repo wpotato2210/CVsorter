@@ -713,7 +713,7 @@ class BenchAppController(QObject):
             self._serial_connected = True
             self._set_serial_status(True)
         except RuntimeError as exc:
-            self._set_serial_status(False, str(exc))
+            self._set_serial_status(False, self._serial_connect_error_detail(exc))
 
     @Slot()
     def on_serial_disconnect_clicked(self) -> None:
@@ -721,3 +721,9 @@ class BenchAppController(QObject):
             self.transport.close()
         self._serial_connected = False
         self._set_serial_status(False)
+
+    def _serial_connect_error_detail(self, error: RuntimeError) -> str:
+        error_text = str(error)
+        if "pyserial is required" in error_text:
+            return "pyserial missing; install with: python -m pip install -e .[serial]"
+        return error_text

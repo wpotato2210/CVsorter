@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+import importlib.util
+
 import pytest
 
 from coloursorter.config import ConfigValidationError, RuntimeConfig
+
+
+@pytest.fixture(autouse=True)
+def _serial_dependency_available_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: object() if name == "serial" else original_find_spec(name),
+    )
 
 
 def _canonical_text() -> str:
@@ -94,3 +106,10 @@ def test_runtime_config_rejects_unknown_detection_provider() -> None:
     raw_text = _canonical_text().replace("provider: opencv_basic", "provider: unknown")
     with pytest.raises(ConfigValidationError, match="Unknown detection.provider"):
         RuntimeConfig.from_text(raw_text)
+
+
+def test_runtime_config_serial_mode_requires_optional_dependency(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None if name == "serial" else original_find_spec(name))
+    with pytest.raises(ConfigValidationError, match="Install with: python -m pip install -e .\\[serial\\]"):
+        RuntimeConfig.from_text(_canonical_text())

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -156,6 +157,7 @@ class RuntimeConfig:
         serial_timeout_s = _optional_float(serial_payload, "timeout_s", DEFAULT_SERIAL_TIMEOUT_S)
         _validate_range("transport.serial.baud", serial_baud, min_value=1)
         _validate_range("transport.serial.timeout_s", serial_timeout_s, min_value=0.001)
+        _validate_serial_dependency(transport_kind)
 
         cycle_payload = _required_map(payload, "cycle_timing")
         period_ms = _required_int(cycle_payload, "period_ms")
@@ -392,3 +394,14 @@ def _validate_enum(field_name: str, value: str, allowed_values: tuple[str, ...])
     if value not in allowed_values:
         allowed = ", ".join(allowed_values)
         raise ConfigValidationError(f"Unknown {field_name}: {value}. Allowed: {allowed}")
+
+
+def _validate_serial_dependency(transport_kind: str) -> None:
+    if transport_kind != "serial":
+        return
+    if importlib.util.find_spec("serial") is not None:
+        return
+    raise ConfigValidationError(
+        "transport.kind=serial requires optional dependency 'pyserial'. "
+        "Install with: python -m pip install -e .[serial]"
+    )
