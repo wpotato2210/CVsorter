@@ -102,39 +102,53 @@ def _load_pyside6_submodules(spec_path: Path) -> list[str]:
     return sorted({str(module) for module in required_modules if isinstance(module, str)})
 
 
-def _check_distributions(distribution_names: list[str]) -> tuple[list[str], list[str]]:
+def _check_distributions(distribution_names: list[str], verbose: bool = False) -> tuple[list[str], list[str]]:
     installed: list[str] = []
     missing: list[str] = []
     for dist_name in distribution_names:
         try:
             dist = importlib_metadata.distribution(dist_name)
             installed.append(dist.metadata.get("Name", dist_name))
-            print(f"[PASS][DIST] {dist_name} (installed={dist.version})")
+            if verbose:
+                print(f"[PASS][DIST] {dist_name} (installed={dist.version})")
         except importlib_metadata.PackageNotFoundError:
             missing.append(dist_name)
-            print(
-                f"[FAIL][DIST] {dist_name} is not installed. "
-                f"Install project dependencies first: pip install -e ."
-            )
+            if verbose:
+                print(
+                    f"[FAIL][DIST] {dist_name} is not installed. "
+                    f"Install project dependencies first: pip install -e ."
+                )
     return installed, missing
 
 
-def _check_modules(module_names: list[str]) -> list[str]:
+def _check_modules(module_names: list[str], verbose: bool = False) -> list[str]:
     missing: list[str] = []
     for module_name in sorted(set(module_names)):
-        if importlib.util.find_spec(module_name) is None:
+        module_spec = importlib.util.find_spec(module_name)
+        if verbose:
+            print(f"[CHECK][MOD] validating {module_name}")
+            print(f"[CHECK][MOD] find_spec({module_name!r}) -> {module_spec!r}")
+        if module_spec is None:
             missing.append(module_name)
-            print(f"[FAIL][MOD] {module_name} import spec not found")
-        else:
+            if verbose:
+                print(f"[FAIL][MOD] {module_name} import spec not found")
+        elif verbose:
             print(f"[PASS][MOD] {module_name}")
     return missing
+
+
+def _detect_pyside6_version() -> str:
+    try:
+        return importlib_metadata.distribution("pyside6").version
+    except importlib_metadata.PackageNotFoundError:
+        return "not installed"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pyproject", type=Path, default=DEFAULT_PYPROJECT_PATH)
     parser.add_argument("--requirements", type=Path, default=DEFAULT_REQUIREMENTS_PATH)
-    parser.add_argument("--pyside6-spec", type=Path, default=DEFAULT_SPEC_PATH)
+    parser.add_argument("--pyside6-spec", "--spec", dest="pyside6_spec", type=Path, default=DEFAULT_SPEC_PATH)
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -147,7 +161,7 @@ def main() -> int:
     if args.verbose:
         print(f"Discovered runtime distributions ({len(required_distributions)}): {', '.join(required_distributions)}")
 
-    _, missing_distributions = _check_distributions(required_distributions)
+    _, missing_distributions = _check_distributions(required_distributions, verbose=args.verbose)
     if missing_distributions:
         print("\n[FAIL] Missing required distributions detected.")
         print(f"Missing: {', '.join(missing_distributions)}")
@@ -161,10 +175,12 @@ def main() -> int:
     if pyside6_related:
         module_candidates.extend(_load_pyside6_submodules(args.pyside6_spec))
 
+    unique_module_candidates = sorted(set(module_candidates))
     if args.verbose:
-        print(f"Module checks ({len(sorted(set(module_candidates)))}): {', '.join(sorted(set(module_candidates)))}")
+        print(f"Detected PySide6 version: {_detect_pyside6_version()}")
+        print(f"Module checks ({len(unique_module_candidates)}): {', '.join(unique_module_candidates)}")
 
-    missing_modules = _check_modules(module_candidates)
+    missing_modules = _check_modules(unique_module_candidates, verbose=args.verbose)
     if missing_modules:
         print("\n[FAIL] Installed distributions have missing runtime modules.")
         print("Install or repair environment: pip install -e . --force-reinstall")
@@ -172,6 +188,7 @@ def main() -> int:
         return 4
 
     print("\n[PASS] Runtime dependency validation succeeded.")
+    print(f"Summary: distributions={len(required_distributions)}, modules={len(unique_module_candidates)}, missing=0")
     return 0
 
 
