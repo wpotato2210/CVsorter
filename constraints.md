@@ -13,10 +13,15 @@ Define authoritative correctness constraints for the ColourSorter CV pipeline, s
   - Protocol-compliant wire frames at transport boundary (`<SCHED|lane|trigger_mm>`).
   - Canonical ACK/NACK outcomes for invalid arguments, malformed frame data, and queue/mode violations.
 
+## Terminology Alignment (protocol + architecture)
+- Canonical command and state names match `protocol.md` exactly: `SET_MODE`, `SCHED`, `GET_STATE`, `RESET_QUEUE`, `AUTO`, `MANUAL`, `SAFE`, `IDLE`, `ACTIVE`.
+- Pipeline ordering terminology matches `architecture.md`: preprocess/calibration -> deploy -> eval -> scheduler -> serial wire.
+- Queue terms are explicit: **queue capacity** (configured limit), **queue depth** (current occupancy), **host busy** (temporary admission refusal).
+
 ## States
 - Mode state: `AUTO | MANUAL | SAFE`.
 - Scheduler state: `IDLE | ACTIVE`.
-- Queue state: `0..8` entries.
+- Queue state: `0..8` entries (default protocol value; authoritative owner unresolved).
 - Frame validation state: `valid | rejected` with deterministic reason.
 
 ## Dependencies
@@ -35,17 +40,20 @@ Define authoritative correctness constraints for the ColourSorter CV pipeline, s
 ## Cross-layer Dependency Notes
 - `state_model.md` depends on these bounds to keep `queue_depth` and `scheduler_state` coherent.
 - `error_model.md` consumes constraint violations to emit deterministic NACK code/detail pairs.
+- `testing_strategy.md` must assert these values in unit + integration gates.
+- `data_model.md` must persist queue/state fields with identical names and ranges.
 - `deployment.md` must preserve these invariants across bench/staging/production without environment-specific semantic drift.
 
 ## Performance / Concurrency Notes
-- High frame rate plus frequent triggers can saturate queue depth `8` and increase `QUEUE_FULL` events.
-- Validation split across modules can drift and produce inconsistent NACK behavior if constraints are not treated as canonical.
+- High frame rate plus frequent triggers can saturate queue depth and increase `QUEUE_FULL` events.
+- Validation split across modules can drift and produce inconsistent NACK behavior if constraints are not canonicalized.
 - Parallel producers must not bypass queue-cap checks.
 
 ## Open Questions (requires input)
-- Max/min queue depth and frame-to-trigger latency budget per mode (`AUTO`, `MANUAL`, `SAFE`).
-- Constraints on frame processing throughput and allowable parallel task count.
-- Servo timing/physical actuation limits (minimum trigger spacing, tolerated jitter, max duty cycle).
+- **Execution model:** single-threaded event loop vs multi-threaded producer/consumer with explicit lock/atomic boundaries.
+- **Authoritative queue sizing:** who owns effective queue capacity (`protocol/commands.json`, runtime config, or MCU firmware), and can it vary by stage/mode.
+- **Timing/servo constraints:** minimum trigger spacing, max tolerated jitter, and actuator duty-cycle guardrails.
+- **Latency budgets:** frame-to-trigger SLA by mode (`AUTO`, `MANUAL`, `SAFE`) and rejection/escalation behavior on breaches.
 
 ## Conflicts / Missing Links
 - No explicit conformance gate currently guarantees protocol/spec/runtime parity for constraints.

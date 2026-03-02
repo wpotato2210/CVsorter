@@ -13,6 +13,10 @@ Define canonical runtime and persisted data entities for frame processing, sched
   - Persistable telemetry/event records for mode, queue, and transport outcomes.
   - Version-aware schema alignment with `contracts/*.json` and `data/manifest.json`.
 
+## Terminology Alignment (protocol + architecture)
+- Persisted command, state, and error fields mirror protocol names and values without renaming.
+- Event lineage fields should align with architecture stage names to support end-to-end traceability.
+
 ## States
 - Data schema version state: `manifest_version` + contract revision.
 - Runtime object lifecycle: `ingested -> enriched -> evaluated -> scheduled -> transmitted`.
@@ -33,6 +37,7 @@ Define canonical runtime and persisted data entities for frame processing, sched
 ## Cross-layer Dependency Notes
 - `constraints.md` sets authoritative numeric ranges consumed by schema and validators.
 - `testing_strategy.md` should include schema compatibility and migration regression tests.
+- `security_model.md` should identify required security event fields.
 - `deployment.md` determines telemetry persistence, retention, and export pipeline expectations.
 
 ## Performance / Concurrency Notes
@@ -44,6 +49,7 @@ Define canonical runtime and persisted data entities for frame processing, sched
 - Canonical schema definitions for telemetry, queue event logs, and deployment manifests.
 - Persisted-state expectations: full frame/trigger history vs summary aggregates only.
 - Required schema versioning/evolution policy (semantic versioning, compatibility window, migration process).
+- Whether queue-capacity configuration changes must be captured as versioned deployment events.
 
 ## Conflicts / Missing Links
 - Canonical field-level schemas for internal telemetry objects are not yet documented.

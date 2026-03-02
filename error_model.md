@@ -13,6 +13,10 @@ Define canonical error categories, NACK mappings, and recovery behavior for CV p
   - Deterministic local recovery actions (drop frame, clear queue, retry, enter SAFE mode).
   - Operator-visible diagnostics for CLI/GUI telemetry.
 
+## Terminology Alignment (protocol + architecture)
+- External failures must map to protocol-defined NACK detail labels (`UNKNOWN_COMMAND`, `QUEUE_FULL`, `BUSY`, `MALFORMED_FRAME`, etc.).
+- Internal error origin tags should match architecture stages (preprocess/calibration/deploy/eval/scheduler/transport) for triage.
+
 ## States
 - Error severity: `recoverable | degraded | fail_safe`.
 - Recovery state: `retrying | rejected | safe_halt`.
@@ -35,6 +39,7 @@ Define canonical error categories, NACK mappings, and recovery behavior for CV p
 - `constraints.md` defines input/range violations that should map to `ARG_*` NACKs.
 - `security_model.md` may escalate malformed/flood behavior into SAFE mode or throttling.
 - `deployment.md` should surface operator runbooks for `degraded` and `fail_safe` states.
+- `data_model.md` should preserve stable error fields for correlation and audit trails.
 
 ## Performance / Concurrency Notes
 - Concurrent requesters can induce conflicting retries and duplicate `SCHED` submissions without host-side serialization.
@@ -45,6 +50,7 @@ Define canonical error categories, NACK mappings, and recovery behavior for CV p
 - Full canonical list of error codes/triggers/recovery actions beyond protocol-level NACK set.
 - Differences in error propagation/reporting between bench simulations and production deployments.
 - Whether critical classes of failures must automatically invoke SAFE mode.
+- Whether repeated BUSY/QUEUE_FULL should trigger adaptive throttling or hard rejection windows.
 
 ## Conflicts / Missing Links
 - Canonical mapping from non-protocol internal exceptions to external NACK codes is not yet enumerated.
