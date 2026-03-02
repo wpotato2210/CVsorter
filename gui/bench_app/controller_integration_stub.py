@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 import cv2
@@ -36,7 +37,7 @@ class OverlayMixin:
             return
 
         overlay = frame.copy()
-        indicator_text = "DETECTED" if detected else "SEARCHING"
+        indicator_text = self._overlay_text(detected)
         indicator_color = (0, 255, 0) if detected else (0, 165, 255)
 
         cv2.putText(
@@ -63,12 +64,23 @@ class OverlayMixin:
             pixmap.scaled(self._gui.camera_preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         )
 
+    def _overlay_text(self, detected: bool) -> str:
+        return "DETECTED" if detected else "SEARCHING"
+
 
 @dataclass
 class CameraConfig:
     camera_index: int = 0
     frame_width: int = 640
     frame_height: int = 480
+
+
+@dataclass
+class DetectionConfig:
+    # Placeholder HSV tuning for yellow-like mock target; replace after bench calibration.
+    lower_hsv: tuple[int, int, int] = (18, 90, 90)
+    upper_hsv: tuple[int, int, int] = (34, 255, 255)
+    min_area: int = 120
 
 
 class POCIntegration(QObject, OverlayMixin):
@@ -81,6 +93,7 @@ class POCIntegration(QObject, OverlayMixin):
         tick_ms: int = 100,
         camera_index: int = 0,
         enable_logging: bool = False,
+        detection_config: DetectionConfig | None = None,
     ) -> None:
         super().__init__()
         self._controller = controller
@@ -91,8 +104,11 @@ class POCIntegration(QObject, OverlayMixin):
         self.last_frame_index: int = 0
         self.last_command: str = ""
         self.command_log: list[str] = []
+        self.last_detected_contours: int = 0
+        self._last_mode: str = "sim"
 
         self._camera_config = CameraConfig(camera_index=camera_index)
+        self._detection_config = detection_config or DetectionConfig()
         self._capture: cv2.VideoCapture | None = None
         self._simulated_frame_id = 0
 
@@ -113,20 +129,33 @@ class POCIntegration(QObject, OverlayMixin):
 
     def _next_frame(self) -> np.ndarray:
         """Return a webcam frame (BGR) or a simulated fallback frame (BGR)."""
-        if self._capture is None:
-            capture = cv2.VideoCapture(self._camera_config.camera_index)
-            if capture.isOpened():
-                capture.set(cv2.CAP_PROP_FRAME_WIDTH, self._camera_config.frame_width)
-                capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self._camera_config.frame_height)
-                self._capture = capture
-            else:
-                capture.release()
+        try:
+            if self._capture is None:
+                capture = cv2.VideoCapture(self._camera_config.camera_index)
+                if capture.isOpened():
+                    capture.set(cv2.CAP_PROP_FRAME_WIDTH, self._camera_config.frame_width)
+                    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self._camera_config.frame_height)
+                    self._capture = capture
+                else:
+                    capture.release()
 
-        if self._capture is not None:
-            ok, frame = self._capture.read()
-            if ok and isinstance(frame, np.ndarray):
-                return frame
+            if self._capture is not None:
+                ok, frame = self._capture.read()
+                if ok and isinstance(frame, np.ndarray):
+                    self._last_mode = "live"
+                    return frame
 
+                # camera disconnect/read failure: release and fallback to simulation.
+                self._capture.release()
+                self._capture = None
+
+        except Exception as exc:  # noqa: BLE001 - safety fallback for bench stability.
+            self._safe_set_status(f"Camera error, switching to simulation: {exc}")
+            if self._capture is not None:
+                self._capture.release()
+                self._capture = None
+
+        self._last_mode = "sim"
         return self._build_simulated_frame()
 
     def _build_simulated_frame(self) -> np.ndarray:
@@ -138,45 +167,50 @@ class POCIntegration(QObject, OverlayMixin):
         return frame
 
     def _tick(self) -> None:
-        self._frame_index += 1
-        self.last_frame_index = self._frame_index
-        frame = self._next_frame()
-        detected = self._simple_detection(frame)
-        self.show_frame_overlay(frame, detected)
+        try:
+            self._frame_index += 1
+            self.last_frame_index = self._frame_index
+            frame = self._next_frame()
+            detected, contour_count = self._simple_detection(frame)
+            self.last_detected_contours = contour_count
+            self.show_frame_overlay(frame, detected)
 
-        if not detected:
-            self._set_status(f"[{self._frame_index}] detection=none")
-            return
+            status_prefix = f"[{self._frame_index}] mode={self._last_mode.upper()} contours={contour_count}"
+            if not detected:
+                entry = f"{status_prefix} detection=none"
+                self._set_status(entry)
+                self._log_event(entry)
+                return
 
-        cmd = "FIRE_TEST"
-        self.last_command = cmd
-        self._controller._send_serial_command(cmd)
+            cmd = "FIRE_TEST"
+            self.last_command = cmd
+            self._controller._send_serial_command(cmd)
 
-        # Replace with parsed MCU ACK + telemetry packet handling when available.
-        telemetry = self._mock_servo_feedback(cmd)
-        entry = f"[{self._frame_index}] detection=hit cmd={cmd} feedback={telemetry}"
-        self.command_log.append(entry)
-        self._set_status(entry)
+            # Replace with parsed MCU ACK + telemetry packet handling when available.
+            telemetry = self._mock_servo_feedback(cmd)
+            entry = f"{status_prefix} detection=hit cmd={cmd} feedback={telemetry}"
+            self.command_log.append(entry)
+            self._set_status(entry)
+            self._log_event(entry)
+        except Exception as exc:  # noqa: BLE001 - keep event loop alive on tick errors.
+            self._safe_set_status(f"Tick error: {exc}")
+            self._log_event(f"tick_error={exc}")
 
-        if self.enable_logging:
-            print(entry)
-
-    def _simple_detection(self, frame: np.ndarray) -> bool:
+    def _simple_detection(self, frame: np.ndarray) -> tuple[bool, int]:
         """
         Placeholder CV bean detection using HSV threshold + contour area.
         Returns True if any contour passes minimal area threshold.
         """
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        lower_hsv = np.array([20, 100, 100])
-        upper_hsv = np.array([30, 255, 255])
+        lower_hsv = np.array(self._detection_config.lower_hsv)
+        upper_hsv = np.array(self._detection_config.upper_hsv)
         mask = cv2.inRange(hsv, lower_hsv, upper_hsv)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        min_area = 100
         for cnt in contours:
-            if cv2.contourArea(cnt) >= min_area:
-                return True
-        return False
+            if cv2.contourArea(cnt) >= self._detection_config.min_area:
+                return True, len(contours)
+        return False, len(contours)
 
     def _mock_servo_feedback(self, cmd: str) -> str:
         pos = random.randint(15, 165)
@@ -185,7 +219,25 @@ class POCIntegration(QObject, OverlayMixin):
         return f"servo=OK cmd={cmd} pos={pos}deg duty={duty}% latency={latency_ms}ms"
 
     def _set_status(self, text: str) -> None:
-        self._gui.status_label.setText(text)
+        self._safe_set_status(text)
+
+    def _safe_set_status(self, text: str) -> None:
+        status_label = getattr(self._gui, "status_label", None)
+        if isinstance(status_label, QLabel):
+            status_label.setText(text)
+
+    def _overlay_text(self, detected: bool) -> str:
+        indicator = "DETECTED" if detected else "SEARCHING"
+        return f"{indicator} | mode={self._last_mode.upper()} | tick={self._frame_index}"
+
+    def _log_event(self, event: str) -> None:
+        if not self.enable_logging:
+            return
+        timestamp = datetime.now().isoformat(timespec="milliseconds")
+        print(
+            f"{timestamp} frame={self.last_frame_index} "
+            f"cmd={self.last_command or '-'} contours={self.last_detected_contours} {event}"
+        )
 
 
 class DemoController:
