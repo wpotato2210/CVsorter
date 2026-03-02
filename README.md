@@ -1,6 +1,6 @@
 # ColourSorter
 
-Colour sorter project beginning with ChatGPT generated OpenSpec.
+Bench-first colour sorting project anchored to OpenSpec artifacts and deterministic runtime contracts.
 
 ## Installation
 
@@ -24,6 +24,20 @@ coloursorter-bench-gui --config configs/bench_runtime.yaml
 coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
+## Verification commands
+
+```bash
+pytest -q
+```
+
+```bash
+python tools/hardware_readiness_report.py --strict
+```
+
+```bash
+python tools/validate_pyside6_modules.py
+```
+
 ## Bench bring-up
 
 1. Install project dependencies: `python -m pip install -e .`.
@@ -35,6 +49,13 @@ coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
 - Canonical bench startup config: `configs/bench_runtime.yaml`.
 - Migration notes from legacy startup keys: `docs/bench_runtime_config_migration.md`.
 - Enum migration notes: `docs/config_migration_v4.md`.
+
+## Documentation map
+
+- Architecture and boundaries: `architecture.md`, `constraints.md`, `deployment.md`.
+- Runtime behavior: `state_model.md`, `threading_model.md`, `error_model.md`, `security_model.md`.
+- Data and contracts: `data_model.md`, `protocol.md`, `openspec.md`, `docs/openspec/`.
+- Quality gates and testing: `testing_strategy.md`, `docs/hardware_readiness_gate.md`, `docs/artifacts/hardware_readiness/README.md`.
 
 ## Release done definition
 
