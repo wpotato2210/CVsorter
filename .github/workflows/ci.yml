@@ -8,13 +8,71 @@ on:
   workflow_dispatch:
 
 jobs:
+  guard-python-support:
+    name: Guard Python support matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify matrix matches pyproject requires-python
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import re
+          import sys
+          from pathlib import Path
+
+          # pyproject.toml is the source of truth for supported Python versions.
+          pyproject_text = Path("pyproject.toml").read_text(encoding="utf-8")
+          requires_match = re.search(r'^requires-python\s*=\s*"([^"]+)"', pyproject_text, re.MULTILINE)
+          if not requires_match:
+            raise SystemExit('Could not find project.requires-python in pyproject.toml')
+          requires_python = requires_match.group(1)
+
+          workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+          matrix_match = re.search(r"python-version:\s*\[(.*?)\]", workflow)
+          if not matrix_match:
+            raise SystemExit("Could not find strategy.matrix.python-version list in ci.yml")
+
+          matrix_versions = sorted(re.findall(r"'([0-9]+\.[0-9]+)'", matrix_match.group(1)))
+
+          min_match = re.search(r">=\s*([0-9]+)\.([0-9]+)", requires_python)
+          max_match = re.search(r"<\s*([0-9]+)\.([0-9]+)", requires_python)
+          if not (min_match and max_match):
+            raise SystemExit(f"Unsupported requires-python format: {requires_python!r}")
+
+          min_major, min_minor = map(int, min_match.groups())
+          max_major, max_minor = map(int, max_match.groups())
+          if min_major != max_major:
+            raise SystemExit(
+              "requires-python range spans major versions; update guard logic in ci.yml"
+            )
+
+          expected_versions = [f"{min_major}.{minor}" for minor in range(min_minor, max_minor)]
+
+          if matrix_versions != expected_versions:
+            print(f"requires-python: {requires_python}", file=sys.stderr)
+            print(f"expected matrix: {expected_versions}", file=sys.stderr)
+            print(f"actual matrix:   {matrix_versions}", file=sys.stderr)
+            raise SystemExit(
+              "Python matrix drift detected. Update strategy.matrix.python-version to match pyproject.toml"
+            )
+
+          print(f"Python matrix matches requires-python ({requires_python}): {matrix_versions}")
+          PY
+
   validate-runtime:
     name: Validate runtime dependencies (Python ${{ matrix.python-version }})
+    needs: guard-python-support
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']
+        # pyproject.toml [project.requires-python] is the source of truth for supported Python versions.
+        python-version: ['3.10', '3.11', '3.12']
 
     steps:
       - name: Checkout repository
