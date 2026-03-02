@@ -20,8 +20,9 @@ Define canonical error categories, NACK mappings, and recovery behavior for CV p
 
 ## Dependencies
 - `protocol.md` canonical NACK codes (1..8) and retry policy.
+- `state_model.md` mode/queue transition side effects.
+- `threading_model.md` serialization assumptions preventing duplicate side effects.
 - Scheduler and serial_interface runtime modules.
-- Bench surfaces that render mode/queue/error telemetry.
 
 ## Key Behaviors / Invariants
 - Every rejected command/frame must map to one canonical NACK code and detail.
@@ -30,15 +31,20 @@ Define canonical error categories, NACK mappings, and recovery behavior for CV p
 - Invalid mode transitions preserve current mode and queue safety invariants.
 - Escalation path for repeated transport failures should prefer SAFE mode over undefined operation.
 
-## Performance / Concurrency Risks
+## Cross-layer Dependency Notes
+- `constraints.md` defines input/range violations that should map to `ARG_*` NACKs.
+- `security_model.md` may escalate malformed/flood behavior into SAFE mode or throttling.
+- `deployment.md` should surface operator runbooks for `degraded` and `fail_safe` states.
+
+## Performance / Concurrency Notes
 - Concurrent requesters can induce conflicting retries and duplicate `SCHED` submissions without host-side serialization.
 - Overly aggressive retry timing can worsen link congestion and increase BUSY/NACK rates.
 - Error fan-out to GUI/CLI can lag under burst failures if telemetry queueing is unbounded.
 
-## Integration Points
-- Protocol parser and encoder in `src/coloursorter/protocol/*` and `src/coloursorter/serial_interface/*`.
-- Scheduler queue admission and reset pathways.
-- Bench telemetry aggregation and operator alerts.
+## Open Questions (requires input)
+- Full canonical list of error codes/triggers/recovery actions beyond protocol-level NACK set.
+- Differences in error propagation/reporting between bench simulations and production deployments.
+- Whether critical classes of failures must automatically invoke SAFE mode.
 
 ## Conflicts / Missing Links
 - Canonical mapping from non-protocol internal exceptions to external NACK codes is not yet enumerated.

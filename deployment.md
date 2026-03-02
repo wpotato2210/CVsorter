@@ -21,6 +21,7 @@ Define deployment topology and operational procedures that carry bench-validated
 - `architecture.md` runtime component map.
 - `protocol.md` timeout/retry and mode transition behavior.
 - `security_model.md` controls for parser hardening and host access.
+- `constraints.md` and `state_model.md` invariants that must remain unchanged across environments.
 
 ## Key Behaviors / Invariants
 - Startup validates contracts/config compatibility before accepting frame stream input.
@@ -29,15 +30,20 @@ Define deployment topology and operational procedures that carry bench-validated
 - Deployment-specific config overrides must not change protocol contract semantics.
 - Recovery after transport loss must preserve deterministic queue/state behavior.
 
-## Performance / Concurrency Risks
+## Cross-layer Dependency Notes
+- `testing_strategy.md` defines pre-promotion checks that should gate bench -> staging -> production.
+- `error_model.md` and `security_model.md` define escalation pathways requiring operator runbook entries.
+- `data_model.md` defines telemetry outputs needed for operational observability and rollback diagnostics.
+
+## Performance / Concurrency Notes
 - Production transport latency variance can exceed bench assumptions and stress retry policy.
 - Resource-constrained hosts may reduce frame throughput and increase trigger lag.
 - Restart races can duplicate in-flight triggers if queue checkpoint strategy is absent.
 
-## Integration Points
-- CLI/GUI bench tooling for pre-prod validation.
-- Process manager/service wrapper and environment configuration.
-- Monitoring/alerting hooks for NACK bursts, BUSY rates, and SAFE mode entries.
+## Open Questions (requires input)
+- Production MCU timing budgets and explicit mapping from bench trigger timings to production tolerances.
+- Rollout/rollback lifecycle procedures, maintenance windows, and release ownership model.
+- SAFE mode enforcement differences (if any) between staging and production.
 
 ## Conflicts / Missing Links
 - Target deployment platform matrix (OS/hardware/serial adapters) is not documented.
