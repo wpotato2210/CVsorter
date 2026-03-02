@@ -9,7 +9,9 @@ import cv2
 import numpy as np
 from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMainWindow
+
+from .load_ui_main_layout import load_ui_main_layout
 
 
 class BenchController(Protocol):
@@ -254,20 +256,16 @@ class DemoController:
         self.sent_commands.append(cmd)
 
 
-class DemoWindow(QWidget):
+class DemoWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
+        load_ui_main_layout(self)
         self.setWindowTitle("POC Integration Stub")
-
-        self.status_label = QLabel("Idle")
-        self.camera_preview_label = QLabel("Waiting for frame")
+        self.camera_preview_label.setText("Waiting for frame")
         self.camera_preview_label.setMinimumSize(640, 480)
         self.camera_preview_label.setAlignment(Qt.AlignCenter)
         self.camera_preview_label.setStyleSheet("background: #101010; color: #d0d0d0;")
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.camera_preview_label)
-        layout.addWidget(self.status_label)
+        self.status_label.setText("Idle")
 
 
 if __name__ == "__main__":
