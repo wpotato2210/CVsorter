@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>BenchMainWindow</class>
+ <widget class="QMainWindow" name="BenchMainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>ColourSorter Bench App</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="main_grid_layout">
+    <item row="0" column="0">
+     <widget class="QGroupBox" name="live_preview_group">
+      <property name="title">
+       <string>Live Frame Preview</string>
+      </property>
+      <layout class="QVBoxLayout" name="live_preview_layout">
+       <item>
+        <widget class="QLabel" name="camera_preview_label">
+         <property name="minimumSize">
+          <size>
+           <width>640</width>
+           <height>220</height>
+          </size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="text">
+          <string>No frame loaded</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="status_label">
+         <property name="text">
+          <string>Bench idle</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item row="0" column="1">
+     <widget class="QGroupBox" name="lane_overlay_group">
+      <property name="title">
+       <string>Lane Overlay</string>
+      </property>
+      <layout class="QVBoxLayout" name="lane_overlay_layout">
+       <item>
+        <widget class="QLabel" name="lane_overlay_label">
+         <property name="text">
+          <string>Lane boundaries pending</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item row="1" column="0">
+     <widget class="QGroupBox" name="queue_group">
+      <property name="title">
+       <string>Queue Depth / State</string>
+      </property>
+      <layout class="QVBoxLayout" name="queue_layout">
+       <item>
+        <widget class="QLabel" name="queue_depth_label">
+         <property name="text">
+          <string>Depth: 0/0</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="queue_state_label">
+         <property name="text">
+          <string>State: idle</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="scheduler_state_label">
+         <property name="text">
+          <string>Scheduler: IDLE</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="mode_label">
+         <property name="text">
+          <string>Mode: AUTO</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item row="1" column="1">
+     <widget class="QGroupBox" name="controls_group">
+      <property name="title">
+       <string>Mode / Homing Controls</string>
+      </property>
+      <layout class="QHBoxLayout" name="controls_layout">
+       <item>
+        <widget class="QPushButton" name="replay_button">
+         <property name="text">
+          <string>Replay mode</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="live_button">
+         <property name="text">
+          <string>Live mode</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="home_button">
+         <property name="text">
+          <string>Home</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item row="2" column="0" colspan="2">
+     <widget class="QGroupBox" name="poc_group">
+      <property name="title">
+       <string>POC Vertical Slice</string>
+      </property>
+      <layout class="QGridLayout" name="poc_layout">
+       <item row="0" column="0">
+        <widget class="QPushButton" name="serial_connect_button">
+         <property name="text">
+          <string>Serial Connect</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QPushButton" name="serial_disconnect_button">
+         <property name="text">
+          <string>Serial Disconnect</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="2">
+        <widget class="QPushButton" name="fire_test_button">
+         <property name="text">
+          <string>FIRE TEST</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="3">
+        <widget class="QLabel" name="serial_status_label">
+         <property name="text">
+          <string>Serial: disconnected</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="trigger_threshold_text_label">
+         <property name="text">
+          <string>Trigger threshold</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QDoubleSpinBox" name="trigger_threshold_input">
+         <property name="minimum">
+          <double>0.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>1.000000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>0.050000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.500000000000000</double>
+         </property>
+         <property name="decimals">
+          <number>2</number>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="2">
+        <widget class="QLabel" name="belt_speed_text_label">
+         <property name="text">
+          <string>belt_speed_mm_s</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="3">
+        <widget class="QDoubleSpinBox" name="belt_speed_input">
+         <property name="minimum">
+          <double>1.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>5000.000000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>10.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>140.000000000000000</double>
+         </property>
+         <property name="decimals">
+          <number>1</number>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0" colspan="4">
+        <widget class="QLabel" name="last_command_label">
+         <property name="text">
+          <string>Last command: -</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item row="3" column="0" colspan="2">
+     <widget class="QGroupBox" name="fault_group">
+      <property name="title">
+       <string>Fault Indicators</string>
+      </property>
+      <layout class="QHBoxLayout" name="fault_layout">
+       <item>
+        <widget class="QLabel" name="safe_label">
+         <property name="text">
+          <string>SAFE: off</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="watchdog_label">
+         <property name="text">
+          <string>WATCHDOG: off</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item row="4" column="0" colspan="2">
+     <widget class="QGroupBox" name="log_group">
+      <property name="title">
+       <string>Bench Telemetry</string>
+      </property>
+      <layout class="QVBoxLayout" name="log_layout">
+       <item>
+        <widget class="QTableWidget" name="log_table">
+         <column>
+          <property name="text">
+           <string>Frame Ts (s)</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Trigger Ts (s)</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Lane/Decision</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Rejection</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>RTT (ms)</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>ACK</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
