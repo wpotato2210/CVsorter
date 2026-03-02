@@ -22,22 +22,28 @@ Define canonical runtime and persisted data entities for frame processing, sched
 - `contracts/frame_schema.json`, `contracts/sched_schema.json`, `contracts/mcu_response_schema.json`.
 - `data/manifest.json`.
 - Model/deploy/scheduler/protocol runtime modules.
+- `state_model.md` and `error_model.md` state/error taxonomies for telemetry.
 
 ## Key Behaviors / Invariants
 - Lane and trigger fields remain strongly typed and range-validated before serialization.
-- Protocol emission uses canonical `SCHED:<lane>:<position_mm>` projection from structured scheduler data.
+- Scheduler data projects to canonical `SCHED:<lane>:<position_mm>` and then encodes to protocol frame format for transport.
 - ACK/NACK telemetry records preserve code/detail and correlation to originating frame/trigger where available.
 - Schema evolution must be additive or accompanied by explicit migration notes.
 
-## Performance / Concurrency Risks
+## Cross-layer Dependency Notes
+- `constraints.md` sets authoritative numeric ranges consumed by schema and validators.
+- `testing_strategy.md` should include schema compatibility and migration regression tests.
+- `deployment.md` determines telemetry persistence, retention, and export pipeline expectations.
+
+## Performance / Concurrency Notes
 - High-frequency frame telemetry can create storage pressure without retention limits.
 - Concurrent telemetry writes can reorder related queue/ACK events unless sequence IDs are used.
 - Large object payloads can increase serialization overhead and jitter in scheduler loops.
 
-## Integration Points
-- CV pipeline model types and deploy orchestration outputs.
-- Scheduler output and serial protocol adapter.
-- Bench CLI/GUI telemetry consumers and reporting tools.
+## Open Questions (requires input)
+- Canonical schema definitions for telemetry, queue event logs, and deployment manifests.
+- Persisted-state expectations: full frame/trigger history vs summary aggregates only.
+- Required schema versioning/evolution policy (semantic versioning, compatibility window, migration process).
 
 ## Conflicts / Missing Links
 - Canonical field-level schemas for internal telemetry objects are not yet documented.

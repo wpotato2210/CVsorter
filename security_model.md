@@ -21,6 +21,7 @@ Define practical security controls for protocol parsing, mode protection, and op
 ## Dependencies
 - `protocol.md` frame grammar, command whitelist, NACK behavior.
 - `error_model.md` escalation and recovery semantics.
+- `state_model.md` mode restrictions and queue-reset implications.
 - Deployment/runtime controls for process and device access.
 
 ## Key Behaviors / Invariants
@@ -30,16 +31,20 @@ Define practical security controls for protocol parsing, mode protection, and op
 - Repeated malformed frame bursts should trigger throttling and/or SAFE mode escalation.
 - Queue reset and mode controls should be restricted to trusted operator/control paths.
 
-## Performance / Concurrency Risks
+## Cross-layer Dependency Notes
+- `threading_model.md` must define synchronized abuse counters under concurrent handlers.
+- `deployment.md` must implement host hardening (device permissions, service account scope, log retention).
+- `testing_strategy.md` should include malformed-frame flood and retry-abuse scenarios.
+
+## Performance / Concurrency Notes
 - Excessive validation logging on malformed frame floods can degrade throughput.
 - Shared counters without synchronization can undercount abuse in concurrent handlers.
 - Throttling policies can interact poorly with retry backoff and create starvation.
 
-## Integration Points
-- Protocol parser and serial transport ingress.
-- State/mode manager and scheduler queue controls.
-- Deployment scripts/service configuration for permission hardening.
+## Open Questions (requires input)
+- Authentication/authorization model for command producers (none, shared secret, RBAC, physical link trust).
+- Exact response policy to malformed-frame floods (drop, throttle, temporary lockout, SAFE transition).
+- Whether SAFE mode and communications lockdown are coupled or independently controlled.
 
 ## Conflicts / Missing Links
-- Authentication/authorization mechanism for command origin is not defined.
 - No explicit secret or credential management guidance exists for production deployments.
