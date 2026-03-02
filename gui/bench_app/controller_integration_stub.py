@@ -36,21 +36,25 @@ class OverlayMixin:
             return
 
         overlay = frame.copy()
+        indicator_text = "DETECTED" if detected else "SEARCHING"
+        indicator_color = (0, 255, 0) if detected else (0, 165, 255)
+
+        cv2.putText(
+            overlay,
+            indicator_text,
+            (16, 32),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.9,
+            indicator_color,
+            2,
+        )
+
         if detected:
             # Placeholder overlay box/text; replace with model-provided bounding boxes later.
             height, width = overlay.shape[:2]
             margin_x = max(20, width // 8)
             margin_y = max(20, height // 8)
             cv2.rectangle(overlay, (margin_x, margin_y), (width - margin_x, height - margin_y), (0, 255, 0), 2)
-            cv2.putText(
-                overlay,
-                "DETECTED",
-                (margin_x, max(25, margin_y - 8)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.9,
-                (0, 255, 0),
-                2,
-            )
 
         rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
         image = QImage(rgb.data, rgb.shape[1], rgb.shape[0], rgb.strides[0], QImage.Format.Format_RGB888)
@@ -84,6 +88,8 @@ class POCIntegration(QObject, OverlayMixin):
         self.enable_logging = enable_logging
 
         self._frame_index: int = 0
+        self.last_frame_index: int = 0
+        self.last_command: str = ""
         self.command_log: list[str] = []
 
         self._camera_config = CameraConfig(camera_index=camera_index)
@@ -133,6 +139,7 @@ class POCIntegration(QObject, OverlayMixin):
 
     def _tick(self) -> None:
         self._frame_index += 1
+        self.last_frame_index = self._frame_index
         frame = self._next_frame()
         detected = self._simple_detection(frame)
         self.show_frame_overlay(frame, detected)
@@ -142,6 +149,7 @@ class POCIntegration(QObject, OverlayMixin):
             return
 
         cmd = "FIRE_TEST"
+        self.last_command = cmd
         self._controller._send_serial_command(cmd)
 
         # Replace with parsed MCU ACK + telemetry packet handling when available.
