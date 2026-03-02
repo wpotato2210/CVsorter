@@ -31,7 +31,7 @@ dev = [
 ]
 
 [project.scripts]
-coloursorter-bench-gui = "gui.bench_app.app:run"
+coloursorter-bench-gui = "gui.bench_app.app:main"
 coloursorter-bench-cli = "coloursorter.bench.scenario_runner:run"
 
 [tool.setuptools.packages.find]

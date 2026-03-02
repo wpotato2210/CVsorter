@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(project_root / "src"))
+    sys.path.insert(0, str(project_root / "gui"))
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
@@ -11,7 +17,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem
 from coloursorter.bench import AckCode, BenchLogEntry, FaultState
 from coloursorter.config import RuntimeConfig
 
-from .load_ui_main_layout import load_ui_main_layout
+from bench_app.load_ui_main_layout import load_ui_main_layout
 
 
 @dataclass(frozen=True)
@@ -66,8 +72,8 @@ class BenchMainWindow(QMainWindow):
         self.last_command_label.setText(f"Last command: {message}")
 
 
-def run(argv: list[str] | None = None) -> int:
-    from .controller import BenchAppController
+def main(argv: list[str] | None = None) -> int:
+    from bench_app.controller import BenchAppController
 
     parser = argparse.ArgumentParser(description="ColourSorter bench app")
     parser.add_argument(
@@ -78,10 +84,14 @@ def run(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     runtime_config = RuntimeConfig.load_startup(args.config)
-    app = QApplication([])
+    app = QApplication(sys.argv if argv is None else [sys.argv[0], *argv])
     controller = BenchAppController(app, runtime_config=runtime_config)
     return controller.start()
 
 
+def run(argv: list[str] | None = None) -> int:
+    return main(argv)
+
+
 if __name__ == "__main__":
-    raise SystemExit(run())
+    raise SystemExit(main())
