@@ -1,0 +1,446 @@
+{
+  "project": "ColourSorter",
+  "analysis_type": "layered_file_analysis",
+  "generated_from": [
+    "openspec.md",
+    "architecture.md",
+    "filetree.md",
+    "protocol.md",
+    "constraints.md",
+    "styleguide.md",
+    "testing_strategy.md",
+    "error_model.md",
+    "threading_model.md",
+    "agents.md",
+    "state_model.md",
+    "security_model.md",
+    "data_model.md",
+    "deployment.md"
+  ],
+  "report": [
+    {
+      "file": "openspec.md",
+      "layer": "Core",
+      "exists": true,
+      "inputs": [
+        "Versioned OpenSpec artifacts under docs/openspec/v3/",
+        "Runtime mirror paths in contracts/, protocol/, data/, configs/, gui/"
+      ],
+      "outputs": [
+        "Canonical artifact map from OpenSpec to runtime files",
+        "Spec-to-module mapping for CV pipeline, scheduler, and wire protocol",
+        "High-level I/O dependency graph"
+      ],
+      "states": [
+        "OpenSpec version state pinned to v3",
+        "Artifact synchronization state between docs/openspec and runtime counterparts"
+      ],
+      "dependencies": [
+        "docs/openspec/README.md",
+        "docs/openspec/v3/protocol/commands.json",
+        "docs/openspec/v3/contracts/*.json",
+        "docs/openspec/v3/configs/*",
+        "src/coloursorter/* modules listed in spec-to-module map"
+      ],
+      "key_behaviors_invariants": [
+        "Each OpenSpec artifact should have a runtime counterpart path",
+        "CV pipeline flow remains preprocess/calibration -> deploy -> eval -> scheduler -> serial wire",
+        "Bench and GUI are downstream consumers of the same contract set"
+      ],
+      "performance_or_concurrency_risks": [
+        "No explicit version skew guard between OpenSpec files and runtime mirrors; drift can create silent contract mismatches",
+        "Pipeline ordering is documented but no explicit throughput/latency bounds are stated at this layer"
+      ],
+      "integration_points": [
+        "architecture.md layered module map",
+        "protocol.md command and wire semantics",
+        "filetree.md repository navigation and ownership boundaries"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "OpenSpec snapshot references broad mirror parity but does not define enforcement mechanism (test/check/gate)",
+        "No explicit linkage to correctness-layer docs for constraints/error handling in this file"
+      ]
+    },
+    {
+      "file": "architecture.md",
+      "layer": "Core",
+      "exists": true,
+      "inputs": [
+        "Contracts and protocol assets (contracts/, protocol/, data/)",
+        "Runtime configs from configs/",
+        "Module boundaries under src/coloursorter/*"
+      ],
+      "outputs": [
+        "Layered architecture description",
+        "Explicit dataflow from frame ingest to MCU command format SCHED:<lane>:<position_mm>",
+        "Runtime surfaces for CLI and GUI bench modes"
+      ],
+      "states": [
+        "Pipeline state progression from FrameMetadata/ObjectDetection[] to DecisionPayload",
+        "Scheduler state concept (IDLE/ACTIVE) and queue depth visibility via runtime surfaces"
+      ],
+      "dependencies": [
+        "src/coloursorter/preprocess/lane_segmentation.py",
+        "src/coloursorter/calibration/mapping.py",
+        "src/coloursorter/deploy/pipeline.py",
+        "src/coloursorter/eval/rules.py",
+        "src/coloursorter/scheduler/output.py",
+        "src/coloursorter/serial_interface/*",
+        "src/coloursorter/bench/*",
+        "gui/bench_app/*"
+      ],
+      "key_behaviors_invariants": [
+        "CV pipeline combines lane_id, class, and mm mapping before scheduling",
+        "Scheduler output must serialize to MCU command contract",
+        "Bench CLI/GUI should expose telemetry, queue depth, and SAFE visibility"
+      ],
+      "performance_or_concurrency_risks": [
+        "Potential queue contention between scheduler production and transport consumption is implied but not specified",
+        "No explicit servo timing budget or frame-rate budget in this architecture summary"
+      ],
+      "integration_points": [
+        "openspec.md artifact map",
+        "protocol.md queue and retry semantics",
+        "tests/ for quality gates"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Architecture references quality gates but omits concrete pass/fail thresholds",
+        "Threading ownership (camera thread vs command transport thread) is not documented here"
+      ]
+    },
+    {
+      "file": "filetree.md",
+      "layer": "Core",
+      "exists": true,
+      "inputs": [
+        "Repository directory structure",
+        "Module names and roles across src/, gui/, tests/, docs/"
+      ],
+      "outputs": [
+        "Curated top-level tree",
+        "Task-to-file navigation index"
+      ],
+      "states": [
+        "Logical ownership state by folder (CV pipeline, protocol, bench, GUI)",
+        "Testing scope state mapped via tests/ entrypoints"
+      ],
+      "dependencies": [
+        "Current repository layout",
+        "Referenced module paths in src/coloursorter/*",
+        "docs/openspec/v3/**"
+      ],
+      "key_behaviors_invariants": [
+        "Folder responsibilities remain separated by concern",
+        "Protocol and schema contracts are externalized under protocol/ and contracts/",
+        "Bench and GUI runtime paths are explicitly discoverable"
+      ],
+      "performance_or_concurrency_risks": [
+        "Document is structural only; no direct timing/throughput constraints",
+        "Potential integration risk if paths drift from actual tree without automated verification"
+      ],
+      "integration_points": [
+        "architecture.md module layering",
+        "openspec.md mirror mapping",
+        "protocol.md references protocol and serial_interface locations"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "No direct pointer to threading/state/security documents requested by layered model",
+        "No dependency link to production deployment artifacts beyond high-level tree"
+      ]
+    },
+    {
+      "file": "protocol.md",
+      "layer": "Core",
+      "exists": true,
+      "inputs": [
+        "protocol/commands.json",
+        "src/coloursorter/protocol/*",
+        "src/coloursorter/serial_interface/*",
+        "Incoming ASCII frames <CMD|arg...>"
+      ],
+      "outputs": [
+        "Command validation contract for SET_MODE/SCHED/GET_STATE/RESET_QUEUE",
+        "ACK/NACK response frame formats",
+        "Mode transition and retry policy"
+      ],
+      "states": [
+        "mode: AUTO|MANUAL|SAFE",
+        "scheduler_state: IDLE|ACTIVE",
+        "queue_depth with max default 8",
+        "busy host state and retry counters"
+      ],
+      "dependencies": [
+        "MCU command contract",
+        "Queue storage and scheduler implementation",
+        "Protocol policy/NACK code mappings in src/coloursorter/protocol"
+      ],
+      "key_behaviors_invariants": [
+        "Wire payload excludes literal < > | characters",
+        "SCHED validates lane range 0..21 and trigger_mm 0.0..2000.0",
+        "SAFE -> AUTO is disallowed; SAFE -> MANUAL allowed",
+        "Queue-clearing side effects occur on RESET_QUEUE and effective mode changes",
+        "Retry policy uses ACK timeout 100 ms and max retries 3"
+      ],
+      "performance_or_concurrency_risks": [
+        "Queue full and BUSY handling can induce command drops under burst trigger rates",
+        "Fixed retry/backoff profile may be insufficient on high-latency links",
+        "Concurrent command issuers can race on queue depth unless host serialization is enforced"
+      ],
+      "integration_points": [
+        "scheduler/output for SCHED emission",
+        "serial_interface/wire for frame encoding/decoding",
+        "architecture.md for CV pipeline output handoff",
+        "agents.md for bench-first operational scope"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Protocol includes SAFE mode semantics but cross-file safety model document is absent",
+        "Servo timing and trigger scheduling guarantees are not tied to explicit timing budgets here"
+      ]
+    },
+    {
+      "file": "constraints.md",
+      "layer": "Correctness Layer",
+      "exists": false,
+      "inputs": [],
+      "outputs": [],
+      "states": [],
+      "dependencies": [],
+      "key_behaviors_invariants": [],
+      "performance_or_concurrency_risks": [
+        "Missing constraints document increases risk of implicit, inconsistent validation rules across CV pipeline and protocol boundaries"
+      ],
+      "integration_points": [
+        "Should integrate with protocol.md argument ranges, scheduler queue limits, and OpenSpec schemas"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Requested layered file not present in repository root"
+      ]
+    },
+    {
+      "file": "styleguide.md",
+      "layer": "Correctness Layer",
+      "exists": false,
+      "inputs": [],
+      "outputs": [],
+      "states": [],
+      "dependencies": [],
+      "key_behaviors_invariants": [],
+      "performance_or_concurrency_risks": [
+        "Without centralized style conventions, deterministic behavior and naming consistency may drift across modules"
+      ],
+      "integration_points": [
+        "Would normally align with agents.md deterministic naming and contract file naming conventions"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Requested layered file not present in repository root"
+      ]
+    },
+    {
+      "file": "testing_strategy.md",
+      "layer": "Correctness Layer",
+      "exists": false,
+      "inputs": [],
+      "outputs": [],
+      "states": [],
+      "dependencies": [],
+      "key_behaviors_invariants": [],
+      "performance_or_concurrency_risks": [
+        "No dedicated testing strategy document may leave gaps in frame/queue/trigger determinism coverage"
+      ],
+      "integration_points": [
+        "Should connect tests/ suite, OpenSpec compliance tests, and protocol retry behavior validation"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Requested layered file not present in repository root"
+      ]
+    },
+    {
+      "file": "error_model.md",
+      "layer": "Correctness Layer",
+      "exists": false,
+      "inputs": [],
+      "outputs": [],
+      "states": [],
+      "dependencies": [],
+      "key_behaviors_invariants": [],
+      "performance_or_concurrency_risks": [
+        "Absent unified error model can fragment NACK code handling, SAFE transitions, and queue failure semantics"
+      ],
+      "integration_points": [
+        "Should map protocol NACK codes to deploy/scheduler/transport recovery paths"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Requested layered file not present in repository root"
+      ]
+    },
+    {
+      "file": "threading_model.md",
+      "layer": "Stateful / Agentic Systems",
+      "exists": false,
+      "inputs": [],
+      "outputs": [],
+      "states": [],
+      "dependencies": [],
+      "key_behaviors_invariants": [],
+      "performance_or_concurrency_risks": [
+        "No explicit threading model leaves race conditions around frame ingestion, queue updates, and serial transport unresolved"
+      ],
+      "integration_points": [
+        "Should integrate architecture.md runtime surfaces and protocol.md BUSY/QUEUE_FULL semantics"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Requested layered file not present in repository root"
+      ]
+    },
+    {
+      "file": "agents.md",
+      "layer": "Stateful / Agentic Systems",
+      "exists": true,
+      "inputs": [
+        "Current repository scope and module inventory",
+        "Contributor/automation operating conventions"
+      ],
+      "outputs": [
+        "Bench-first system scope statement",
+        "Deterministic naming conventions",
+        "High-level I/O dependency map",
+        "Contribution checks and bench entry points"
+      ],
+      "states": [
+        "Operational focus state: bench-first validation",
+        "Artifact naming stability state for configs/contracts"
+      ],
+      "dependencies": [
+        "src/coloursorter/* module layout",
+        "configs/* canonical files",
+        "contracts/* schema filenames",
+        "bench CLI/GUI entry points"
+      ],
+      "key_behaviors_invariants": [
+        "Prefer explicit I/O contracts and boundary validation",
+        "Maintain deterministic snake_case naming",
+        "Keep docs synchronized with implementation paths"
+      ],
+      "performance_or_concurrency_risks": [
+        "Guidance-level file; does not define measurable latency/throughput/concurrency limits",
+        "Bench-first emphasis may under-specify production MCU timing edge cases"
+      ],
+      "integration_points": [
+        "architecture.md for module decomposition",
+        "openspec.md for artifact synchronization",
+        "protocol.md for wire and command contracts"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "References contribution checks but no direct linkage to a dedicated testing_strategy.md/error_model.md",
+        "No explicit security or deployment integration guidance in this file"
+      ]
+    },
+    {
+      "file": "state_model.md",
+      "layer": "Stateful / Agentic Systems",
+      "exists": false,
+      "inputs": [],
+      "outputs": [],
+      "states": [],
+      "dependencies": [],
+      "key_behaviors_invariants": [],
+      "performance_or_concurrency_risks": [
+        "Absent state model obscures authoritative transitions among mode, scheduler state, queue depth, and SAFE behavior"
+      ],
+      "integration_points": [
+        "Should align with protocol.md mode transitions and queue lifecycle"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Requested layered file not present in repository root"
+      ]
+    },
+    {
+      "file": "security_model.md",
+      "layer": "Stateful / Agentic Systems",
+      "exists": false,
+      "inputs": [],
+      "outputs": [],
+      "states": [],
+      "dependencies": [],
+      "key_behaviors_invariants": [],
+      "performance_or_concurrency_risks": [
+        "No security model leaves protocol abuse, malformed frame flood, and unauthorized mode-switch threat handling unspecified"
+      ],
+      "integration_points": [
+        "Should connect protocol parser hardening, SAFE mode protections, and deployment controls"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Requested layered file not present in repository root"
+      ]
+    },
+    {
+      "file": "data_model.md",
+      "layer": "Production Layer",
+      "exists": false,
+      "inputs": [],
+      "outputs": [],
+      "states": [],
+      "dependencies": [],
+      "key_behaviors_invariants": [],
+      "performance_or_concurrency_risks": [
+        "Missing data model can create ambiguity in persisted frame telemetry, queue logs, and manifest/schema evolution"
+      ],
+      "integration_points": [
+        "Should tie data/manifest.json and contracts/*.json evolution to runtime consumers"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Requested layered file not present in repository root"
+      ]
+    },
+    {
+      "file": "deployment.md",
+      "layer": "Production Layer",
+      "exists": false,
+      "inputs": [],
+      "outputs": [],
+      "states": [],
+      "dependencies": [],
+      "key_behaviors_invariants": [],
+      "performance_or_concurrency_risks": [
+        "Absent deployment model leaves unclear how bench-validated behavior maps to production MCU/servo timing environments"
+      ],
+      "integration_points": [
+        "Should integrate runtime config loading, transport settings, retry policy, and SAFE mode operational playbooks"
+      ],
+      "conflicts_inconsistencies_missing_links": [
+        "Requested layered file not present in repository root"
+      ]
+    }
+  ],
+  "cross_layer_summary": {
+    "dependencies": [
+      "Core docs consistently connect CV pipeline modules to protocol/scheduler/serial interfaces",
+      "OpenSpec mirrors are central dependency anchors for contracts/configs/gui layout",
+      "Bench and GUI runtime surfaces depend on stable queue, frame, and trigger semantics"
+    ],
+    "conflicts_or_gaps": [
+      "9 of 14 requested layered files are missing in repository root (all non-core docs except agents.md)",
+      "SAFE mode, queue lifecycle, and retry semantics are documented in protocol.md but lack dedicated state/error/security model linkages",
+      "No explicit doc-level mapping from servo timing budgets to SCHED trigger guarantees"
+    ],
+    "performance_bottlenecks": [
+      "Queue depth cap (8) and BUSY behavior can throttle burst trigger throughput",
+      "Static retry/backoff (100 ms timeout, 3 retries) may underperform on variable-latency transports",
+      "Lack of explicit threading model increases risk of frame/queue contention under load"
+    ],
+    "safety_correctness_concerns": [
+      "SAFE mode transition policy exists, but missing security/state/error documents reduce assurance for fault handling",
+      "Absence of correctness-layer docs may weaken deterministic validation across frame parsing, queue operations, and trigger scheduling",
+      "Spec/runtime parity is declared but not coupled to a mandatory automated consistency gate"
+    ],
+    "terminology_alignment": [
+      "SCHED:<lane>:<position_mm>",
+      "CV pipeline",
+      "SAFE mode",
+      "MCU",
+      "frame",
+      "queue",
+      "triggers"
+    ]
+  }
+}
