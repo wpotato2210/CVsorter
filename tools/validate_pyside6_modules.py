@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.metadata as importlib_metadata
 import importlib.util
+import os
 import platform
 import re
 import struct
@@ -179,10 +181,51 @@ def _check_module(module_name: str, verbose: bool) -> tuple[bool, str]:
     return True, ""
 
 
+def _run_qtwidgets_smoke(verbose: bool) -> str | None:
+    previous_platform = os.environ.get("QT_QPA_PLATFORM")
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
+    try:
+        qtwidgets = importlib.import_module("PySide6.QtWidgets")
+    except Exception as exc:  # pragma: no cover - depends on runtime environment
+        return f"Failed importing PySide6.QtWidgets: {exc}"
+
+    qapplication = getattr(qtwidgets, "QApplication", None)
+    if qapplication is None:
+        return "PySide6.QtWidgets does not expose QApplication."
+
+    app = None
+    created_app = False
+    try:
+        app = qapplication.instance()
+        if app is None:
+            app = qapplication([])
+            created_app = True
+        app.processEvents()
+        if verbose:
+            print("[CHECK][SMOKE] PySide6.QtWidgets QApplication -> ok")
+    except Exception as exc:  # pragma: no cover - depends on runtime environment
+        return f"PySide6.QtWidgets QApplication offscreen smoke failed: {exc}"
+    finally:
+        if created_app and app is not None:
+            app.quit()
+        if previous_platform is None:
+            os.environ.pop("QT_QPA_PLATFORM", None)
+        else:
+            os.environ["QT_QPA_PLATFORM"] = previous_platform
+
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC_PATH, help="Path to runtime YAML spec")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument(
+        "--skip-qtwidgets-smoke",
+        action="store_true",
+        help="Skip QtWidgets QApplication offscreen smoke check",
+    )
     args = parser.parse_args()
 
     failures: list[str] = []
@@ -218,6 +261,12 @@ def main() -> int:
                 print(
                     f"[INFO][MOD] {module_name}: origin={spec_obj.origin} loader={type(spec_obj.loader).__name__ if spec_obj.loader else 'None'}"
                 )
+
+    if not args.skip_qtwidgets_smoke:
+        smoke_failure = _run_qtwidgets_smoke(verbose=args.verbose)
+        if smoke_failure:
+            print("[CHECK][SMOKE] PySide6.QtWidgets QApplication -> failed")
+            failures.append(smoke_failure)
 
     if failures:
         print("\n[FAIL] PySide6 runtime module validation failed.")
