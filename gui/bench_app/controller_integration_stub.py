@@ -90,9 +90,9 @@ class POCIntegration(QObject, OverlayMixin):
         super().__init__()
         self._controller = controller
         self._gui = gui
-        self._enable_logging = enable_logging
+        self.enable_logging = enable_logging
         self._frame_index = 0
-        self.command_log: list[tuple[int, str]] = []
+        self.command_log: list[str] = []
         self._timer = QTimer(self)
         self._timer.setInterval(tick_ms)
         self._timer.timeout.connect(self._tick)
@@ -110,14 +110,14 @@ class POCIntegration(QObject, OverlayMixin):
         self._frame_index += 1
         frame = self._controller._next_frame()
         if frame is None:
-            self._set_status(f"Frame {self._frame_index}: waiting for frame...")
+            self._set_status(f"[{self._frame_index}] waiting for frame")
             return
 
         detected = self._simple_detection(frame)
         self.show_frame_overlay(frame, detected)
 
         if not detected:
-            self._set_status(f"Frame {self._frame_index}: no detection")
+            self._set_status(f"[{self._frame_index}] detection=none")
             return
 
         # For the POC we use a simple textual command; replace with your real
@@ -131,12 +131,14 @@ class POCIntegration(QObject, OverlayMixin):
         elif hasattr(self._controller, "_send_protocol_command"):
             self._controller._send_protocol_command("SCHED", (0, 100))
 
-        servo_feedback = self._mock_servo_feedback()
-        self.command_log.append((self._frame_index, command))
-        self._set_status(f"Frame {self._frame_index}: sent {command} | {servo_feedback}")
+        # Replace this with real servo/MCU acknowledgement telemetry once available.
+        servo_feedback = self._mock_servo_feedback(command)
+        log_entry = f"[{self._frame_index}] detection=hit cmd={command} feedback={servo_feedback}"
+        self.command_log.append(log_entry)
+        self._set_status(log_entry)
 
-        if self._enable_logging:
-            print(f"[POC] frame={self._frame_index} detected=1 cmd={command} {servo_feedback}")
+        if self.enable_logging:
+            print(f"[POC] {log_entry}")
 
     def _simple_detection(self, frame: object) -> bool:  # noqa: ARG002 - placeholder for future CV
         """POC detection stub: random trigger at ~20% per frame.
@@ -153,10 +155,11 @@ class POCIntegration(QObject, OverlayMixin):
             self._gui.last_command_label.setText(f"Last command: {text}")
             return
 
-    def _mock_servo_feedback(self) -> str:
+    def _mock_servo_feedback(self, cmd: str) -> str:
+        # `cmd` is currently only used for tagging; wire into real transport IDs later.
         position_deg = random.randint(10, 170)
         duty_pct = random.randint(35, 85)
-        return f"servo=OK pos={position_deg}deg duty={duty_pct}%"
+        return f"servo=OK cmd={cmd} pos={position_deg}deg duty={duty_pct}%"
 
 
 if __name__ == "__main__":
