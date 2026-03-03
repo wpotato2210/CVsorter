@@ -285,3 +285,28 @@ def test_gui_selectors_are_initialized_from_runtime_config(qapp: QApplication, r
     assert controller.window.com_selector.currentText() == runtime_config.transport.serial_port
     assert controller.window.baud_selector.currentText() == str(runtime_config.transport.serial_baud)
     assert controller.window.log_level_selector.currentText() == runtime_config.bench_gui.default_log_level
+
+
+def test_manual_fire_is_blocked_while_auto_cycle_active(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller.runtime_state.controller_state = ControllerState.REPLAY_RUNNING
+    controller.runtime_state.operator_mode = OperatorMode.AUTO
+
+    controller.on_fire_test_clicked()
+
+    assert "AUTO cycle active" in controller.window.last_command_label.text()
+
+
+def test_transport_reconfiguration_is_blocked_while_auto_cycle_active(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller.runtime_state.controller_state = ControllerState.LIVE_RUNNING
+    controller.runtime_state.operator_mode = OperatorMode.AUTO
+    original_kind = controller._selected_transport_kind
+
+    controller.on_mcu_selector_changed("serial")
+    controller.on_serial_connect_clicked()
+
+    assert controller._selected_transport_kind == original_kind
+    assert "blocked: AUTO cycle active" in controller.window.serial_status_label.text()

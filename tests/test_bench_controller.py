@@ -11,7 +11,7 @@ try:
 except ImportError:  # pragma: no cover - environment dependent
     pytest.skip("PySide6 with system GL dependencies is required for GUI tests", allow_module_level=True)
 
-from coloursorter.bench import AckCode, BenchFrame, BenchLogEntry, FaultState
+from coloursorter.bench import AckCode, BenchFrame, BenchLogEntry, BenchMode, FaultState, FrameSourceError
 from coloursorter.bench.types import TransportResponse
 from coloursorter.scheduler import ScheduledCommand
 from coloursorter.config import RuntimeConfig
@@ -458,3 +458,33 @@ def test_manual_fire_rejects_non_manual_test_reason(qapp: QApplication, runtime_
 
     assert ack is None
     assert "manual-test path only" in controller.window.last_command_label.text()
+
+
+def test_live_simulated_feed_requires_explicit_ack(qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    class _FailingLiveSource:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def open(self) -> None:
+            raise FrameSourceError("camera unavailable")
+
+    monkeypatch.setattr("gui.bench_app.controller.LiveFrameSource", _FailingLiveSource)
+    monkeypatch.setattr(controller, "_operator_acknowledges_simulated_feed", lambda _detail: False)
+
+    activated = controller._activate_frame_source(BenchMode.LIVE)
+
+    assert activated is False
+    assert controller._use_simulated_live_feed is False
+
+
+def test_degraded_mode_forces_safe_and_updates_banner(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller.runtime_state.operator_mode = OperatorMode.AUTO
+
+    controller._set_degraded_mode(True, "Synthetic camera feed in LIVE mode")
+
+    assert controller._degraded_mode_active is True
+    assert controller.runtime_state.operator_mode == OperatorMode.SAFE
+    assert "DEGRADED" in controller.window.statusBar().currentMessage()
