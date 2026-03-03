@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,6 +59,7 @@ class PipelineRunner:
         self,
         frame: FrameMetadata,
         detections: list[ObjectDetection],
+        thresholds: Mapping[str, float] | None = None,
     ) -> PipelineResult:
         decisions: list[DecisionPayload] = []
         commands: list[ScheduledCommand] = []
@@ -89,7 +91,7 @@ class PipelineRunner:
                     y_mm=calibration.px_to_mm(detection.centroid_y_px),
                 )
                 trigger_mm = self._geometry.camera_to_reject_mm + centroid_mm.y_mm
-                reason = reason or rejection_reason_for_object(detection)
+                reason = reason or rejection_reason_for_object(detection, thresholds=thresholds)
 
             decision = DecisionPayload(
                 frame_id=frame.frame_id,
