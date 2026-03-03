@@ -1,0 +1,6 @@
+window_s,commands,ack,nack6_queue_full,nack_other,ack_ratio_percent
+0-2,72,69,3,0,95.83
+2-4,73,69,4,0,94.52
+4-6,75,71,4,0,94.67
+6-8,72,68,4,0,94.44
+8-10,73,67,6,0,91.78

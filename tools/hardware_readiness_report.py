@@ -21,6 +21,7 @@ CRITERIA: tuple[GateCriterion, ...] = (
         required_artifacts=(
             Path("docs/artifacts/hardware_readiness/protocol/bench_protocol_trace.log"),
             Path("docs/artifacts/hardware_readiness/protocol/hardware_protocol_trace.log"),
+            Path("docs/artifacts/hardware_readiness/protocol/esp32_protocol_rtt_distribution.csv"),
             Path("docs/artifacts/hardware_readiness/protocol/protocol_interop_summary.md"),
         ),
     ),
@@ -29,6 +30,7 @@ CRITERIA: tuple[GateCriterion, ...] = (
         required_artifacts=(
             Path("docs/artifacts/hardware_readiness/queue/bench_queue_stress.log"),
             Path("docs/artifacts/hardware_readiness/queue/hardware_queue_stress.log"),
+            Path("docs/artifacts/hardware_readiness/queue/esp32_ack_nack_stability_under_load.csv"),
             Path("docs/artifacts/hardware_readiness/queue/queue_behavior_summary.md"),
         ),
     ),
@@ -37,6 +39,7 @@ CRITERIA: tuple[GateCriterion, ...] = (
         required_artifacts=(
             Path("docs/artifacts/hardware_readiness/safety/bench_fault_injection.log"),
             Path("docs/artifacts/hardware_readiness/safety/hardware_fault_injection.log"),
+            Path("docs/artifacts/hardware_readiness/safety/esp32_safe_watchdog_nack_fault_matrix.md"),
             Path("docs/artifacts/hardware_readiness/safety/safe_watchdog_recovery_summary.md"),
         ),
     ),
@@ -45,6 +48,7 @@ CRITERIA: tuple[GateCriterion, ...] = (
         required_artifacts=(
             Path("docs/artifacts/hardware_readiness/timing/bench_timing_budget.csv"),
             Path("docs/artifacts/hardware_readiness/timing/hardware_timing_budget.csv"),
+            Path("docs/artifacts/hardware_readiness/timing/esp32_scheduler_timing_envelope.csv"),
             Path("docs/artifacts/hardware_readiness/timing/timing_budget_summary.md"),
         ),
     ),
