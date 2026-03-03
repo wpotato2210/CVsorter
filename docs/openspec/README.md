@@ -17,11 +17,11 @@ This directory consolidates OpenSpec v3 artifacts that were previously stored ac
 | `v3/contracts/frame_schema.json` | `tests/test_preprocess.py`, `tests/test_integration.py` | Frame payload schema constraints for preprocessing and end-to-end checks. |
 | `v3/contracts/mcu_response_schema.json` | `tests/test_serial_interface.py`, `tests/test_integration.py` | MCU response validation targets serial and integration coverage. |
 | `v3/contracts/sched_schema.json` | `tests/test_scheduler.py`, `tests/test_integration.py` | Scheduler message/state schema aligns with scheduler and integration tests. |
-| `v3/data/manifest.json` | `tests/test_integration.py`, `README.md` | Top-level artifact index consumed during integration and documentation context. |
-| `v3/configs/default_config.yaml` | `src/constants.py`, `tests/test_integration.py` | Runtime defaults and integration test baselines. |
+| `v3/data/manifest.json` | `src/coloursorter/ingest/adapter.py`, `tests/test_integration.py` | Top-level artifact index and ingest-facing artifact mapping context. |
+| `v3/configs/default_config.yaml` | `src/coloursorter/config/runtime.py`, `tests/test_openspec_artifacts.py` | Canonical runtime config keys for MCU selector + serial defaults and parity coverage. |
 | `v3/configs/calibration.json` | `tests/test_camera.py`, `tests/test_integration.py` | Camera calibration parameters used in camera/integration validation. |
 | `v3/configs/lane_geometry.yaml` | `tests/test_preprocess.py`, `tests/test_integration.py` | Lane geometry assumptions used by preprocessing and integration checks. |
-| `v3/gui/ui_main_layout.json` | `tests/test_integration.py`, `README.md` | GUI layout contract referenced in integration expectations and project docs. |
+| `v3/gui/ui_main_layout.json` | `gui/bench_app/load_ui_main_layout.py`, `tests/test_openspec_artifacts.py` | GUI contract includes selectors/controls for MCU + serial + manual servo + logging, with parity guards. |
 
 ## Provenance (for v4 migration traceability)
 

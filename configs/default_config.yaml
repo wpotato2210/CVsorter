@@ -7,7 +7,9 @@ defect_thresholds:
   snapped_score: 0.6
 motion_mode: FOLLOW_BELT
 homing_mode: SKIP_HOME
-bench_transport: mock
-serial_port: /dev/ttyACM0
-serial_baud: 115200
-serial_timeout_s: 0.1
+transport:
+  kind: mock
+  serial:
+    port: /dev/ttyACM0
+    baud: 115200
+    timeout_s: 0.1
