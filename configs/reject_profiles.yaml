@@ -1,0 +1,12 @@
+selected_profile: standard_reject
+profiles:
+  - name: standard_reject
+    thresholds:
+      broken_snapped: 60.0
+      immature_thin_small: 55.0
+      rot: 35.0
+      mould: 30.0
+      curliness_degrees: 45.0
+      length: 50.0
+      visual_defects_spots_stripes: 40.0
+      over_mature_beginning_seed_fill: 65.0

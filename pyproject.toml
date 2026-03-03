@@ -34,6 +34,7 @@ dev = [
 coloursorter-bench-gui = "gui.bench_app.app:main"
 coloursorter-bench-cli = "coloursorter.bench.scenario_runner:run"
 coloursorter-live-runtime = "coloursorter.runtime.live_runner:main"
+coloursorter-reject-profiles-gui = "gui.bench_app.reject_profile_manager:main"
 
 [tool.setuptools.packages.find]
 where = ["src", "."]
