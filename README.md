@@ -99,3 +99,29 @@ Artifacts generated per run include:
 - Inspect confidence distribution in `events.jsonl` before adjusting thresholds.
 - Tune one variable at a time: threshold, provider mapping, calibration mode.
 - For retraining preparation, use deterministic augmentation in `coloursorter.train.augment_dataset(...)` and record train artifact metadata with `coloursorter.train.run_baseline_training(...)`.
+
+## Development Setup
+
+1. Create and activate a virtual environment.
+
+   ```bash
+   python3.12 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+2. Install the project in editable mode.
+
+   ```bash
+   python -m pip install --upgrade pip
+   python -m pip install -e .
+   ```
+
+3. Run the installed console entry point.
+
+   ```bash
+   coloursorter-bench-gui --config configs/bench_runtime.yaml
+   ```
+
+4. Do **not** run package modules directly (for example, `python gui/bench_app/app.py`).
+
+Direct module execution can inject repository paths into `sys.path`, which may make invalid imports appear to work locally. Running via the installed entry point validates package import paths exactly as they will run after `pip install -e .`.

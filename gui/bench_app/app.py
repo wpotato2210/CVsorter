@@ -5,11 +5,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-if __package__ in {None, ""}:
-    project_root = Path(__file__).resolve().parents[2]
-    sys.path.insert(0, str(project_root / "src"))
-    sys.path.insert(0, str(project_root / "gui"))
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem
@@ -17,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem
 from coloursorter.bench import AckCode, BenchLogEntry, FaultState
 from coloursorter.config import RuntimeConfig
 
-from bench_app.load_ui_main_layout import load_ui_main_layout
+from .load_ui_main_layout import load_ui_main_layout
 
 
 @dataclass(frozen=True)
@@ -73,7 +68,7 @@ class BenchMainWindow(QMainWindow):
 
 
 def main(argv: list[str] | None = None) -> int:
-    from bench_app.controller import BenchAppController
+    from .controller import BenchAppController
 
     parser = argparse.ArgumentParser(description="ColourSorter bench app")
     parser.add_argument(
