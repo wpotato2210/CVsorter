@@ -1,0 +1,4 @@
+# Pinned firmware toolchain versions
+cmake=3.27.7
+arm-none-eabi-gcc=13.2.0
+newlib=4.3.0
