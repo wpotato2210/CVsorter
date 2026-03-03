@@ -1,24 +1,29 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "frame_id": {
-      "type": "integer"
+    "msg_id": {
+      "type": "string",
+      "minLength": 1
     },
-    "timestamp": {
-      "type": "number"
+    "command": {
+      "type": "string"
     },
-    "image_shape": {
+    "payload": {
       "type": "array",
       "items": {
-        "type": "integer"
-      },
-      "minItems": 3,
-      "maxItems": 3
+        "type": "string"
+      }
+    },
+    "crc": {
+      "type": "string",
+      "pattern": "^[A-F0-9]{8}$"
     }
   },
   "required": [
-    "frame_id",
-    "timestamp",
-    "image_shape"
+    "msg_id",
+    "command",
+    "payload",
+    "crc"
   ]
 }

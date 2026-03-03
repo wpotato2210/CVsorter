@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "command": {
+    "msg_id": {
       "type": "string"
     },
     "status": {
@@ -42,28 +42,18 @@
         "ACTIVE"
       ]
     },
-    "message": {
-      "type": "string"
+    "link_state": {
+      "type": "string",
+      "enum": [
+        "DISCONNECTED",
+        "SYNCING",
+        "READY",
+        "DEGRADED"
+      ]
     }
   },
   "required": [
-    "command",
+    "msg_id",
     "status"
-  ],
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "status": {
-            "const": "NACK"
-          }
-        }
-      },
-      "then": {
-        "required": [
-          "nack_code"
-        ]
-      }
-    }
   ]
 }

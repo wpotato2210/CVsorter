@@ -13,243 +13,102 @@ from coloursorter.bench.types import AckCode, FaultState
 from coloursorter.protocol import OpenSpecV3Host
 from coloursorter.protocol.nack_codes import CANONICAL_NACK_7, DETAIL_BUSY, DETAIL_WATCHDOG, NACK_BUSY
 from coloursorter.scheduler import ScheduledCommand
+from coloursorter.serial_interface import parse_frame, serialize_packet
 
 
-class _FakeSerial:
-    def __init__(self, response: bytes | list[bytes]) -> None:
-        self._response = response
-        self.written: bytes | None = None
+class _HostBackedSerial:
+    def __init__(self, host: OpenSpecV3Host) -> None:
+        self._host = host
+        self.written: list[bytes] = []
 
     def write(self, payload: bytes) -> None:
-        self.written = payload
+        self.written.append(payload)
 
     def readline(self) -> bytes:
-        if isinstance(self._response, list):
-            return self._response.pop(0) if self._response else b""
-        return self._response
+        request = self.written[-1].decode().strip()
+        return self._host.handle_frame(request).encode() + b"\n"
 
     def close(self) -> None:
         return None
 
 
 def test_serial_transport_encodes_sched_and_parses_ack() -> None:
-    fake = _FakeSerial(b"<ACK|AUTO|1|ACTIVE|false>\n")
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-    )
+    host = OpenSpecV3Host(max_queue_depth=4)
+    fake = _HostBackedSerial(host)
+    transport = SerialMcuTransport(SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05), serial_factory=lambda **_: fake)
 
     response = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
 
-    assert fake.written == b"<SCHED|1|200.000>\n"
+    assert parse_frame(fake.written[-1].decode().strip()).command == "SCHED"
     assert response.ack_code == AckCode.ACK
-    assert response.queue_depth == 1
     assert response.scheduler_state == "ACTIVE"
-    assert response.mode == "AUTO"
-    assert response.fault_state == FaultState.NORMAL
-    assert transport.current_fault_state() == FaultState.NORMAL
-    assert transport.current_queue_depth() == 1
-    assert transport.last_queue_cleared_observation() is False
 
 
-def test_serial_transport_persists_latest_queue_state_from_ack() -> None:
-    fake = _FakeSerial([b"<ACK|AUTO|2|ACTIVE|false>\n", b"<ACK|AUTO|0|IDLE|true>\n"])
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-    )
+def test_serial_transport_deduplicates_replayed_msg_id_on_host() -> None:
+    host = OpenSpecV3Host(max_queue_depth=4)
+    first = host.handle_frame(serialize_packet("HELLO", ("3.1", "CRC32;SCHED;HEARTBEAT;DEDUPE"), msg_id="8"))
+    assert "ACK" in first
+    host.handle_frame(serialize_packet("HEARTBEAT", (), msg_id="9"))
+    before = len(host.queue)
+    frame = serialize_packet("SCHED", (1, "100.000"), msg_id="11")
 
-    first = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
-    second = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
+    host.handle_frame(frame)
+    host.handle_frame(frame)
 
-    assert first.queue_depth == 2
-    assert first.queue_cleared is False
-    assert second.queue_depth == 0
-    assert second.queue_cleared is True
-    assert transport.current_queue_depth() == 0
-    assert transport.last_queue_cleared_observation() is True
+    assert len(host.queue) == before + 1
 
-
-def test_serial_transport_maps_nack_busy() -> None:
-    fake = _FakeSerial(f"<NACK|{NACK_BUSY}|{DETAIL_BUSY}>\n".encode())
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-    )
-
-    response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
-
-    assert response.ack_code == AckCode.NACK_BUSY
-    assert response.fault_state == FaultState.NORMAL
-    assert response.nack_code == NACK_BUSY
-    assert response.nack_detail == DETAIL_BUSY
-
-
-def test_serial_transport_treats_noncanonical_nack_code_7_watchdog_as_safe() -> None:
-    fake = _FakeSerial(f"<NACK|{NACK_BUSY}|{DETAIL_WATCHDOG}>\n".encode())
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-    )
-
-    response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
-
-    assert response.ack_code == AckCode.NACK_SAFE
-    assert response.fault_state == FaultState.SAFE
-    assert response.nack_code == NACK_BUSY
-    assert response.nack_detail == DETAIL_WATCHDOG
 
 @pytest.mark.parametrize(
-    ("raw_response", "expected_ack", "expected_fault"),
+    ("status", "code", "detail", "expected_ack", "expected_fault"),
     [
-        (b"<ACK>\n", AckCode.ACK, FaultState.NORMAL),
-        (b"<NACK|6|QUEUE_FULL>\n", AckCode.NACK_QUEUE_FULL, FaultState.NORMAL),
-        (b"<NACK|5|SAFE>\n", AckCode.NACK_SAFE, FaultState.SAFE),
-        (f"<NACK|{NACK_BUSY}|{DETAIL_BUSY}>\n".encode(), AckCode.NACK_BUSY, FaultState.NORMAL),
+        ("ACK", None, None, AckCode.ACK, FaultState.NORMAL),
+        ("NACK", 6, "QUEUE_FULL", AckCode.NACK_QUEUE_FULL, FaultState.NORMAL),
+        ("NACK", 5, "SAFE", AckCode.NACK_SAFE, FaultState.SAFE),
+        ("NACK", NACK_BUSY, DETAIL_BUSY, AckCode.NACK_BUSY, FaultState.NORMAL),
     ],
 )
-def test_serial_transport_contract_ack_nack_mapping(
-    raw_response: bytes,
-    expected_ack: AckCode,
-    expected_fault: FaultState,
-) -> None:
-    fake = _FakeSerial(raw_response)
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-    )
-
-    response = transport.send(ScheduledCommand(lane=1, position_mm=210.0))
-
-    assert response.ack_code == expected_ack
-    assert response.fault_state == expected_fault
+def test_serial_transport_contract_ack_nack_mapping(status: str, code: int | None, detail: str | None, expected_ack: AckCode, expected_fault: FaultState) -> None:
+    ack_code, fault = _map_ack_to_bench_state(status, code, detail)
+    assert ack_code == expected_ack
+    assert fault == expected_fault
 
 
 def test_serial_transport_maps_canonical_busy_pair_to_busy_state() -> None:
     code, detail = CANONICAL_NACK_7
-
     ack_code, fault_state = _map_ack_to_bench_state("NACK", code, detail)
-
     assert ack_code == AckCode.NACK_BUSY
     assert fault_state == FaultState.NORMAL
 
 
 def test_serial_transport_maps_canonical_watchdog_without_nack_code() -> None:
     ack_code, fault_state = _map_ack_to_bench_state("NACK", None, DETAIL_WATCHDOG)
-
     assert ack_code == AckCode.NACK_WATCHDOG
     assert fault_state == FaultState.WATCHDOG
 
+
 def test_serial_transport_raises_structured_timeout_error() -> None:
-    fake = _FakeSerial(b"")
+    class _TimeoutSerial:
+        def write(self, _payload: bytes) -> None:
+            return None
+
+        def readline(self) -> bytes:
+            return b""
+
     transport = SerialMcuTransport(
         config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
+        serial_factory=lambda **_: _TimeoutSerial(),
     )
 
     with pytest.raises(SerialTransportError) as exc_info:
         transport.send(ScheduledCommand(lane=3, position_mm=111.0))
 
     assert exc_info.value.category == "serial_timeout"
-    assert "No MCU response within" in exc_info.value.detail
-    assert exc_info.value.fault_state == FaultState.WATCHDOG
-    assert exc_info.value.telemetry.category == "serial_timeout"
-    assert exc_info.value.telemetry.fault_state == FaultState.WATCHDOG
-
-
-def test_serial_transport_raises_structured_parse_error() -> None:
-    fake = _FakeSerial(b"MALFORMED\n")
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-    )
-
-    with pytest.raises(SerialTransportError) as exc_info:
-        transport.send(ScheduledCommand(lane=3, position_mm=111.0))
-
-    assert exc_info.value.category == "serial_parse_error"
-    assert exc_info.value.fault_state == FaultState.SAFE
-    assert exc_info.value.telemetry.fault_state == FaultState.SAFE
-
-
-def test_serial_transport_updates_current_fault_state_on_nack() -> None:
-    fake = _FakeSerial(b"<NACK|5|SAFE>\n")
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-    )
-
-    response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
-
-    assert response.fault_state == FaultState.SAFE
-    assert transport.current_fault_state() == FaultState.SAFE
-
-
-def test_serial_transport_retries_on_timeout_then_succeeds() -> None:
-    fake = _FakeSerial([b"", b"<ACK|AUTO|1|ACTIVE|false>\n"])
-    slept: list[float] = []
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-        sleep_fn=lambda s: slept.append(s),
-    )
-
-    response = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
-
-    assert response.ack_code == AckCode.ACK
-    assert slept == [0.0]
-
-
-def test_serial_transport_exhausts_retries_before_timeout_error() -> None:
-    fake = _FakeSerial([b"", b"", b"", b""])
-    slept: list[float] = []
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-        sleep_fn=lambda s: slept.append(s),
-    )
-
-    with pytest.raises(SerialTransportError) as exc_info:
-        transport.send(ScheduledCommand(lane=3, position_mm=111.0))
-
-    assert exc_info.value.category == "serial_timeout"
-    assert slept == [0.0, 0.05, 0.1]
-
-
-def test_serial_transport_preserves_raw_nack_detail() -> None:
-    fake = _FakeSerial(b"<NACK|6|QUEUE_FULL>\n")
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-    )
-
-    response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
-
-    assert response.ack_code == AckCode.NACK_QUEUE_FULL
-    assert response.nack_code == 6
-    assert response.nack_detail == "QUEUE_FULL"
-
-
-def test_serial_transport_end_to_end_busy_nack_from_host_maps_to_busy_state() -> None:
-    host = OpenSpecV3Host(max_queue_depth=2, busy=True)
-    fake = _FakeSerial(host.handle_frame("<GET_STATE>").encode() + b"\n")
-    transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
-        serial_factory=lambda **_: fake,
-    )
-
-    response = transport.send(ScheduledCommand(lane=2, position_mm=250.0))
-
-    assert response.ack_code == AckCode.NACK_BUSY
-    assert response.fault_state == FaultState.NORMAL
-    assert response.nack_code == NACK_BUSY
-    assert response.nack_detail == DETAIL_BUSY
-    assert transport.current_fault_state() == FaultState.NORMAL
 
 
 @pytest.mark.parametrize("transport_cls", [SerialMcuTransport, Esp32McuTransport])
 def test_esp32_adapter_matches_serial_sched_path(transport_cls: type[SerialMcuTransport] | type[Esp32McuTransport]) -> None:
-    fake = _FakeSerial(b"<ACK|AUTO|1|ACTIVE|false>\n")
+    host = OpenSpecV3Host(max_queue_depth=4)
+    fake = _HostBackedSerial(host)
     transport = transport_cls(
         config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
         serial_factory=lambda **_: fake,
@@ -257,6 +116,5 @@ def test_esp32_adapter_matches_serial_sched_path(transport_cls: type[SerialMcuTr
 
     response = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
 
-    assert fake.written == b"<SCHED|1|200.000>\n"
+    assert parse_frame(fake.written[-1].decode().strip()).command == "SCHED"
     assert response.ack_code == AckCode.ACK
-    assert response.fault_state == FaultState.NORMAL

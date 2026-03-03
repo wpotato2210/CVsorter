@@ -7,7 +7,13 @@ CMD_SET_MODE: Final[str] = "SET_MODE"
 CMD_SCHED: Final[str] = "SCHED"
 CMD_GET_STATE: Final[str] = "GET_STATE"
 CMD_RESET_QUEUE: Final[str] = "RESET_QUEUE"
-SUPPORTED_COMMANDS: Final[frozenset[str]] = frozenset({CMD_SET_MODE, CMD_SCHED, CMD_GET_STATE, CMD_RESET_QUEUE})
+CMD_HELLO: Final[str] = "HELLO"
+CMD_HEARTBEAT: Final[str] = "HEARTBEAT"
+SUPPORTED_PROTOCOL_VERSION: Final[str] = "3.1"
+SUPPORTED_CAPABILITIES: Final[frozenset[str]] = frozenset({"SCHED", "HEARTBEAT", "DEDUPE", "CRC32"})
+SUPPORTED_COMMANDS: Final[frozenset[str]] = frozenset(
+    {CMD_SET_MODE, CMD_SCHED, CMD_GET_STATE, CMD_RESET_QUEUE, CMD_HELLO, CMD_HEARTBEAT}
+)
 
 # ACK/NACK tokens
 ACK_TOKEN: Final[str] = "ACK"
@@ -33,6 +39,12 @@ SCHEDULER_IDLE: Final[str] = "IDLE"
 SCHEDULER_ACTIVE: Final[str] = "ACTIVE"
 ALLOWED_SCHEDULER_STATES: Final[frozenset[str]] = frozenset({SCHEDULER_IDLE, SCHEDULER_ACTIVE})
 
+LINK_DISCONNECTED: Final[str] = "DISCONNECTED"
+LINK_SYNCING: Final[str] = "SYNCING"
+LINK_READY: Final[str] = "READY"
+LINK_DEGRADED: Final[str] = "DEGRADED"
+ALLOWED_LINK_STATES: Final[frozenset[str]] = frozenset({LINK_DISCONNECTED, LINK_SYNCING, LINK_READY, LINK_DEGRADED})
+
 # OpenSpec v3 canonical NACK details.
 NACK_UNKNOWN_COMMAND: Final[int] = 1
 NACK_ARG_COUNT_MISMATCH: Final[int] = 2
@@ -44,4 +56,3 @@ NACK_BUSY: Final[int] = 7
 NACK_MALFORMED_FRAME: Final[int] = 8
 NACK_CODE_MIN: Final[int] = NACK_UNKNOWN_COMMAND
 NACK_CODE_MAX: Final[int] = NACK_MALFORMED_FRAME
-

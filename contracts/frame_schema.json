@@ -1,45 +1,29 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "frame_id": {
-      "type": "integer"
+    "msg_id": {
+      "type": "string",
+      "minLength": 1
     },
-    "timestamp": {
-      "type": "number"
+    "command": {
+      "type": "string"
     },
-    "image_shape": {
+    "payload": {
       "type": "array",
       "items": {
-        "type": "integer"
-      },
-      "minItems": 3,
-      "maxItems": 3
+        "type": "string"
+      }
     },
-    "lane_index": {
-      "type": "integer"
-    },
-    "centroid_mm": {
-      "type": "object",
-      "properties": {
-        "x_mm": {
-          "type": "number"
-        },
-        "y_mm": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "x_mm",
-        "y_mm"
-      ]
-    },
-    "trigger_mm": {
-      "type": "number"
+    "crc": {
+      "type": "string",
+      "pattern": "^[A-F0-9]{8}$"
     }
   },
   "required": [
-    "frame_id",
-    "timestamp",
-    "image_shape"
+    "msg_id",
+    "command",
+    "payload",
+    "crc"
   ]
 }
