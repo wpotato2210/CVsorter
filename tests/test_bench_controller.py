@@ -44,10 +44,10 @@ class _FakeRgbFrame:
 class _RecordingRunner:
     def __init__(self, logs: tuple[BenchLogEntry, ...]) -> None:
         self.logs = logs
-        self.calls: list[dict[str, float | int]] = []
+        self.calls: list[dict[str, object]] = []
 
-    def run_cycle(self, **kwargs):
-        self.calls.append(kwargs)
+    def process_ingest_payload(self, payload: dict[str, object]):
+        self.calls.append(payload)
         return self.logs
 
 
@@ -156,7 +156,7 @@ def test_cycle_processing_is_deterministic_with_mocked_frame_source_and_clock(
 
     assert len(recording_runner.calls) == 1
     assert recording_runner.calls[0]["frame_id"] == 7
-    assert recording_runner.calls[0]["timestamp_s"] == pytest.approx(0.250)
+    assert recording_runner.calls[0]["timestamp"] == pytest.approx(0.250)
     assert recording_runner.calls[0]["previous_timestamp_s"] == pytest.approx(0.200)
     assert observed_logs == [expected_log]
     assert controller.runtime_state.previous_timestamp_s == pytest.approx(0.250)
