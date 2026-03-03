@@ -77,6 +77,7 @@ def test_bench_logs_include_required_telemetry_fields() -> None:
     assert log.queue_depth >= 0
     assert log.scheduler_state
     assert log.mode
+    assert log.command_source == "auto_pipeline"
 
 
 def test_trigger_timestamp_uses_distance_and_stage_timing_projection() -> None:
@@ -294,3 +295,21 @@ def test_watchdog_summary_counts_ack_code_not_nack_code_aliases() -> None:
 
     summary = BenchRunner.summarize(watchdog_logs)
     assert summary.watchdog_transitions == 1
+
+
+def test_duplicate_frame_object_command_is_not_resent() -> None:
+    transport = MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5))
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=transport,
+        encoder=VirtualEncoder(EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0)),
+    )
+
+    detection = _reject_detection()
+    first = runner.run_cycle(1, 0.2, 720, 1056, [detection], 0.1)[0]
+    second = runner.run_cycle(1, 0.25, 720, 1056, [detection], 0.2)[0]
+
+    assert first.actuator_command_issued is True
+    assert first.command_source == "auto_pipeline"
+    assert second.actuator_command_issued is False
+    assert second.command_source == ""

@@ -85,6 +85,7 @@ class BenchLogEntry:
     confidence: float = 0.0
     actuator_command_issued: bool = False
     actuator_command_payload: str = ""
+    command_source: str = ""
     frame_snapshot_path: str = ""
     ground_truth_label: str = ""
     decision_reason: str = ""

@@ -427,8 +427,6 @@ class BenchAppController(QObject):
         self.frame_preview_requested.emit(frame_rgb.tobytes(), frame_rgb.shape[1], frame_rgb.shape[0])
 
         detections = self._detector.detect(frame.image_bgr)
-        if any(detection.infection_score >= self.trigger_threshold for detection in detections):
-            self._send_poc_fire_command(reason="auto_detect")
         try:
             logs = self.bench_runner.process_ingest_payload(
                 {
@@ -546,6 +544,13 @@ class BenchAppController(QObject):
         return parse_ack_tokens((parsed_response.command, *parsed_response.args))
 
     def _send_poc_fire_command(self, reason: str) -> AckResponse | None:
+        if reason != "manual_fire_test":
+            self._set_last_command_status("manual fire rejected: manual-test path only")
+            return None
+        if self.runtime_state.operator_mode != OperatorMode.MANUAL:
+            self._set_last_command_status("manual fire rejected: requires MANUAL mode")
+            return None
+
         lane = int(self.window.manual_lane_input.value())
         position_mm = float(self.window.manual_position_input.value())
         manual_cfg = self._runtime_config.bench_gui.manual_servo
@@ -570,6 +575,22 @@ class BenchAppController(QObject):
         self.runtime_state.scheduler_state = response.scheduler_state
         detail = "ACK" if ack.status == "ACK" else f"NACK({ack.nack_code})"
         self._set_last_command_status(f"<SCHED|{lane}|{position_mm:.1f}> ({reason}) -> {detail}")
+        self.log_entry_requested.emit(
+            BenchLogEntry(
+                frame_timestamp_s=self.runtime_state.previous_timestamp_s,
+                trigger_generation_s=self.runtime_state.previous_timestamp_s,
+                lane=lane,
+                decision="manual_fire_test",
+                rejection_reason=None,
+                protocol_round_trip_ms=response.round_trip_ms,
+                ack_code=ack.status,
+                queue_depth=response.queue_depth,
+                scheduler_state=response.scheduler_state,
+                mode=response.mode,
+                queue_cleared=response.queue_cleared,
+                command_source="manual_test",
+            )
+        )
         self._emit_runtime_state()
         return ack
 
