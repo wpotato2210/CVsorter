@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+import time
 from typing import Any
 
 from .adapter import IngestCycleInput, IngestPayloadAdapter
@@ -29,7 +30,7 @@ class IngestBoundary:
         self._drop_policy = drop_policy
 
     def submit(self, payload: dict[str, Any]) -> IngestEnqueueResult:
-        adapted = self._adapter.adapt(payload)
+        adapted = replace(self._adapter.adapt(payload), enqueued_monotonic_s=time.perf_counter())
         self._frame_policy.validate(adapted.frame.frame_id)
         result: QueuePushResult[IngestCycleInput] = self._queue.push(adapted, self._drop_policy)
         dropped_frame_id = result.dropped_item.frame.frame_id if result.dropped_item is not None else None

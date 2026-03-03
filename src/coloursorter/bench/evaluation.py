@@ -24,14 +24,37 @@ class BenchEvaluation:
 def evaluate_logs(logs: tuple[BenchLogEntry, ...], scenarios: tuple[BenchScenario, ...]) -> BenchEvaluation:
     bench_summary = BenchRunner.summarize(logs)
     results = tuple(scenario.evaluate(bench_summary) for scenario in scenarios)
+    round_trips = sorted(log.protocol_round_trip_ms for log in logs)
+    p50 = _percentile(round_trips, 0.50)
+    p95 = _percentile(round_trips, 0.95)
+    p99 = _percentile(round_trips, 0.99)
+    max_jitter = max((log.rtt_jitter_ms for log in logs), default=0.0)
     summary = {
         "avg_round_trip_ms": bench_summary.avg_round_trip_ms,
         "max_round_trip_ms": bench_summary.max_round_trip_ms,
+        "p50_round_trip_ms": p50,
+        "p95_round_trip_ms": p95,
+        "p99_round_trip_ms": p99,
+        "max_jitter_ms": max_jitter,
+        "jitter_warn_alarm": any(log.jitter_warn for log in logs),
+        "jitter_critical_alarm": any(log.jitter_critical for log in logs),
         "safe_transitions": bench_summary.safe_transitions,
         "watchdog_transitions": bench_summary.watchdog_transitions,
         "recovered_from_safe": bench_summary.recovered_from_safe,
     }
     return BenchEvaluation(scenarios=results, summary=summary)
+
+
+def _percentile(sorted_values: list[float], quantile: float) -> float:
+    if not sorted_values:
+        return 0.0
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    index = (len(sorted_values) - 1) * quantile
+    low = int(index)
+    high = min(low + 1, len(sorted_values) - 1)
+    weight = index - low
+    return sorted_values[low] * (1.0 - weight) + sorted_values[high] * weight
 
 
 def write_artifacts(
@@ -87,9 +110,20 @@ def write_artifacts(
                 "queue_depth": entry.queue_depth,
                 "ingest_latency_ms": entry.ingest_latency_ms,
                 "decision_latency_ms": entry.decision_latency_ms,
+                "detect_latency_ms": entry.detect_latency_ms,
                 "schedule_latency_ms": entry.schedule_latency_ms,
                 "transport_latency_ms": entry.transport_latency_ms,
                 "cycle_latency_ms": entry.cycle_latency_ms,
+                "queue_age_ms": entry.queue_age_ms,
+                "frame_staleness_ms": entry.frame_staleness_ms,
+                "total_budget_ms": entry.total_budget_ms,
+                "over_budget": entry.over_budget,
+                "fault_event": entry.fault_event,
+                "timebase_reference": entry.timebase_reference,
+                "trigger_reference_s": entry.trigger_reference_s,
+                "rtt_jitter_ms": entry.rtt_jitter_ms,
+                "jitter_warn": entry.jitter_warn,
+                "jitter_critical": entry.jitter_critical,
                 "frame_snapshot_path": entry.frame_snapshot_path,
                 "ground_truth_label": entry.ground_truth_label,
             }
@@ -127,9 +161,20 @@ def write_artifacts(
                 "protocol_round_trip_ms",
                 "ingest_latency_ms",
                 "decision_latency_ms",
+                "detect_latency_ms",
                 "schedule_latency_ms",
                 "transport_latency_ms",
                 "cycle_latency_ms",
+                "queue_age_ms",
+                "frame_staleness_ms",
+                "total_budget_ms",
+                "over_budget",
+                "fault_event",
+                "timebase_reference",
+                "trigger_reference_s",
+                "rtt_jitter_ms",
+                "jitter_warn",
+                "jitter_critical",
                 "ack_code",
                 "nack_code",
                 "nack_detail",
@@ -167,9 +212,20 @@ def write_artifacts(
                     f"{entry.protocol_round_trip_ms:.3f}",
                     f"{entry.ingest_latency_ms:.3f}",
                     f"{entry.decision_latency_ms:.3f}",
+                    f"{entry.detect_latency_ms:.3f}",
                     f"{entry.schedule_latency_ms:.3f}",
                     f"{entry.transport_latency_ms:.3f}",
                     f"{entry.cycle_latency_ms:.3f}",
+                    f"{entry.queue_age_ms:.3f}",
+                    f"{entry.frame_staleness_ms:.3f}",
+                    f"{entry.total_budget_ms:.3f}",
+                    str(entry.over_budget).lower(),
+                    entry.fault_event,
+                    entry.timebase_reference,
+                    f"{entry.trigger_reference_s:.6f}",
+                    f"{entry.rtt_jitter_ms:.3f}",
+                    str(entry.jitter_warn).lower(),
+                    str(entry.jitter_critical).lower(),
                     ack_code,
                     "" if entry.nack_code is None else entry.nack_code,
                     entry.nack_detail or "",

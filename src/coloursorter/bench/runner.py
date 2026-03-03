@@ -21,6 +21,21 @@ class BenchRunResult:
     summary: BenchSummary
 
 
+@dataclass(frozen=True)
+class BenchSafetyConfig:
+    ingest_budget_ms: float = 100.0
+    detect_budget_ms: float = 100.0
+    decide_budget_ms: float = 100.0
+    send_budget_ms: float = 100.0
+    total_budget_ms: float = 400.0
+    max_queue_age_ms: float = 20.0
+    max_frame_staleness_ms: float = 50.0
+    timebase_strategy: str = "encoder_epoch"
+    host_to_mcu_offset_ms: float = 0.0
+    jitter_warn_ms: float = 5.0
+    jitter_critical_ms: float = 10.0
+
+
 class BenchRunner:
     def __init__(
         self,
@@ -29,6 +44,7 @@ class BenchRunner:
         encoder: VirtualEncoder,
         calibrator: ActuatorTimingCalibrator | None = None,
         ingest_boundary: IngestBoundary | None = None,
+        safety: BenchSafetyConfig | None = None,
     ) -> None:
         self._pipeline = pipeline
         self._transport = transport
@@ -41,6 +57,8 @@ class BenchRunner:
             capacity=1,
             drop_policy=DeterministicDropPolicy.DROP_OLDEST,
         )
+        self._safety = safety or BenchSafetyConfig()
+        self._last_round_trip_ms: float | None = None
 
     def process_ingest_payload(self, payload: dict[str, object]) -> tuple[BenchLogEntry, ...]:
         self._ingest_boundary.submit(payload)
@@ -58,6 +76,9 @@ class BenchRunner:
             test_batch_id=cycle_input.test_batch_id,
             frame_snapshot_path=cycle_input.frame_snapshot_path,
             ground_truth_by_object_id=cycle_input.ground_truth_by_object_id,
+            enqueued_monotonic_s=cycle_input.enqueued_monotonic_s,
+            captured_monotonic_s=cycle_input.captured_monotonic_s,
+            detect_latency_ms=cycle_input.detect_latency_ms,
         )
 
     def run_cycle(
@@ -72,6 +93,9 @@ class BenchRunner:
         test_batch_id: str = "default-batch",
         frame_snapshot_path: str = "",
         ground_truth_by_object_id: dict[str, str] | None = None,
+        enqueued_monotonic_s: float = 0.0,
+        captured_monotonic_s: float = 0.0,
+        detect_latency_ms: float = 0.0,
     ) -> tuple[BenchLogEntry, ...]:
         cycle_started = time.perf_counter()
         ingest_started = cycle_started
@@ -85,6 +109,9 @@ class BenchRunner:
         trigger_generation_s = self._encoder.resolve_trigger_generation_timestamp(previous_timestamp_s)
         ingest_latency_ms = (time.perf_counter() - ingest_started) * 1000.0
 
+        queue_age_ms = max(0.0, (cycle_started - enqueued_monotonic_s) * 1000.0) if enqueued_monotonic_s > 0.0 else 0.0
+        frame_staleness_ms = max(0.0, (cycle_started - captured_monotonic_s) * 1000.0) if captured_monotonic_s > 0.0 else 0.0
+
         decision_started = time.perf_counter()
         pipeline_result = self._pipeline.run(frame=frame, detections=detections)
         decision_latency_ms = (time.perf_counter() - decision_started) * 1000.0
@@ -97,6 +124,12 @@ class BenchRunner:
         logs: list[BenchLogEntry] = []
         decision_by_object_id = {decision.object_id: decision for decision in pipeline_result.decisions}
         command_by_object_id = {event.object_id: event.command for event in pipeline_result.scheduled_events}
+
+        stage_over_budget = {
+            "ingest": ingest_latency_ms > self._safety.ingest_budget_ms,
+            "detect": detect_latency_ms > self._safety.detect_budget_ms,
+            "decide": decision_latency_ms > self._safety.decide_budget_ms,
+        }
 
         for detection in detections:
             decision = decision_by_object_id[detection.object_id]
@@ -115,8 +148,11 @@ class BenchRunner:
                 trigger_distance_mm=command_position_mm,
                 schedule_time_s=decision_schedule_time_s,
             )
+            if self._safety.timebase_strategy == "host_to_mcu_offset":
+                projected_trigger_timestamp_s += self._safety.host_to_mcu_offset_ms / 1000.0
 
             command_source = ""
+            fault_event = ""
             if command is not None:
                 command_key = (frame_id, detection.object_id)
                 if command_key in self._issued_command_keys:
@@ -126,24 +162,51 @@ class BenchRunner:
                 else:
                     self._issued_command_keys.add(command_key)
 
+            if queue_age_ms > self._safety.max_queue_age_ms:
+                fault_event = "QUEUE_AGE_EXCEEDED"
+                command = None
+            elif frame_staleness_ms > self._safety.max_frame_staleness_ms:
+                fault_event = "FRAME_STALENESS_EXCEEDED"
+                command = None
+
+            cycle_no_send_ms = ingest_latency_ms + detect_latency_ms + decision_latency_ms + schedule_latency_ms
+            if cycle_no_send_ms > self._safety.total_budget_ms or any(stage_over_budget.values()):
+                fault_event = fault_event or "CYCLE_BUDGET_EXCEEDED"
+                command = None
+
             if command is not None:
                 transport_started = time.perf_counter()
                 response = self._transport.send(command)
                 transport_latency_ms = (time.perf_counter() - transport_started) * 1000.0
-                actuator_issued = True
-                command_source = "auto_pipeline"
+                if transport_latency_ms > self._safety.send_budget_ms:
+                    fault_event = "SEND_BUDGET_EXCEEDED"
+                    response = type("_Resp", (), {
+                        "queue_depth": 0,
+                        "scheduler_state": "SAFE",
+                        "mode": "AUTO",
+                        "queue_cleared": True,
+                        "round_trip_ms": 0.0,
+                        "ack_code": AckCode.NACK_SAFE,
+                        "nack_code": None,
+                        "nack_detail": fault_event,
+                    })()
+                    actuator_issued = False
+                    command_source = ""
+                else:
+                    actuator_issued = True
+                    command_source = "auto_pipeline"
             else:
                 transport_latency_ms = 0.0
                 actuator_issued = False
                 response = type("_Resp", (), {
                     "queue_depth": 0,
-                    "scheduler_state": "SKIPPED",
+                    "scheduler_state": "SAFE" if fault_event else "SKIPPED",
                     "mode": "AUTO",
-                    "queue_cleared": False,
+                    "queue_cleared": bool(fault_event),
                     "round_trip_ms": 0.0,
-                    "ack_code": AckCode.ACK,
+                    "ack_code": AckCode.NACK_SAFE if fault_event else AckCode.ACK,
                     "nack_code": None,
-                    "nack_detail": None,
+                    "nack_detail": fault_event or None,
                 })()
 
             if response.mode == "AUTO":
@@ -153,6 +216,14 @@ class BenchRunner:
                     raise AssertionError("AUTO mode cannot emit manual_test commands")
 
             cycle_latency_ms = (time.perf_counter() - cycle_started) * 1000.0
+            total_budget_ms = ingest_latency_ms + detect_latency_ms + decision_latency_ms + transport_latency_ms
+            over_budget = bool(fault_event)
+            rtt_jitter_ms = (
+                abs(response.round_trip_ms - self._last_round_trip_ms)
+                if self._last_round_trip_ms is not None
+                else 0.0
+            )
+            self._last_round_trip_ms = response.round_trip_ms
             logs.append(
                 BenchLogEntry(
                     run_id=run_id,
@@ -179,10 +250,21 @@ class BenchRunner:
                     protocol_round_trip_ms=response.round_trip_ms,
                     ack_code=response.ack_code,
                     ingest_latency_ms=ingest_latency_ms,
+                    detect_latency_ms=detect_latency_ms,
                     decision_latency_ms=decision_latency_ms,
                     schedule_latency_ms=schedule_latency_ms,
                     transport_latency_ms=transport_latency_ms,
                     cycle_latency_ms=cycle_latency_ms,
+                    queue_age_ms=queue_age_ms,
+                    frame_staleness_ms=frame_staleness_ms,
+                    total_budget_ms=total_budget_ms,
+                    over_budget=over_budget,
+                    fault_event=fault_event,
+                    timebase_reference=self._safety.timebase_strategy,
+                    trigger_reference_s=trigger_generation_s,
+                    rtt_jitter_ms=rtt_jitter_ms,
+                    jitter_warn=rtt_jitter_ms >= self._safety.jitter_warn_ms,
+                    jitter_critical=rtt_jitter_ms >= self._safety.jitter_critical_ms,
                     nack_code=response.nack_code,
                     nack_detail=response.nack_detail,
                     actuator_command_issued=actuator_issued,

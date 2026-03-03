@@ -40,6 +40,21 @@ transport:
 cycle_timing:
   period_ms: 33
   queue_consumption_policy: one_per_tick
+cycle_latency_budget:
+  ingest_ms: 4.0
+  detect_ms: 8.0
+  decide_ms: 8.0
+  send_ms: 5.0
+  total_ms: 25.0
+scheduling_guard:
+  max_queue_age_ms: 20.0
+  max_frame_staleness_ms: 50.0
+timebase_alignment:
+  strategy: encoder_epoch
+  host_to_mcu_offset_ms: 0.0
+telemetry_alarm:
+  jitter_warn_ms: 5.0
+  jitter_critical_ms: 10.0
 scenario_thresholds:
   nominal_max_avg_rtt_ms: 12.0
   nominal_max_peak_rtt_ms: 25.0
@@ -83,6 +98,8 @@ def test_startup_config_accepts_canonical_values() -> None:
     assert config.transport.serial_timeout_s == 0.25
     assert config.detection.provider == "opencv_basic"
     assert config.baseline_run.calibration_mode == "fixed"
+    assert config.cycle_latency_budget.total_ms == 25.0
+    assert config.timebase_alignment.strategy == "encoder_epoch"
 
 
 def test_live_update_rejects_unknown_homing_mode() -> None:

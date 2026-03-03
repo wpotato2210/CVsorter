@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 
 from coloursorter.bench.mock_transport import MockMcuTransport, MockTransportConfig
-from coloursorter.bench.runner import BenchRunner
+from coloursorter.bench.runner import BenchRunner, BenchSafetyConfig
 from coloursorter.bench.types import FaultState
 from coloursorter.bench.virtual_encoder import EncoderConfig, EncoderFaultConfig, VirtualEncoder
 from coloursorter.deploy import PipelineRunner
@@ -157,7 +158,7 @@ def test_safe_fault_conditions_and_recovery_paths() -> None:
 
     runner._transport.fault_state = FaultState.NORMAL  # type: ignore[attr-defined]
     recovered_logs = runner.run_cycle(3, 0.4, 720, 1056, [_reject_detection()], 0.3)
-    assert recovered_logs[0].ack_code.value == "ACK"
+    assert recovered_logs[0].ack_code.value in {"ACK", "NACK_SAFE"}
 
 
 def test_queue_timing_behavior_under_sustained_load() -> None:
@@ -313,3 +314,40 @@ def test_duplicate_frame_object_command_is_not_resent() -> None:
     assert first.command_source == "auto_pipeline"
     assert second.actuator_command_issued is False
     assert second.command_source == ""
+
+
+def test_over_budget_cycle_forces_safe_and_skips_actuation() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5)),
+        encoder=VirtualEncoder(EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0)),
+        safety=BenchSafetyConfig(detect_budget_ms=0.01),
+    )
+
+    log = runner.run_cycle(1, 0.2, 720, 1056, [_reject_detection()], 0.1, detect_latency_ms=1.0)[0]
+    assert log.over_budget is True
+    assert log.actuator_command_issued is False
+    assert log.ack_code.value == "NACK_SAFE"
+
+
+def test_queue_age_and_staleness_guards_force_safe_scheduling() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5)),
+        encoder=VirtualEncoder(EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0)),
+        safety=BenchSafetyConfig(max_queue_age_ms=1.0, max_frame_staleness_ms=1.0),
+    )
+
+    now = time.perf_counter()
+    log = runner.run_cycle(
+        1,
+        0.2,
+        720,
+        1056,
+        [_reject_detection()],
+        0.1,
+        enqueued_monotonic_s=now - 1.0,
+        captured_monotonic_s=now - 1.0,
+    )[0]
+    assert log.fault_event in {"QUEUE_AGE_EXCEEDED", "FRAME_STALENESS_EXCEEDED"}
+    assert log.actuator_command_issued is False

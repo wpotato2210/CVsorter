@@ -63,6 +63,33 @@ class CycleTimingConfig:
 
 
 @dataclass(frozen=True)
+class CycleLatencyBudgetConfig:
+    ingest_ms: float
+    detect_ms: float
+    decide_ms: float
+    send_ms: float
+    total_ms: float
+
+
+@dataclass(frozen=True)
+class SchedulingGuardConfig:
+    max_queue_age_ms: float
+    max_frame_staleness_ms: float
+
+
+@dataclass(frozen=True)
+class TimebaseAlignmentConfig:
+    strategy: str
+    host_to_mcu_offset_ms: float
+
+
+@dataclass(frozen=True)
+class TelemetryAlarmConfig:
+    jitter_warn_ms: float
+    jitter_critical_ms: float
+
+
+@dataclass(frozen=True)
 class ScenarioThresholdsConfig:
     nominal_max_avg_rtt_ms: float
     nominal_max_peak_rtt_ms: float
@@ -134,6 +161,10 @@ class RuntimeConfig:
     camera: CameraConfig
     transport: TransportConfig
     cycle_timing: CycleTimingConfig
+    cycle_latency_budget: CycleLatencyBudgetConfig
+    scheduling_guard: SchedulingGuardConfig
+    timebase_alignment: TimebaseAlignmentConfig
+    telemetry_alarm: TelemetryAlarmConfig
     scenario_thresholds: ScenarioThresholdsConfig
     detection: DetectionConfig
     baseline_run: BaselineRunConfig
@@ -189,6 +220,43 @@ class RuntimeConfig:
         queue_consumption_policy = _required_str(cycle_payload, "queue_consumption_policy")
         _validate_range("cycle_timing.period_ms", period_ms, min_value=1)
         _validate_enum("cycle_timing.queue_consumption_policy", queue_consumption_policy, QUEUE_CONSUMPTION_VALUES)
+
+        budget_payload = _required_map(payload, "cycle_latency_budget")
+        cycle_latency_budget = CycleLatencyBudgetConfig(
+            ingest_ms=_required_float(budget_payload, "ingest_ms"),
+            detect_ms=_required_float(budget_payload, "detect_ms"),
+            decide_ms=_required_float(budget_payload, "decide_ms"),
+            send_ms=_required_float(budget_payload, "send_ms"),
+            total_ms=_required_float(budget_payload, "total_ms"),
+        )
+        _validate_range("cycle_latency_budget.ingest_ms", cycle_latency_budget.ingest_ms, min_value=0.1)
+        _validate_range("cycle_latency_budget.detect_ms", cycle_latency_budget.detect_ms, min_value=0.1)
+        _validate_range("cycle_latency_budget.decide_ms", cycle_latency_budget.decide_ms, min_value=0.1)
+        _validate_range("cycle_latency_budget.send_ms", cycle_latency_budget.send_ms, min_value=0.1)
+        _validate_range("cycle_latency_budget.total_ms", cycle_latency_budget.total_ms, min_value=0.1)
+
+        guards_payload = _required_map(payload, "scheduling_guard")
+        scheduling_guard = SchedulingGuardConfig(
+            max_queue_age_ms=_required_float(guards_payload, "max_queue_age_ms"),
+            max_frame_staleness_ms=_required_float(guards_payload, "max_frame_staleness_ms"),
+        )
+        _validate_range("scheduling_guard.max_queue_age_ms", scheduling_guard.max_queue_age_ms, min_value=0.0)
+        _validate_range("scheduling_guard.max_frame_staleness_ms", scheduling_guard.max_frame_staleness_ms, min_value=0.0)
+
+        timebase_payload = _required_map(payload, "timebase_alignment")
+        strategy = _required_str(timebase_payload, "strategy")
+        _validate_enum("timebase_alignment.strategy", strategy, ("encoder_epoch", "host_to_mcu_offset"))
+        host_to_mcu_offset_ms = _required_float(timebase_payload, "host_to_mcu_offset_ms")
+        _validate_range("timebase_alignment.host_to_mcu_offset_ms", host_to_mcu_offset_ms, min_value=0.0)
+        timebase_alignment = TimebaseAlignmentConfig(strategy=strategy, host_to_mcu_offset_ms=host_to_mcu_offset_ms)
+
+        alarm_payload = _required_map(payload, "telemetry_alarm")
+        telemetry_alarm = TelemetryAlarmConfig(
+            jitter_warn_ms=_required_float(alarm_payload, "jitter_warn_ms"),
+            jitter_critical_ms=_required_float(alarm_payload, "jitter_critical_ms"),
+        )
+        _validate_range("telemetry_alarm.jitter_warn_ms", telemetry_alarm.jitter_warn_ms, min_value=0.0)
+        _validate_range("telemetry_alarm.jitter_critical_ms", telemetry_alarm.jitter_critical_ms, min_value=telemetry_alarm.jitter_warn_ms)
 
         thresholds_payload = _required_map(payload, "scenario_thresholds")
         scenario_thresholds = ScenarioThresholdsConfig(
@@ -324,6 +392,10 @@ class RuntimeConfig:
                 serial_timeout_s=serial_timeout_s,
             ),
             cycle_timing=CycleTimingConfig(period_ms=period_ms, queue_consumption_policy=queue_consumption_policy),
+            cycle_latency_budget=cycle_latency_budget,
+            scheduling_guard=scheduling_guard,
+            timebase_alignment=timebase_alignment,
+            telemetry_alarm=telemetry_alarm,
             scenario_thresholds=scenario_thresholds,
             detection=DetectionConfig(
                 provider=provider,
@@ -369,6 +441,10 @@ class RuntimeConfig:
             camera=self.camera,
             transport=self.transport,
             cycle_timing=self.cycle_timing,
+            cycle_latency_budget=self.cycle_latency_budget,
+            scheduling_guard=self.scheduling_guard,
+            timebase_alignment=self.timebase_alignment,
+            telemetry_alarm=self.telemetry_alarm,
             scenario_thresholds=self.scenario_thresholds,
             detection=self.detection,
             baseline_run=self.baseline_run,

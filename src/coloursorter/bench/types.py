@@ -74,6 +74,17 @@ class BenchLogEntry:
     schedule_latency_ms: float = 0.0
     transport_latency_ms: float = 0.0
     cycle_latency_ms: float = 0.0
+    detect_latency_ms: float = 0.0
+    queue_age_ms: float = 0.0
+    frame_staleness_ms: float = 0.0
+    total_budget_ms: float = 0.0
+    over_budget: bool = False
+    fault_event: str = ""
+    timebase_reference: str = "encoder_epoch"
+    trigger_reference_s: float = 0.0
+    rtt_jitter_ms: float = 0.0
+    jitter_warn: bool = False
+    jitter_critical: bool = False
     nack_code: int | None = None
     nack_detail: str | None = None
     run_id: str = "default-run"

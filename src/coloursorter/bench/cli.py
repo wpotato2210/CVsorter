@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import time
 
 import cv2
 
@@ -16,6 +17,7 @@ from coloursorter.bench import (
     BenchLogEntry,
     BenchMode,
     BenchRunner,
+    BenchSafetyConfig,
     EncoderConfig,
     LiveConfig,
     LiveFrameSource,
@@ -161,7 +163,9 @@ def _run_cycles(
             if frame is None:
                 break
             frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
+            detect_started = time.perf_counter()
             detections = detector.detect(frame.image_bgr)
+            detect_latency_ms = (time.perf_counter() - detect_started) * 1000.0
             snapshot_path = _snapshot_frame(frame.image_bgr, artifact_root, frame.frame_id, args.enable_snapshots)
             cycle_logs = runner.process_ingest_payload(
                 {
@@ -174,6 +178,8 @@ def _run_cycles(
                     "test_batch_id": args.test_batch_id,
                     "frame_snapshot_path": snapshot_path,
                     "ground_truth_by_object_id": ground_truth_by_object_id,
+                    "captured_monotonic_s": detect_started,
+                    "detect_latency_ms": detect_latency_ms,
                 }
             )
             logs.extend(cycle_logs)
@@ -196,7 +202,22 @@ def main() -> int:
         pulley_circumference_mm=210.0,
         dropout_ratio=0.0,
     )
-    runner = BenchRunner(pipeline=pipeline, transport=transport, encoder=VirtualEncoder(encoder))
+    safety = None
+    if runtime_config is not None:
+        safety = BenchSafetyConfig(
+            ingest_budget_ms=runtime_config.cycle_latency_budget.ingest_ms,
+            detect_budget_ms=runtime_config.cycle_latency_budget.detect_ms,
+            decide_budget_ms=runtime_config.cycle_latency_budget.decide_ms,
+            send_budget_ms=runtime_config.cycle_latency_budget.send_ms,
+            total_budget_ms=runtime_config.cycle_latency_budget.total_ms,
+            max_queue_age_ms=runtime_config.scheduling_guard.max_queue_age_ms,
+            max_frame_staleness_ms=runtime_config.scheduling_guard.max_frame_staleness_ms,
+            timebase_strategy=runtime_config.timebase_alignment.strategy,
+            host_to_mcu_offset_ms=runtime_config.timebase_alignment.host_to_mcu_offset_ms,
+            jitter_warn_ms=runtime_config.telemetry_alarm.jitter_warn_ms,
+            jitter_critical_ms=runtime_config.telemetry_alarm.jitter_critical_ms,
+        )
+    runner = BenchRunner(pipeline=pipeline, transport=transport, encoder=VirtualEncoder(encoder), safety=safety)
 
     ground_truth_by_object_id = _load_ground_truth(args.ground_truth_manifest)
     logs = _run_cycles(args, runner, runtime_config, Path(args.artifact_root), ground_truth_by_object_id)
