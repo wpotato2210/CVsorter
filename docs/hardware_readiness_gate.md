@@ -15,11 +15,15 @@ This checklist defines the minimum evidence required before declaring a release 
 
 1. Collect artifacts in the required output locations above.
 2. Run `python tools/hardware_readiness_report.py --strict`.
-3. Attach the report output to the release review thread.
-4. Mark release as finished only when all criteria report `PASS`.
+3. Run `python tools/firmware_readiness_check.py --strict`.
+4. Confirm board profile constraints are documented in `docs/mcu_target_constraints.md` for the selected MCU target.
+5. Attach both report outputs to the release review thread.
+6. Mark release as finished only when all criteria report `PASS`.
 
 ## CI usage
 
 - Non-blocking summary: `python tools/hardware_readiness_report.py`
 - Blocking gate: `python tools/hardware_readiness_report.py --strict`
 - CI/release blocking workflow: `.github/workflows/hardware-readiness-gate.yml` runs `python tools/hardware_readiness_report.py --strict` on pull requests, `main` pushes, and published releases.
+
+- Additional firmware readiness gate: `python tools/firmware_readiness_check.py --strict` validates protocol/schema/config parity for firmware generation.

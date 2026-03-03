@@ -4,8 +4,12 @@ import pytest
 
 from coloursorter.scheduler import ScheduledCommand
 from coloursorter.serial_interface import (
+    AckSensorAdapter,
+    ActuationRequest,
+    ActuationResponse,
     FrameFormatError,
     PacketValidationError,
+    WireActuatorAdapter,
     decode_packet_bytes,
     encode_schedule_command,
     parse_ack_tokens,
@@ -24,7 +28,13 @@ def test_protocol_framing_round_trip_for_sched_packet() -> None:
     assert parsed.args == ("4", "301.500")
 
 
-@pytest.mark.parametrize("payload", [encode_schedule_command(ScheduledCommand(lane=1, position_mm=200.0)), serialize_packet("ACK", (), msg_id="2").encode() + b"\n"])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        encode_schedule_command(ScheduledCommand(lane=1, position_mm=200.0)),
+        serialize_packet("ACK", (), msg_id="2").encode() + b"\n",
+    ],
+)
 def test_decode_packet_bytes_accepts_ascii_wire_payload(payload: bytes) -> None:
     parsed = decode_packet_bytes(payload)
     assert parsed.command in {"SCHED", "ACK"}
@@ -79,3 +89,27 @@ def test_ack_metadata_rejects_negative_queue_depth() -> None:
 def test_ack_metadata_rejects_unknown_scheduler_state() -> None:
     with pytest.raises(PacketValidationError, match="scheduler_state must be IDLE or ACTIVE"):
         parse_ack_tokens(["ACK", "AUTO", "1", "PAUSED", "false"])
+
+
+def test_wire_actuator_adapter_encodes_sched_request() -> None:
+    adapter = WireActuatorAdapter()
+    payload = adapter.encode_actuation(
+        ActuationRequest(
+            command=ScheduledCommand(lane=2, position_mm=123.456),
+            msg_id="42",
+        )
+    )
+    assert payload.startswith(b"<42|SCHED|2,123.456|")
+
+
+def test_ack_sensor_adapter_maps_ack_to_sensor_snapshot() -> None:
+    adapter = AckSensorAdapter()
+    ack = parse_ack_tokens(["ACK", "MANUAL", "4", "ACTIVE", "false", "READY"])
+
+    snapshot = adapter.decode_response(ActuationResponse(ack=ack, msg_id="42"))
+
+    assert snapshot.mode == "MANUAL"
+    assert snapshot.queue_depth == 4
+    assert snapshot.scheduler_state == "ACTIVE"
+    assert snapshot.queue_cleared is False
+    assert snapshot.link_state == "READY"
