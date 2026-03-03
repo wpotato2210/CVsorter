@@ -20,7 +20,7 @@ class ConfigValidationError(ValueError):
 
 
 FRAME_SOURCE_VALUES = ("replay", "live")
-BENCH_TRANSPORT_VALUES = ("mock", "serial")
+BENCH_TRANSPORT_VALUES = ("mock", "serial", "esp32")
 QUEUE_CONSUMPTION_VALUES = ("none", "one_per_tick", "all")
 
 DEFAULT_SERIAL_PORT = "/dev/ttyACM0"
@@ -397,11 +397,11 @@ def _validate_enum(field_name: str, value: str, allowed_values: tuple[str, ...])
 
 
 def _validate_serial_dependency(transport_kind: str) -> None:
-    if transport_kind != "serial":
+    if transport_kind not in {"serial", "esp32"}:
         return
     if importlib.util.find_spec("serial") is not None:
         return
     raise ConfigValidationError(
-        "transport.kind=serial requires optional dependency 'pyserial'. "
+        f"transport.kind={transport_kind} requires optional dependency 'pyserial'. "
         "Install with: python -m pip install -e .[serial]"
     )

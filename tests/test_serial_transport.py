@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from coloursorter.bench.esp32_transport import Esp32McuTransport
 from coloursorter.bench.serial_transport import (
     SerialMcuTransport,
     SerialTransportConfig,
@@ -244,3 +245,18 @@ def test_serial_transport_end_to_end_busy_nack_from_host_maps_to_busy_state() ->
     assert response.nack_code == NACK_BUSY
     assert response.nack_detail == DETAIL_BUSY
     assert transport.current_fault_state() == FaultState.NORMAL
+
+
+@pytest.mark.parametrize("transport_cls", [SerialMcuTransport, Esp32McuTransport])
+def test_esp32_adapter_matches_serial_sched_path(transport_cls: type[SerialMcuTransport] | type[Esp32McuTransport]) -> None:
+    fake = _FakeSerial(b"<ACK|AUTO|1|ACTIVE|false>\n")
+    transport = transport_cls(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: fake,
+    )
+
+    response = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
+
+    assert fake.written == b"<SCHED|1|200.000>\n"
+    assert response.ack_code == AckCode.ACK
+    assert response.fault_state == FaultState.NORMAL
