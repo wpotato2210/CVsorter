@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -492,7 +493,9 @@ def _required_float(payload: dict[str, Any], key: str) -> float:
     value = payload.get(key)
     if isinstance(value, bool) or not isinstance(value, (float, int)):
         raise ConfigValidationError(f"{key} is required and must be a number")
-    return float(value)
+    out = float(value)
+    _validate_finite_number(key, out)
+    return out
 
 
 def _optional_float(payload: dict[str, Any], key: str, fallback: float) -> float:
@@ -501,7 +504,9 @@ def _optional_float(payload: dict[str, Any], key: str, fallback: float) -> float
     value = payload[key]
     if isinstance(value, bool) or not isinstance(value, (float, int)):
         raise ConfigValidationError(f"{key} must be a number")
-    return float(value)
+    out = float(value)
+    _validate_finite_number(key, out)
+    return out
 
 
 
@@ -544,6 +549,11 @@ def _validate_enum(field_name: str, value: str, allowed_values: tuple[str, ...])
     if value not in allowed_values:
         allowed = ", ".join(allowed_values)
         raise ConfigValidationError(f"Unknown {field_name}: {value}. Allowed: {allowed}")
+
+
+def _validate_finite_number(field_name: str, value: float) -> None:
+    if not math.isfinite(value):
+        raise ConfigValidationError(f"{field_name} must be finite")
 
 
 def _validate_serial_dependency(transport_kind: str) -> None:
