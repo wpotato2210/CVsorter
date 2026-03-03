@@ -195,3 +195,15 @@ def test_runtime_config_uses_profiled_detection_thresholds() -> None:
     assert profile.camera_recipe == "cam_a"
     assert profile.lighting_recipe == "bright"
     assert profile.opencv_basic.reject_red_threshold == 170
+
+
+def test_runtime_config_rejects_duplicate_yaml_keys() -> None:
+    raw_text = _canonical_text() + "motion_mode: SKIP_BELT\n"
+    with pytest.raises(ConfigValidationError, match="Duplicate key 'motion_mode'"):
+        RuntimeConfig.from_text(raw_text)
+
+
+def test_runtime_config_rejects_tab_indentation() -> None:
+    raw_text = _canonical_text().replace("  mode: replay", "\tmode: replay", 1)
+    with pytest.raises(ConfigValidationError, match="must use spaces for indentation"):
+        RuntimeConfig.from_text(raw_text)

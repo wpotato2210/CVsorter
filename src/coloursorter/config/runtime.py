@@ -516,6 +516,9 @@ class RuntimeConfig:
 
 
 def _parse_simple_yaml(raw_text: str) -> dict[str, Any]:
+    if "\t" in raw_text:
+        raise ConfigValidationError("Startup config must use spaces for indentation")
+
     root: dict[str, Any] = {}
     stack: list[tuple[int, Any]] = [(-1, root)]
 
@@ -553,6 +556,9 @@ def _parse_simple_yaml(raw_text: str) -> dict[str, Any]:
 
         if not isinstance(parent, dict):
             raise ConfigValidationError(f"Mapping entry is not under a map at line {line_no}")
+
+        if key in parent:
+            raise ConfigValidationError(f"Duplicate key '{key}' at line {line_no}")
 
         if not value_text:
             parent[key] = {}
