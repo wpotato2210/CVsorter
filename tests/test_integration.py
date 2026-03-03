@@ -226,3 +226,31 @@ def test_mixed_detections_only_rejects_issue_commands() -> None:
     assert by_id["obj-accept"].actuator_command_issued is False
     assert by_id["obj-reject"].actuator_command_issued is True
     assert by_id["obj-reject"].actuator_command_payload.startswith("lane=")
+
+
+def test_pipeline_emits_alignment_fault_and_blocks_schedule_when_frame_misaligned() -> None:
+    pipeline = _build_pipeline()
+    frame = FrameMetadata(frame_id=12, timestamp_s=0.5, image_height_px=720, image_width_px=1100)
+
+    result = pipeline.run(frame=frame, detections=[_reject_detection()])
+
+    assert len(result.decisions) == 1
+    assert result.decisions[0].rejection_reason == "lane_alignment_misaligned"
+    assert len(result.schedule_commands) == 0
+
+
+def test_pipeline_uses_frame_scaled_lane_geometry_for_lane_assignment() -> None:
+    pipeline = _build_pipeline()
+    frame = FrameMetadata(frame_id=13, timestamp_s=0.5, image_height_px=720, image_width_px=1040)
+    detection = ObjectDetection(
+        object_id="scaled-lane",
+        centroid_x_px=95.0,
+        centroid_y_px=240.0,
+        classification="accept",
+    )
+
+    result = pipeline.run(frame=frame, detections=[detection])
+
+    assert len(result.decisions) == 1
+    assert result.decisions[0].lane == 2
+    assert result.decisions[0].rejection_reason is None

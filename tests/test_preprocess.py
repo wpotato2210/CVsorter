@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from coloursorter.preprocess import lane_for_x_px, load_lane_geometry
+from coloursorter.model import FrameMetadata
+from coloursorter.preprocess import lane_for_x_px, lane_geometry_for_frame, load_lane_geometry
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -47,3 +48,24 @@ def test_lane_geometry_fixture_rejects_non_monotonic_boundaries(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="strictly increasing"):
         load_lane_geometry(broken)
+
+
+def test_lane_geometry_for_frame_scales_boundaries_with_frame_width() -> None:
+    geometry = load_lane_geometry(FIXTURES / "lane_geometry_22.yaml")
+    frame = FrameMetadata(frame_id=1, timestamp_s=0.0, image_height_px=720, image_width_px=1100)
+
+    result = lane_geometry_for_frame(frame, geometry)
+
+    assert result.alignment_state == "degraded"
+    assert result.alignment_reason == "lane_alignment_misaligned"
+    assert lane_for_x_px(100.0, result.lane_geometry) == 2
+
+
+def test_lane_geometry_for_frame_remains_ok_when_frame_matches_geometry() -> None:
+    geometry = load_lane_geometry(FIXTURES / "lane_geometry_22.yaml")
+    frame = FrameMetadata(frame_id=2, timestamp_s=0.0, image_height_px=720, image_width_px=1056)
+
+    result = lane_geometry_for_frame(frame, geometry)
+
+    assert result.alignment_state == "ok"
+    assert result.alignment_reason is None
