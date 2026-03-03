@@ -46,3 +46,12 @@ flowchart TB
     Q --> W[serial wire]
     D --> B[bench runner + GUI]
 ```
+
+## Packaging rules
+
+```yaml
+packaging_rules:
+  require_relative_imports: true
+  forbid_implicit_top_level_packages:
+    - bench_app
+```
