@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem
+from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QWidget
 
 from coloursorter.bench import AckCode, BenchLogEntry, FaultState
 from coloursorter.config import RuntimeConfig
@@ -27,6 +27,8 @@ class QueueState:
 class BenchMainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
+        self._central_widget: QWidget | None = None
+        self._ui_root_window: QMainWindow | None = None
         load_ui_main_layout(self)
 
     def update_frame_preview(self, frame_rgb: bytes, width: int, height: int) -> None:

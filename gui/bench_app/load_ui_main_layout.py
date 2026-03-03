@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from PySide6.QtCore import QFile
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import QMainWindow, QWidget
+from shiboken6 import isValid
 
 
 _UI_FILE = Path(__file__).with_name("ui_main_layout.ui")
+
+
+def _is_invalid_widget(widget: QWidget | None) -> bool:
+    if widget is None:
+        return True
+    try:
+        return not isValid(widget)
+    except RuntimeError:
+        return True
 
 
 def load_ui_main_layout(host: QMainWindow) -> QWidget:
@@ -19,24 +30,36 @@ def load_ui_main_layout(host: QMainWindow) -> QWidget:
     - BenchAppController and POCIntegration can share the same named widgets safely.
     """
 
-    ui_path = str(_UI_FILE)
-    ui_file = QFile(ui_path)
-    if not ui_file.open(QFile.ReadOnly):
-        raise RuntimeError(f"Unable to open UI file: {ui_path}")
+    existing_central = getattr(host, "_central_widget", None)
+    if not _is_invalid_widget(existing_central):
+        central = existing_central
+    else:
+        ui_path = str(_UI_FILE)
+        ui_file = QFile(ui_path)
+        if not ui_file.open(QFile.ReadOnly):
+            raise RuntimeError(f"Unable to open UI file: {ui_path}")
 
-    loader = QUiLoader(host)
-    root = loader.load(ui_file, host)
-    ui_file.close()
+        loader = QUiLoader()
+        root = loader.load(ui_file)
+        ui_file.close()
 
-    if not isinstance(root, QMainWindow):
-        raise TypeError("ui_main_layout.ui root widget must be a QMainWindow")
+        if not isinstance(root, QMainWindow):
+            raise TypeError("ui_main_layout.ui root widget must be a QMainWindow")
 
-    central = root.centralWidget()
+        central = root.takeCentralWidget()
+        if central is None:
+            raise RuntimeError("ui_main_layout.ui did not provide a central widget")
+
+        host._ui_root_window = root
+        host._central_widget = central
+        host.setWindowTitle(root.windowTitle())
+        host.setCentralWidget(central)
+
     if central is None:
-        raise RuntimeError("ui_main_layout.ui did not provide a central widget")
+        raise RuntimeError("Central widget missing during UI construction")
 
-    host.setWindowTitle(root.windowTitle())
-    host.setCentralWidget(central)
+    if _is_invalid_widget(central) or central.parent() is None:
+        raise RuntimeError("Central widget invalid before child iteration")
 
     for child in central.findChildren(QWidget):
         object_name = child.objectName()
