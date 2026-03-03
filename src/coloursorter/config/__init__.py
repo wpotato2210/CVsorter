@@ -8,9 +8,11 @@ from coloursorter.config.enums import (
     MOTION_MODE_VALUES,
 )
 from coloursorter.config.runtime import (
+    BenchGuiConfig,
     CameraConfig,
     ConfigValidationError,
     CycleTimingConfig,
+    ManualServoConfig,
     DetectionConfig,
     FrameSourceConfig,
     OpenCvBasicDetectionConfig,
@@ -21,6 +23,7 @@ from coloursorter.config.runtime import (
 )
 
 __all__ = [
+    "BenchGuiConfig",
     "CameraConfig",
     "ConfigValidationError",
     "CycleTimingConfig",
@@ -33,6 +36,7 @@ __all__ = [
     "LEGACY_TO_V4",
     "MOTION_MODE",
     "MOTION_MODE_VALUES",
+    "ManualServoConfig",
     "OpenCvBasicDetectionConfig",
     "OpenCvCalibratedDetectionConfig",
     "RuntimeConfig",

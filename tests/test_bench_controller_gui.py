@@ -250,3 +250,38 @@ def test_log_mode_updates_runtime_mode_from_transport_feedback(qapp: QApplicatio
 
     assert controller.window.scheduler_state_label.text() == "Scheduler: ACTIVE"
     assert controller.window.mode_label.text() == "Mode: MANUAL"
+
+
+def test_selector_values_drive_serial_transport_config(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serial_runtime = replace(runtime_config, transport=replace(runtime_config.transport, kind="serial"))
+    observed: list[object] = []
+
+    class _CaptureSerialTransport(_StubSerialTransport):
+        def __init__(self, config, *_args, **_kwargs) -> None:
+            observed.append(config)
+            super().__init__()
+
+    monkeypatch.setattr("gui.bench_app.controller.SerialMcuTransport", _CaptureSerialTransport)
+    controller = BenchAppController(qapp, serial_runtime)
+
+    controller.window.mcu_selector.setCurrentText("serial")
+    controller.window.com_selector.setCurrentText("COM3")
+    controller.window.baud_selector.setCurrentText("230400")
+    controller.on_serial_disconnect_clicked()
+    controller.on_serial_connect_clicked()
+
+    assert observed
+    config = observed[-1]
+    assert config.port == "COM3"
+    assert config.baud == 230400
+
+
+def test_gui_selectors_are_initialized_from_runtime_config(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    assert controller.window.mcu_selector.currentText() == runtime_config.transport.kind
+    assert controller.window.com_selector.currentText() == runtime_config.transport.serial_port
+    assert controller.window.baud_selector.currentText() == str(runtime_config.transport.serial_baud)
+    assert controller.window.log_level_selector.currentText() == runtime_config.bench_gui.default_log_level
