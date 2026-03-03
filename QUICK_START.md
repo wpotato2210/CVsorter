@@ -10,11 +10,45 @@
 - Optional: webcam for live mode
 - Optional: serial device + `pyserial` for hardware transport mode
 
-## Setup
+## Setup (step-by-step)
+
+### 1) Open a terminal in the project folder
+
+```bash
+cd /path/to/ColourSorter
+```
+
+### 2) Create a virtual environment
 
 ```bash
 python3.12 -m venv .venv
-source .venv/bin/activate
+```
+
+If that command fails because `python3.12` is unavailable, use:
+
+```bash
+python -m venv .venv
+```
+
+### 3) Activate the environment
+
+- macOS/Linux:
+
+  ```bash
+  source .venv/bin/activate
+  ```
+
+- Windows PowerShell:
+
+  ```powershell
+  .\.venv\Scripts\Activate.ps1
+  ```
+
+After activation, your terminal prompt should start with `(.venv)`.
+
+### 4) Install ColourSorter
+
+```bash
 python -m pip install --upgrade pip
 python -m pip install -e .
 ```
@@ -23,8 +57,16 @@ Optional extras:
 
 ```bash
 python -m pip install -e .[serial]   # serial transport support
-python -m pip install -e .[dev]      # test/lint dependencies
+python -m pip install -e .[dev]      # test dependencies
 ```
+
+### 5) Confirm install succeeded
+
+```bash
+coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
+```
+
+You should see scenario output with pass/fail values.
 
 ## Run the app
 
@@ -79,3 +121,29 @@ transport:
   - `telemetry.csv`
   - `config_snapshot.json` (when config snapshot is provided)
   - `report.txt` (with `--text-report`)
+
+## Basic testing workflow (for first-time testers)
+
+1. Make sure `(.venv)` is visible in your prompt.
+2. Install test dependencies:
+
+   ```bash
+   python -m pip install -e .[dev]
+   ```
+
+3. Run all tests:
+
+   ```bash
+   pytest -q
+   ```
+
+4. Run one focused file when iterating quickly:
+
+   ```bash
+   pytest -q tests/test_bench_controller.py
+   ```
+
+5. If a test fails, read the first traceback block in terminal output. It usually shows:
+   - which file/test failed,
+   - expected vs actual value,
+   - line number to inspect.
