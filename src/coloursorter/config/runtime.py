@@ -120,11 +120,28 @@ class ModelStubProviderConfig:
 
 
 @dataclass(frozen=True)
-class DetectionConfig:
-    provider: str
+class DetectionProfileConfig:
+    camera_recipe: str
+    lighting_recipe: str
     opencv_basic: OpenCvBasicDetectionConfig
     opencv_calibrated: OpenCvCalibratedDetectionConfig
     model_stub: ModelStubProviderConfig
+
+
+@dataclass(frozen=True)
+class PreprocessConfig:
+    enable_normalization: bool
+    target_luma: float
+    gray_world_strength: float
+
+
+@dataclass(frozen=True)
+class DetectionConfig:
+    provider: str
+    active_camera_recipe: str
+    active_lighting_recipe: str
+    profiles: tuple[DetectionProfileConfig, ...]
+    preprocess: PreprocessConfig
 
 
 @dataclass(frozen=True)
@@ -278,36 +295,80 @@ class RuntimeConfig:
         provider = _required_str(detection_payload, "provider")
         _validate_enum("detection.provider", provider, DETECTION_PROVIDER_VALUES)
 
-        basic_payload = _required_map(detection_payload, "opencv_basic")
-        basic = OpenCvBasicDetectionConfig(
-            min_area_px=_required_int(basic_payload, "min_area_px"),
-            reject_red_threshold=_required_int(basic_payload, "reject_red_threshold"),
+        preprocess_payload = detection_payload.get("preprocess", {})
+        if preprocess_payload and not isinstance(preprocess_payload, dict):
+            raise ConfigValidationError("detection.preprocess must be a mapping")
+        preprocess = PreprocessConfig(
+            enable_normalization=_optional_bool(preprocess_payload, "enable_normalization", True),
+            target_luma=_optional_float(preprocess_payload, "target_luma", 128.0),
+            gray_world_strength=_optional_float(preprocess_payload, "gray_world_strength", 0.6),
         )
-        _validate_range("detection.opencv_basic.min_area_px", basic.min_area_px, min_value=1)
-        _validate_range("detection.opencv_basic.reject_red_threshold", basic.reject_red_threshold, min_value=0, max_value=255)
+        _validate_range("detection.preprocess.target_luma", preprocess.target_luma, min_value=1.0, max_value=255.0)
+        _validate_range("detection.preprocess.gray_world_strength", preprocess.gray_world_strength, min_value=0.0, max_value=1.0)
 
-        calibrated_payload = _required_map(detection_payload, "opencv_calibrated")
-        calibrated = OpenCvCalibratedDetectionConfig(
-            min_area_px=_required_int(calibrated_payload, "min_area_px"),
-            reject_hue_min=_required_int(calibrated_payload, "reject_hue_min"),
-            reject_hue_max=_required_int(calibrated_payload, "reject_hue_max"),
-            reject_saturation_min=_required_int(calibrated_payload, "reject_saturation_min"),
-            reject_value_min=_required_int(calibrated_payload, "reject_value_min"),
-        )
-        _validate_range("detection.opencv_calibrated.min_area_px", calibrated.min_area_px, min_value=1)
-        _validate_range("detection.opencv_calibrated.reject_hue_min", calibrated.reject_hue_min, min_value=0, max_value=179)
-        _validate_range("detection.opencv_calibrated.reject_hue_max", calibrated.reject_hue_max, min_value=0, max_value=179)
-        if calibrated.reject_hue_min > calibrated.reject_hue_max:
-            raise ConfigValidationError("detection.opencv_calibrated.reject_hue_min must be <= reject_hue_max")
-        _validate_range(
-            "detection.opencv_calibrated.reject_saturation_min", calibrated.reject_saturation_min, min_value=0, max_value=255
-        )
-        _validate_range("detection.opencv_calibrated.reject_value_min", calibrated.reject_value_min, min_value=0, max_value=255)
+        active_camera_recipe = _optional_str(detection_payload, "active_camera_recipe", "default")
+        active_lighting_recipe = _optional_str(detection_payload, "active_lighting_recipe", "default")
 
+        profiles_payload = detection_payload.get("profiles")
+        if profiles_payload is None:
+            profiles_payload = [
+                {
+                    "camera_recipe": "default",
+                    "lighting_recipe": "default",
+                    "opencv_basic": _required_map(detection_payload, "opencv_basic"),
+                    "opencv_calibrated": _required_map(detection_payload, "opencv_calibrated"),
+                    "model_stub": _required_map(detection_payload, "model_stub"),
+                }
+            ]
+        if isinstance(profiles_payload, dict):
+            profiles_payload = list(profiles_payload.values())
+        if not isinstance(profiles_payload, list) or not profiles_payload:
+            raise ConfigValidationError("detection.profiles must be a non-empty list")
 
-        model_stub_payload = _required_map(detection_payload, "model_stub")
-        model_stub = ModelStubProviderConfig(reject_threshold=_required_float(model_stub_payload, "reject_threshold"))
-        _validate_range("detection.model_stub.reject_threshold", model_stub.reject_threshold, min_value=0.0, max_value=1.0)
+        profiles: list[DetectionProfileConfig] = []
+        for profile in profiles_payload:
+            if not isinstance(profile, dict):
+                raise ConfigValidationError("detection.profiles entries must be mappings")
+            camera_recipe = _required_str(profile, "camera_recipe")
+            lighting_recipe = _required_str(profile, "lighting_recipe")
+
+            basic_payload = _required_map(profile, "opencv_basic")
+            basic = OpenCvBasicDetectionConfig(
+                min_area_px=_required_int(basic_payload, "min_area_px"),
+                reject_red_threshold=_required_int(basic_payload, "reject_red_threshold"),
+            )
+            _validate_range("detection.opencv_basic.min_area_px", basic.min_area_px, min_value=1)
+            _validate_range("detection.opencv_basic.reject_red_threshold", basic.reject_red_threshold, min_value=0, max_value=255)
+
+            calibrated_payload = _required_map(profile, "opencv_calibrated")
+            calibrated = OpenCvCalibratedDetectionConfig(
+                min_area_px=_required_int(calibrated_payload, "min_area_px"),
+                reject_hue_min=_required_int(calibrated_payload, "reject_hue_min"),
+                reject_hue_max=_required_int(calibrated_payload, "reject_hue_max"),
+                reject_saturation_min=_required_int(calibrated_payload, "reject_saturation_min"),
+                reject_value_min=_required_int(calibrated_payload, "reject_value_min"),
+            )
+            _validate_range("detection.opencv_calibrated.min_area_px", calibrated.min_area_px, min_value=1)
+            _validate_range("detection.opencv_calibrated.reject_hue_min", calibrated.reject_hue_min, min_value=0, max_value=179)
+            _validate_range("detection.opencv_calibrated.reject_hue_max", calibrated.reject_hue_max, min_value=0, max_value=179)
+            if calibrated.reject_hue_min > calibrated.reject_hue_max:
+                raise ConfigValidationError("detection.opencv_calibrated.reject_hue_min must be <= reject_hue_max")
+            _validate_range("detection.opencv_calibrated.reject_saturation_min", calibrated.reject_saturation_min, min_value=0, max_value=255)
+            _validate_range("detection.opencv_calibrated.reject_value_min", calibrated.reject_value_min, min_value=0, max_value=255)
+
+            model_stub_payload = _required_map(profile, "model_stub")
+            model_stub = ModelStubProviderConfig(reject_threshold=_required_float(model_stub_payload, "reject_threshold"))
+            _validate_range("detection.model_stub.reject_threshold", model_stub.reject_threshold, min_value=0.0, max_value=1.0)
+            profiles.append(DetectionProfileConfig(
+                camera_recipe=camera_recipe,
+                lighting_recipe=lighting_recipe,
+                opencv_basic=basic,
+                opencv_calibrated=calibrated,
+                model_stub=model_stub,
+            ))
+
+        if not any(p.camera_recipe == active_camera_recipe and p.lighting_recipe == active_lighting_recipe for p in profiles):
+            raise ConfigValidationError("detection active recipe does not match any configured profile")
 
         baseline_payload = _required_map(payload, "baseline_run")
         detector_threshold = _required_float(baseline_payload, "detector_threshold")
@@ -399,9 +460,10 @@ class RuntimeConfig:
             scenario_thresholds=scenario_thresholds,
             detection=DetectionConfig(
                 provider=provider,
-                opencv_basic=basic,
-                opencv_calibrated=calibrated,
-                model_stub=model_stub,
+                active_camera_recipe=active_camera_recipe,
+                active_lighting_recipe=active_lighting_recipe,
+                profiles=tuple(profiles),
+                preprocess=preprocess,
             ),
             baseline_run=BaselineRunConfig(
                 detector_threshold=detector_threshold,
@@ -538,6 +600,15 @@ def _required_str(payload: dict[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ConfigValidationError(f"{key} is required and must be a non-empty string")
     return value.strip()
+
+
+def _optional_bool(payload: dict[str, Any], key: str, fallback: bool) -> bool:
+    if key not in payload:
+        return fallback
+    value = payload[key]
+    if not isinstance(value, bool):
+        raise ConfigValidationError(f"{key} must be boolean")
+    return value
 
 
 def _optional_str(payload: dict[str, Any], key: str, fallback: str) -> str:

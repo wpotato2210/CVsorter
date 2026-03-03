@@ -351,3 +351,18 @@ def test_queue_age_and_staleness_guards_force_safe_scheduling() -> None:
     )[0]
     assert log.fault_event in {"QUEUE_AGE_EXCEEDED", "FRAME_STALENESS_EXCEEDED"}
     assert log.actuator_command_issued is False
+
+
+def test_log_contains_provider_version_and_config_hash() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5)),
+        encoder=VirtualEncoder(EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0)),
+        provider_version="opencv_basic@2",
+        model_version="n/a",
+        active_config_hash="abc123",
+    )
+    log = runner.run_cycle(1, 0.2, 720, 1056, [_reject_detection()], 0.1, preprocess_metrics={"preprocess_valid": True})[0]
+    assert log.detection_provider_version == "opencv_basic@2"
+    assert log.active_config_hash == "abc123"
+    assert log.preprocess_valid is True

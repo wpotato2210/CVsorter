@@ -36,6 +36,7 @@ from coloursorter.deploy import (
     ModelStubDetectionConfig,
     OpenCvDetectionConfig,
     PipelineRunner,
+    PreprocessConfig,
     build_detection_provider,
 )
 
@@ -61,6 +62,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--detector-provider", default="")
     parser.add_argument("--detector-threshold", type=float, default=-1.0)
     parser.add_argument("--calibration-mode", choices=["fixed", "adaptive"], default="fixed")
+    parser.add_argument("--camera-recipe", default="")
+    parser.add_argument("--lighting-recipe", default="")
     return parser.parse_args()
 
 
@@ -100,31 +103,45 @@ def _select_scenarios(names: list[str], runtime_config: RuntimeConfig | None):
     return tuple(available[name] for name in selected_names)
 
 
-def _build_detector(runtime_config: RuntimeConfig | None, provider_override: str, threshold_override: float):
+def _build_detector(runtime_config: RuntimeConfig | None, provider_override: str, threshold_override: float, camera_recipe: str = "", lighting_recipe: str = ""):
     """Build a detection provider based on config values and optional CLI overrides."""
     if runtime_config is None:
         provider = provider_override or "opencv_basic"
         return build_detection_provider(provider)
 
+    selected_camera = camera_recipe or runtime_config.detection.active_camera_recipe
+    selected_lighting = lighting_recipe or runtime_config.detection.active_lighting_recipe
+    selected_profile = next(
+        profile
+        for profile in runtime_config.detection.profiles
+        if profile.camera_recipe == selected_camera and profile.lighting_recipe == selected_lighting
+    )
+
     basic = OpenCvDetectionConfig(
-        min_area_px=runtime_config.detection.opencv_basic.min_area_px,
-        reject_red_threshold=runtime_config.detection.opencv_basic.reject_red_threshold,
+        min_area_px=selected_profile.opencv_basic.min_area_px,
+        reject_red_threshold=selected_profile.opencv_basic.reject_red_threshold,
     )
     calibrated = CalibratedOpenCvDetectionConfig(
-        min_area_px=runtime_config.detection.opencv_calibrated.min_area_px,
-        reject_hue_min=runtime_config.detection.opencv_calibrated.reject_hue_min,
-        reject_hue_max=runtime_config.detection.opencv_calibrated.reject_hue_max,
-        reject_saturation_min=runtime_config.detection.opencv_calibrated.reject_saturation_min,
-        reject_value_min=runtime_config.detection.opencv_calibrated.reject_value_min,
+        min_area_px=selected_profile.opencv_calibrated.min_area_px,
+        reject_hue_min=selected_profile.opencv_calibrated.reject_hue_min,
+        reject_hue_max=selected_profile.opencv_calibrated.reject_hue_max,
+        reject_saturation_min=selected_profile.opencv_calibrated.reject_saturation_min,
+        reject_value_min=selected_profile.opencv_calibrated.reject_value_min,
     )
-    threshold = runtime_config.detection.model_stub.reject_threshold if threshold_override < 0.0 else threshold_override
+    threshold = selected_profile.model_stub.reject_threshold if threshold_override < 0.0 else threshold_override
     model_stub = ModelStubDetectionConfig(reject_threshold=threshold)
     provider = provider_override or runtime_config.detection.provider
+    preprocess = PreprocessConfig(
+        enable_normalization=runtime_config.detection.preprocess.enable_normalization,
+        target_luma=runtime_config.detection.preprocess.target_luma,
+        gray_world_strength=runtime_config.detection.preprocess.gray_world_strength,
+    )
     return build_detection_provider(
         provider,
         basic_config=basic,
         calibrated_config=calibrated,
         model_stub_config=model_stub,
+        preprocess_config=preprocess,
     )
 
 
@@ -154,7 +171,7 @@ def _run_cycles(
         else LiveFrameSource(LiveConfig(camera_index=args.camera_index, frame_period_s=args.frame_period_s))
     )
     frame_source.open()
-    detector = _build_detector(runtime_config, args.detector_provider, args.detector_threshold)
+    detector = _build_detector(runtime_config, args.detector_provider, args.detector_threshold, args.camera_recipe, args.lighting_recipe)
     logs: list[BenchLogEntry] = []
     previous_timestamp_s = 0.0
     try:
@@ -180,6 +197,10 @@ def _run_cycles(
                     "ground_truth_by_object_id": ground_truth_by_object_id,
                     "captured_monotonic_s": detect_started,
                     "detect_latency_ms": detect_latency_ms,
+                    "preprocess_metrics": detector.last_validation_metrics,
+                    "detection_provider_version": detector.provider_version,
+                    "detection_model_version": detector.model_version,
+                    "active_config_hash": detector.active_config_hash,
                 }
             )
             logs.extend(cycle_logs)

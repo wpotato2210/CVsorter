@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import os
 
 import pytest
+import time
 
 from coloursorter.calibration import load_calibration
 from coloursorter.deploy import PipelineRunner
@@ -68,3 +71,31 @@ def test_scheduler_enforces_trigger_mm_bounds() -> None:
 
     with pytest.raises(ValueError, match="0.0..2000.0"):
         build_scheduled_command(1, 2000.001)
+
+
+def test_pipeline_runner_reload_calibration_on_change(tmp_path: Path) -> None:
+    lane_path = FIXTURES / "lane_geometry_22.yaml"
+    calibration_path = tmp_path / "calibration.json"
+    valid = json.loads((FIXTURES / "calibration_edge_valid.json").read_text(encoding="utf-8"))
+    calibration_path.write_text(json.dumps(valid), encoding="utf-8")
+    runner = PipelineRunner(lane_config_path=lane_path, calibration_path=calibration_path)
+
+    detection = ObjectDetection(
+        object_id="det-1",
+        centroid_x_px=100.0,
+        centroid_y_px=100.0,
+        classification="reject",
+        infection_score=0.9,
+    )
+    frame = FrameMetadata(frame_id=1, timestamp_s=0.1, image_height_px=720, image_width_px=1056)
+    first = runner.run(frame, [detection]).decisions[0]
+
+    bad = dict(valid)
+    bad["calibration_hash"] = "invalid"
+    time.sleep(0.02)
+    calibration_path.write_text(json.dumps(bad), encoding="utf-8")
+    os.utime(calibration_path, None)
+    second = runner.run(frame, [detection]).decisions[0]
+
+    assert first.rejection_reason != "Invalid calibration hash: expected deterministic SHA-256 of mm_per_pixel"
+    assert second.rejection_reason == "Invalid calibration hash: expected deterministic SHA-256 of mm_per_pixel"

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import hashlib
+import json
 from typing import Callable
 
 import cv2
@@ -35,6 +37,76 @@ class DetectionProvider(ABC):
     @abstractmethod
     def detect(self, frame_bgr: object) -> list[ObjectDetection]:
         raise NotImplementedError
+
+    @property
+    def provider_version(self) -> str:
+        return "unknown"
+
+    @property
+    def model_version(self) -> str:
+        return "n/a"
+
+    @property
+    def active_config_hash(self) -> str:
+        return ""
+
+    @property
+    def last_validation_metrics(self) -> dict[str, float | bool]:
+        return {}
+
+
+@dataclass(frozen=True)
+class PreprocessConfig:
+    enable_normalization: bool = True
+    target_luma: float = 128.0
+    gray_world_strength: float = 0.6
+
+
+def _stable_config_hash(payload: dict[str, object]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _normalize_frame(frame_bgr: np.ndarray, config: PreprocessConfig) -> tuple[np.ndarray, dict[str, float | bool]]:
+    frame = frame_bgr.astype(np.float32)
+    luma_before = float(np.mean(frame))
+    if not config.enable_normalization:
+        return frame_bgr, {
+            "preprocess_valid": True,
+            "luma_before": luma_before,
+            "luma_after": luma_before,
+            "exposure_gain": 1.0,
+            "wb_gain_b": 1.0,
+            "wb_gain_g": 1.0,
+            "wb_gain_r": 1.0,
+            "clipped_ratio": 0.0,
+        }
+
+    exposure_gain = max(0.25, min(4.0, config.target_luma / max(luma_before, 1.0)))
+    adjusted = frame * exposure_gain
+
+    channel_means = adjusted.mean(axis=(0, 1))
+    mean_gray = float(np.mean(channel_means))
+    wb_gains = np.ones(3, dtype=np.float32)
+    if mean_gray > 0:
+        ideal = mean_gray / np.maximum(channel_means, 1.0)
+        wb_gains = (1.0 - config.gray_world_strength) + (ideal * config.gray_world_strength)
+    adjusted *= wb_gains.reshape((1, 1, 3))
+
+    clipped_ratio = float(np.mean((adjusted > 255.0) | (adjusted < 0.0)))
+    normalized = np.clip(adjusted, 0.0, 255.0).astype(np.uint8)
+    luma_after = float(np.mean(normalized))
+    preprocess_valid = bool(np.isfinite(luma_after) and clipped_ratio <= 0.2)
+    return normalized, {
+        "preprocess_valid": preprocess_valid,
+        "luma_before": luma_before,
+        "luma_after": luma_after,
+        "exposure_gain": float(exposure_gain),
+        "wb_gain_b": float(wb_gains[0]),
+        "wb_gain_g": float(wb_gains[1]),
+        "wb_gain_r": float(wb_gains[2]),
+        "clipped_ratio": clipped_ratio,
+    }
 
 
 @dataclass(frozen=True)
@@ -78,11 +150,22 @@ def _validate_detection_output(detections: list[ObjectDetection]) -> list[Object
 
 
 class OpenCvDetectionProvider(DetectionProvider):
-    def __init__(self, config: OpenCvDetectionConfig | None = None) -> None:
+    def __init__(self, config: OpenCvDetectionConfig | None = None, preprocess_config: PreprocessConfig | None = None) -> None:
         self._config = config or OpenCvDetectionConfig()
+        self._preprocess_config = preprocess_config or PreprocessConfig()
+        self._last_validation_metrics: dict[str, float | bool] = {}
+        self._active_config_hash = _stable_config_hash(
+            {
+                "provider": "opencv_basic",
+                "min_area_px": self._config.min_area_px,
+                "reject_red_threshold": self._config.reject_red_threshold,
+                "preprocess": self._preprocess_config.__dict__,
+            }
+        )
 
     def detect(self, frame_bgr: object) -> list[ObjectDetection]:
         frame = _validate_frame(frame_bgr)
+        frame, self._last_validation_metrics = _normalize_frame(frame, self._preprocess_config)
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
@@ -119,13 +202,39 @@ class OpenCvDetectionProvider(DetectionProvider):
 
         return _validate_detection_output(sorted(detections, key=lambda item: item.object_id))
 
+    @property
+    def provider_version(self) -> str:
+        return "opencv_basic@2"
+
+    @property
+    def active_config_hash(self) -> str:
+        return self._active_config_hash
+
+    @property
+    def last_validation_metrics(self) -> dict[str, float | bool]:
+        return dict(self._last_validation_metrics)
+
 
 class CalibratedOpenCvDetectionProvider(DetectionProvider):
-    def __init__(self, config: CalibratedOpenCvDetectionConfig | None = None) -> None:
+    def __init__(self, config: CalibratedOpenCvDetectionConfig | None = None, preprocess_config: PreprocessConfig | None = None) -> None:
         self._config = config or CalibratedOpenCvDetectionConfig()
+        self._preprocess_config = preprocess_config or PreprocessConfig()
+        self._last_validation_metrics: dict[str, float | bool] = {}
+        self._active_config_hash = _stable_config_hash(
+            {
+                "provider": "opencv_calibrated",
+                "min_area_px": self._config.min_area_px,
+                "reject_hue_min": self._config.reject_hue_min,
+                "reject_hue_max": self._config.reject_hue_max,
+                "reject_saturation_min": self._config.reject_saturation_min,
+                "reject_value_min": self._config.reject_value_min,
+                "preprocess": self._preprocess_config.__dict__,
+            }
+        )
 
     def detect(self, frame_bgr: object) -> list[ObjectDetection]:
         frame = _validate_frame(frame_bgr)
+        frame, self._last_validation_metrics = _normalize_frame(frame, self._preprocess_config)
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
@@ -177,6 +286,18 @@ class CalibratedOpenCvDetectionProvider(DetectionProvider):
 
         return _validate_detection_output(sorted(detections, key=lambda item: item.object_id))
 
+    @property
+    def provider_version(self) -> str:
+        return "opencv_calibrated@2"
+
+    @property
+    def active_config_hash(self) -> str:
+        return self._active_config_hash
+
+    @property
+    def last_validation_metrics(self) -> dict[str, float | bool]:
+        return dict(self._last_validation_metrics)
+
 
 @dataclass(frozen=True)
 class ModelStubDetectionConfig:
@@ -193,6 +314,12 @@ class ModelStubDetectionProvider(DetectionProvider):
     def __init__(self, predictor: Callable[[np.ndarray], list[dict[str, float | str]]] | None = None, config: ModelStubDetectionConfig | None = None) -> None:
         self._config = config or ModelStubDetectionConfig()
         self._predictor = predictor or self._default_predictor
+        self._active_config_hash = _stable_config_hash(
+            {
+                "provider": "model_stub",
+                "reject_threshold": self._config.reject_threshold,
+            }
+        )
 
     @staticmethod
     def _default_predictor(frame_bgr: np.ndarray) -> list[dict[str, float | str]]:
@@ -228,17 +355,30 @@ class ModelStubDetectionProvider(DetectionProvider):
             )
         return _validate_detection_output(detections)
 
+    @property
+    def provider_version(self) -> str:
+        return "model_stub@1"
+
+    @property
+    def model_version(self) -> str:
+        return "model_stub_baseline"
+
+    @property
+    def active_config_hash(self) -> str:
+        return self._active_config_hash
+
 
 def build_detection_provider(
     provider_name: str,
     basic_config: OpenCvDetectionConfig | None = None,
     calibrated_config: CalibratedOpenCvDetectionConfig | None = None,
     model_stub_config: ModelStubDetectionConfig | None = None,
+    preprocess_config: PreprocessConfig | None = None,
 ) -> DetectionProvider:
     if provider_name == "opencv_basic":
-        return OpenCvDetectionProvider(config=basic_config)
+        return OpenCvDetectionProvider(config=basic_config, preprocess_config=preprocess_config)
     if provider_name == "opencv_calibrated":
-        return CalibratedOpenCvDetectionProvider(config=calibrated_config)
+        return CalibratedOpenCvDetectionProvider(config=calibrated_config, preprocess_config=preprocess_config)
     if provider_name == "model_stub":
         return ModelStubDetectionProvider(config=model_stub_config)
     raise DetectionError(f"Unsupported detection provider: {provider_name}")
