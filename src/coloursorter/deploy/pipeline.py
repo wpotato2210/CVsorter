@@ -6,7 +6,7 @@ from pathlib import Path
 from coloursorter.calibration import CalibrationError, load_calibration
 from coloursorter.eval import rejection_reason_for_object
 from coloursorter.model import CentroidMM, DecisionPayload, FrameMetadata, ObjectDetection
-from coloursorter.preprocess import lane_for_x_px, load_lane_geometry
+from coloursorter.preprocess import lane_for_x_px, lane_geometry_for_frame, load_lane_geometry
 from coloursorter.scheduler import ScheduledCommand, build_scheduled_command
 
 
@@ -66,11 +66,15 @@ class PipelineRunner:
         calibration = self._calibration
         calibration_error = self._calibration_error
 
+        frame_lane_geometry = lane_geometry_for_frame(frame, self._geometry)
+        lane_geometry = frame_lane_geometry.lane_geometry
+        alignment_fault = frame_lane_geometry.alignment_reason
+
         scheduled_events: list[ScheduledDecision] = []
 
         for detection in detections:
-            lane = lane_for_x_px(detection.centroid_x_px, self._geometry)
-            reason = calibration_error
+            lane = lane_for_x_px(detection.centroid_x_px, lane_geometry)
+            reason = calibration_error or alignment_fault
 
             if lane is None:
                 reason = reason or "out_of_lane_bounds"
@@ -98,7 +102,7 @@ class PipelineRunner:
             )
             decisions.append(decision)
 
-            if lane is not None and reason is not None and reason != calibration_error:
+            if lane is not None and reason is not None and calibration_error is None and alignment_fault is None:
                 command = build_scheduled_command(lane, trigger_mm)
                 commands.append(command)
                 scheduled_events.append(ScheduledDecision(object_id=detection.object_id, decision=decision, command=command))
