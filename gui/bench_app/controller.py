@@ -21,6 +21,7 @@ from coloursorter.bench import (
     FrameSourceError,
     LiveConfig,
     LiveFrameSource,
+    Esp32McuTransport,
     MockMcuTransport,
     MockTransportConfig,
     ReplayConfig,
@@ -206,8 +207,9 @@ class BenchAppController(QObject):
             lane_config_path=project_root / "configs" / "lane_geometry.yaml",
             calibration_path=project_root / "configs" / "calibration.json",
         )
-        if runtime_config.transport.kind == "serial":
-            self.transport = SerialMcuTransport(
+        if runtime_config.transport.kind in {"serial", "esp32"}:
+            transport_cls = SerialMcuTransport if runtime_config.transport.kind == "serial" else Esp32McuTransport
+            self.transport = transport_cls(
                 config=SerialTransportConfig(
                     port=runtime_config.transport.serial_port,
                     baud=runtime_config.transport.serial_baud,
@@ -695,14 +697,15 @@ class BenchAppController(QObject):
 
     @Slot()
     def on_serial_connect_clicked(self) -> None:
-        if self._runtime_config.transport.kind != "serial":
+        if self._runtime_config.transport.kind not in {"serial", "esp32"}:
             self._set_serial_status(False, "mock transport")
             return
         if self._serial_connected:
             self._set_serial_status(True)
             return
         try:
-            self.transport = SerialMcuTransport(
+            transport_cls = SerialMcuTransport if self._runtime_config.transport.kind == "serial" else Esp32McuTransport
+            self.transport = transport_cls(
                 config=SerialTransportConfig(
                     port=self._runtime_config.transport.serial_port,
                     baud=self._runtime_config.transport.serial_baud,

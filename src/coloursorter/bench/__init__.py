@@ -1,6 +1,7 @@
 from .evaluation import BenchEvaluation, evaluate_logs, write_artifacts
 from .frame_source import BenchFrameSource, FrameSourceError
 from .live_source import LiveConfig, LiveFrameSource
+from .esp32_transport import Esp32McuTransport
 from .mock_transport import MockMcuTransport, MockTransportConfig
 from .replay_source import ReplayConfig, ReplayFrameSource
 from .runner import BenchRunner, BenchRunResult
@@ -41,6 +42,7 @@ __all__ = [
     "FrameSourceError",
     "LiveConfig",
     "LiveFrameSource",
+    "Esp32McuTransport",
     "MockMcuTransport",
     "MockTransportConfig",
     "ReplayConfig",

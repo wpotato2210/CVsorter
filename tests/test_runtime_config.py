@@ -113,3 +113,20 @@ def test_runtime_config_serial_mode_requires_optional_dependency(monkeypatch: py
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None if name == "serial" else original_find_spec(name))
     with pytest.raises(ConfigValidationError, match="Install with: python -m pip install -e .\\[serial\\]"):
         RuntimeConfig.from_text(_canonical_text())
+
+
+def test_runtime_config_accepts_esp32_transport_kind() -> None:
+    raw_text = _canonical_text().replace("kind: serial", "kind: esp32", 1)
+
+    config = RuntimeConfig.from_text(raw_text)
+
+    assert config.transport.kind == "esp32"
+
+
+def test_runtime_config_esp32_mode_requires_optional_dependency(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None if name == "serial" else original_find_spec(name))
+
+    raw_text = _canonical_text().replace("kind: serial", "kind: esp32", 1)
+    with pytest.raises(ConfigValidationError, match="transport.kind=esp32 requires optional dependency"):
+        RuntimeConfig.from_text(raw_text)

@@ -5,9 +5,13 @@ from pathlib import Path
 
 import pytest
 
+from coloursorter.bench.esp32_transport import Esp32McuTransport
+from coloursorter.bench.types import AckCode, FaultState
 from coloursorter.protocol import MODE_TRANSITIONS, OpenSpecV3Host, is_mode_transition_allowed
 from coloursorter.protocol.nack_codes import CANONICAL_NACK_7, DETAIL_BUSY, NACK_BUSY
+from coloursorter.scheduler import ScheduledCommand
 from coloursorter.serial_interface import parse_ack_tokens, parse_frame
+from coloursorter.bench.serial_transport import SerialTransportConfig
 
 
 def _response_tokens(frame: str) -> list[str]:
@@ -156,3 +160,28 @@ def test_host_mode_transition_outcomes_match_contract(
     result = parse_ack_tokens(_response_tokens(host.handle_frame(f"<SET_MODE|{target_mode}>")))
 
     assert result.status == expected_status
+
+
+class _HostBackedSerial:
+    def __init__(self, host: OpenSpecV3Host) -> None:
+        self._host = host
+
+    def write(self, _payload: bytes) -> None:
+        return None
+
+    def readline(self) -> bytes:
+        return self._host.handle_frame("<SCHED|1|100.0>").encode() + b"\n"
+
+
+def test_esp32_adapter_preserves_protocol_ack_parsing_invariants() -> None:
+    host = OpenSpecV3Host(max_queue_depth=4)
+    transport = Esp32McuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        serial_factory=lambda **_: _HostBackedSerial(host),
+    )
+
+    response = transport.send(ScheduledCommand(lane=1, position_mm=100.0))
+
+    assert response.ack_code == AckCode.ACK
+    assert response.fault_state == FaultState.NORMAL
+    assert response.queue_depth == 1

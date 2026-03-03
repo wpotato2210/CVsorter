@@ -379,3 +379,14 @@ def test_serial_transport_response_updates_latest_queue_observations(
     assert controller._latest_transport_queue_cleared is True
     assert controller._transport_queue_depth() == 5
     assert controller._transport_last_queue_cleared() is True
+
+
+def test_controller_uses_esp32_transport_when_configured(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    esp32_runtime = replace(runtime_config, transport=replace(runtime_config.transport, kind="esp32"))
+    monkeypatch.setattr("gui.bench_app.controller.Esp32McuTransport", _StubSerialTransport)
+
+    controller = BenchAppController(qapp, esp32_runtime)
+
+    assert isinstance(controller.transport, _StubSerialTransport)
