@@ -24,6 +24,10 @@ class IngestCycleInput:
     captured_monotonic_s: float = 0.0
     enqueued_monotonic_s: float = 0.0
     detect_latency_ms: float = 0.0
+    detection_provider_version: str = ""
+    detection_model_version: str = ""
+    active_config_hash: str = ""
+    preprocess_metrics: dict[str, float | bool] | None = None
 
 
 class IngestPayloadAdapter:
@@ -52,6 +56,10 @@ class IngestPayloadAdapter:
             ground_truth_by_object_id=payload.get("ground_truth_by_object_id"),
             captured_monotonic_s=float(payload.get("captured_monotonic_s", 0.0)),
             detect_latency_ms=float(payload.get("detect_latency_ms", 0.0)),
+            detection_provider_version=str(payload.get("detection_provider_version", "")),
+            detection_model_version=str(payload.get("detection_model_version", "")),
+            active_config_hash=str(payload.get("active_config_hash", "")),
+            preprocess_metrics=payload.get("preprocess_metrics"),
         )
 
     def _validate_against_contract(self, payload: dict[str, Any]) -> None:

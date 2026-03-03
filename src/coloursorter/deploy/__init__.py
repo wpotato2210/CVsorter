@@ -9,6 +9,7 @@ from .detection import (
     ModelStubDetectionProvider,
     OpenCvDetectionConfig,
     OpenCvDetectionProvider,
+    PreprocessConfig,
     build_detection_provider,
 )
 from .pipeline import PipelineResult, PipelineRunner, ScheduledDecision
@@ -24,6 +25,7 @@ __all__ = [
     "DetectionProvider",
     "OpenCvDetectionConfig",
     "OpenCvDetectionProvider",
+    "PreprocessConfig",
     "PipelineResult",
     "PipelineRunner",
     "ActuatorCalibration",

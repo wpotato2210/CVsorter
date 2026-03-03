@@ -100,3 +100,14 @@ class BenchLogEntry:
     frame_snapshot_path: str = ""
     ground_truth_label: str = ""
     decision_reason: str = ""
+    detection_provider_version: str = ""
+    detection_model_version: str = ""
+    active_config_hash: str = ""
+    preprocess_valid: bool = True
+    preprocess_luma_before: float = 0.0
+    preprocess_luma_after: float = 0.0
+    preprocess_exposure_gain: float = 1.0
+    preprocess_wb_gain_b: float = 1.0
+    preprocess_wb_gain_g: float = 1.0
+    preprocess_wb_gain_r: float = 1.0
+    preprocess_clipped_ratio: float = 0.0

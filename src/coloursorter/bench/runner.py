@@ -8,6 +8,7 @@ import time
 from coloursorter.deploy import ActuatorTimingCalibrator, PipelineRunner
 from coloursorter.ingest import DeterministicDropPolicy, IngestBoundary
 from coloursorter.model import FrameMetadata, ObjectDetection
+from coloursorter.scheduler import build_scheduled_command
 
 from .transport import McuTransport
 from .scenarios import BenchSummary
@@ -34,6 +35,7 @@ class BenchSafetyConfig:
     host_to_mcu_offset_ms: float = 0.0
     jitter_warn_ms: float = 5.0
     jitter_critical_ms: float = 10.0
+    detect_timeout_fallback: str = "SAFE"
 
 
 class BenchRunner:
@@ -45,6 +47,9 @@ class BenchRunner:
         calibrator: ActuatorTimingCalibrator | None = None,
         ingest_boundary: IngestBoundary | None = None,
         safety: BenchSafetyConfig | None = None,
+        provider_version: str = "",
+        model_version: str = "",
+        active_config_hash: str = "",
     ) -> None:
         self._pipeline = pipeline
         self._transport = transport
@@ -59,6 +64,9 @@ class BenchRunner:
         )
         self._safety = safety or BenchSafetyConfig()
         self._last_round_trip_ms: float | None = None
+        self._provider_version = provider_version
+        self._model_version = model_version
+        self._active_config_hash = active_config_hash
 
     def process_ingest_payload(self, payload: dict[str, object]) -> tuple[BenchLogEntry, ...]:
         self._ingest_boundary.submit(payload)
@@ -79,6 +87,10 @@ class BenchRunner:
             enqueued_monotonic_s=cycle_input.enqueued_monotonic_s,
             captured_monotonic_s=cycle_input.captured_monotonic_s,
             detect_latency_ms=cycle_input.detect_latency_ms,
+            detection_provider_version=cycle_input.detection_provider_version,
+            detection_model_version=cycle_input.detection_model_version,
+            active_config_hash=cycle_input.active_config_hash,
+            preprocess_metrics=cycle_input.preprocess_metrics,
         )
 
     def run_cycle(
@@ -96,6 +108,10 @@ class BenchRunner:
         enqueued_monotonic_s: float = 0.0,
         captured_monotonic_s: float = 0.0,
         detect_latency_ms: float = 0.0,
+        detection_provider_version: str = "",
+        detection_model_version: str = "",
+        active_config_hash: str = "",
+        preprocess_metrics: dict[str, float | bool] | None = None,
     ) -> tuple[BenchLogEntry, ...]:
         cycle_started = time.perf_counter()
         ingest_started = cycle_started
@@ -172,7 +188,16 @@ class BenchRunner:
             cycle_no_send_ms = ingest_latency_ms + detect_latency_ms + decision_latency_ms + schedule_latency_ms
             if cycle_no_send_ms > self._safety.total_budget_ms or any(stage_over_budget.values()):
                 fault_event = fault_event or "CYCLE_BUDGET_EXCEEDED"
-                command = None
+                detect_timeout = stage_over_budget["detect"]
+                fallback_mode = self._safety.detect_timeout_fallback.upper()
+                if detect_timeout and fallback_mode == "REJECT" and decision.lane >= 0:
+                    if command is None:
+                        command = build_scheduled_command(decision.lane, max(0.0, decision.trigger_mm))
+                        command_position_mm = max(0.0, command.position_mm - calibration.offset_mm)
+                        actuator_command_payload = f"lane={command.lane};position_mm={command.position_mm:.2f}"
+                    fault_event = "DETECT_TIMEOUT_REJECT_MODE"
+                else:
+                    command = None
 
             if command is not None:
                 transport_started = time.perf_counter()
@@ -272,6 +297,17 @@ class BenchRunner:
                     command_source=command_source,
                     frame_snapshot_path=frame_snapshot_path,
                     ground_truth_label=(ground_truth_by_object_id or {}).get(detection.object_id, ""),
+                    detection_provider_version=detection_provider_version or self._provider_version,
+                    detection_model_version=detection_model_version or self._model_version,
+                    active_config_hash=active_config_hash or self._active_config_hash,
+                    preprocess_valid=bool((preprocess_metrics or {}).get("preprocess_valid", True)),
+                    preprocess_luma_before=float((preprocess_metrics or {}).get("luma_before", 0.0)),
+                    preprocess_luma_after=float((preprocess_metrics or {}).get("luma_after", 0.0)),
+                    preprocess_exposure_gain=float((preprocess_metrics or {}).get("exposure_gain", 1.0)),
+                    preprocess_wb_gain_b=float((preprocess_metrics or {}).get("wb_gain_b", 1.0)),
+                    preprocess_wb_gain_g=float((preprocess_metrics or {}).get("wb_gain_g", 1.0)),
+                    preprocess_wb_gain_r=float((preprocess_metrics or {}).get("wb_gain_r", 1.0)),
+                    preprocess_clipped_ratio=float((preprocess_metrics or {}).get("clipped_ratio", 0.0)),
                 )
             )
         return tuple(logs)

@@ -26,8 +26,33 @@ class ScheduledDecision:
 
 class PipelineRunner:
     def __init__(self, lane_config_path: str | Path, calibration_path: str | Path) -> None:
-        self._geometry = load_lane_geometry(lane_config_path)
-        self._calibration_path = calibration_path
+        self._lane_config_path = Path(lane_config_path)
+        self._calibration_path = Path(calibration_path)
+        self._geometry = load_lane_geometry(self._lane_config_path)
+        self._calibration = None
+        self._calibration_error: str | None = None
+        self._lane_mtime_ns = self._lane_config_path.stat().st_mtime_ns
+        self._calibration_mtime_ns = -1
+        self._reload_calibration_if_changed(force=True)
+
+    def _reload_lane_geometry_if_changed(self) -> None:
+        current_mtime_ns = self._lane_config_path.stat().st_mtime_ns
+        if current_mtime_ns == self._lane_mtime_ns:
+            return
+        self._geometry = load_lane_geometry(self._lane_config_path)
+        self._lane_mtime_ns = current_mtime_ns
+
+    def _reload_calibration_if_changed(self, force: bool = False) -> None:
+        current_mtime_ns = self._calibration_path.stat().st_mtime_ns
+        if not force and current_mtime_ns == self._calibration_mtime_ns:
+            return
+        try:
+            self._calibration = load_calibration(self._calibration_path)
+            self._calibration_error = None
+        except CalibrationError as exc:
+            self._calibration = None
+            self._calibration_error = str(exc)
+        self._calibration_mtime_ns = current_mtime_ns
 
     def run(
         self,
@@ -36,13 +61,10 @@ class PipelineRunner:
     ) -> PipelineResult:
         decisions: list[DecisionPayload] = []
         commands: list[ScheduledCommand] = []
-
-        try:
-            calibration = load_calibration(self._calibration_path)
-            calibration_error: str | None = None
-        except CalibrationError as exc:
-            calibration = None
-            calibration_error = str(exc)
+        self._reload_lane_geometry_if_changed()
+        self._reload_calibration_if_changed()
+        calibration = self._calibration
+        calibration_error = self._calibration_error
 
         scheduled_events: list[ScheduledDecision] = []
 

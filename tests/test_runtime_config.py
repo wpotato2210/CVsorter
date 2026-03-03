@@ -98,6 +98,9 @@ def test_startup_config_accepts_canonical_values() -> None:
     assert config.transport.serial_timeout_s == 0.25
     assert config.detection.provider == "opencv_basic"
     assert config.baseline_run.calibration_mode == "fixed"
+    assert config.detection.active_camera_recipe == "default"
+    assert config.detection.active_lighting_recipe == "default"
+    assert config.detection.preprocess.enable_normalization is True
     assert config.cycle_latency_budget.total_ms == 25.0
     assert config.timebase_alignment.strategy == "encoder_epoch"
 
@@ -164,3 +167,31 @@ def test_runtime_config_esp32_mode_requires_optional_dependency(monkeypatch: pyt
     raw_text = _canonical_text().replace("kind: serial", "kind: esp32", 1)
     with pytest.raises(ConfigValidationError, match="transport.kind=esp32 requires optional dependency"):
         RuntimeConfig.from_text(raw_text)
+
+
+def test_runtime_config_uses_profiled_detection_thresholds() -> None:
+    from coloursorter.config.runtime import _parse_simple_yaml
+
+    payload = _parse_simple_yaml(_canonical_text())
+    payload["detection"]["active_camera_recipe"] = "cam_a"
+    payload["detection"]["active_lighting_recipe"] = "bright"
+    payload["detection"]["profiles"] = [
+        {
+            "camera_recipe": "cam_a",
+            "lighting_recipe": "bright",
+            "opencv_basic": {"min_area_px": 80, "reject_red_threshold": 170},
+            "opencv_calibrated": {
+                "min_area_px": 110,
+                "reject_hue_min": 0,
+                "reject_hue_max": 15,
+                "reject_saturation_min": 95,
+                "reject_value_min": 95,
+            },
+            "model_stub": {"reject_threshold": 0.7},
+        }
+    ]
+    config = RuntimeConfig.from_dict(payload)
+    profile = config.detection.profiles[0]
+    assert profile.camera_recipe == "cam_a"
+    assert profile.lighting_recipe == "bright"
+    assert profile.opencv_basic.reject_red_threshold == 170
