@@ -10,6 +10,8 @@ from coloursorter.protocol.constants import (
     CMD_RESET_QUEUE,
     CMD_SCHED,
     CMD_SET_MODE,
+    CMD_HEARTBEAT,
+    CMD_HELLO,
     LANE_MAX,
     LANE_MIN,
     NACK_ARG_COUNT_MISMATCH,
@@ -37,7 +39,14 @@ def test_protocol_constants_match_commands_json_contract() -> None:
     commands_spec = json.loads(COMMANDS_PATH.read_text(encoding="utf-8"))
     commands_by_name = {command["name"]: command for command in commands_spec["commands"]}
 
-    assert set(commands_by_name) == {CMD_SET_MODE, CMD_SCHED, CMD_GET_STATE, CMD_RESET_QUEUE}
+    assert set(commands_by_name) == {
+        CMD_HELLO,
+        CMD_HEARTBEAT,
+        CMD_SET_MODE,
+        CMD_SCHED,
+        CMD_GET_STATE,
+        CMD_RESET_QUEUE,
+    }
 
     mode_arg = commands_by_name[CMD_SET_MODE]["args"][0]
     assert set(mode_arg["allowed"]) == ALLOWED_MODES

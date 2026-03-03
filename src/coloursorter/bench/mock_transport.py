@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from coloursorter.protocol import OpenSpecV3Host
+from coloursorter.protocol.constants import SUPPORTED_CAPABILITIES, SUPPORTED_PROTOCOL_VERSION
 from coloursorter.scheduler import ScheduledCommand
 from coloursorter.serial_interface import AckResponse, parse_ack_tokens, parse_frame, serialize_packet
 
@@ -23,9 +24,15 @@ class MockMcuTransport:
     queue: list[ScheduledCommand] = field(default_factory=list)
     _last_queue_cleared: bool = False
     _host: OpenSpecV3Host = field(init=False)
+    _next_msg_id: int = field(init=False, default=1)
 
     def __post_init__(self) -> None:
         self._host = OpenSpecV3Host(max_queue_depth=self.config.max_queue_depth)
+        original_fault_state = self.fault_state
+        caps = ";".join(sorted(SUPPORTED_CAPABILITIES))
+        self.send_command("HELLO", (SUPPORTED_PROTOCOL_VERSION, caps))
+        self.send_command("HEARTBEAT")
+        self.fault_state = original_fault_state
 
     def send(self, command: ScheduledCommand) -> TransportResponse:
         self._last_queue_cleared = False
@@ -64,7 +71,9 @@ class MockMcuTransport:
         )
 
     def send_command(self, command: str, args: tuple[object, ...] = ()) -> AckResponse:
-        frame = serialize_packet(command, args)
+        msg_id = str(self._next_msg_id)
+        self._next_msg_id += 1
+        frame = serialize_packet(command, args, msg_id=msg_id)
         response_frame = self._host.handle_frame(frame)
         parsed = parse_frame(response_frame)
         ack = parse_ack_tokens((parsed.command, *parsed.args))

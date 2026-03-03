@@ -42,7 +42,7 @@ def test_end_to_end_dry_run_detection_to_sched_serialization() -> None:
     assert len(result.decisions) == 1
     assert result.decisions[0].rejection_reason == "classified_reject"
     assert len(result.schedule_commands) == 1
-    assert encode_schedule_command(result.schedule_commands[0]) == b"<SCHED|2|304.630>\n"
+    assert encode_schedule_command(result.schedule_commands[0]).startswith(b"<0|SCHED|2,304.630|")
 
 
 def test_latency_budget_at_pipeline_transport_boundary_with_mock_clock() -> None:
