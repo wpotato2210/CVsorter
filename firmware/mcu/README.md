@@ -16,3 +16,7 @@ Version pins are enforced by:
 cmake -S firmware/mcu -B firmware/mcu/build
 cmake --build firmware/mcu/build
 ```
+
+## Target constraints
+- Board-level constraints and pin/electrical assumptions: `docs/mcu_target_constraints.md`.
+- Run firmware readiness parity checks: `python tools/firmware_readiness_check.py --strict`.

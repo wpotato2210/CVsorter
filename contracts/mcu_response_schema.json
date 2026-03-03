@@ -1,9 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "msg_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "status": {
       "type": "string",
@@ -18,7 +20,8 @@
       "maximum": 8
     },
     "detail": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "queue_depth": {
       "type": "integer",
@@ -55,5 +58,90 @@
   "required": [
     "msg_id",
     "status"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "NACK"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "nack_code"
+        ],
+        "not": {
+          "required": [
+            "queue_depth",
+            "queue_cleared",
+            "mode",
+            "scheduler_state",
+            "link_state"
+          ]
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "nack_code"
+          ]
+        },
+        "anyOf": [
+          {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "queue_depth"
+                  ]
+                },
+                {
+                  "required": [
+                    "queue_cleared"
+                  ]
+                },
+                {
+                  "required": [
+                    "mode"
+                  ]
+                },
+                {
+                  "required": [
+                    "scheduler_state"
+                  ]
+                },
+                {
+                  "required": [
+                    "link_state"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "required": [
+              "queue_depth",
+              "queue_cleared",
+              "mode",
+              "scheduler_state"
+            ]
+          },
+          {
+            "required": [
+              "queue_depth",
+              "queue_cleared",
+              "mode",
+              "scheduler_state",
+              "link_state"
+            ]
+          }
+        ]
+      }
+    }
   ]
 }
