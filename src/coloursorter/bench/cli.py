@@ -19,12 +19,15 @@ from coloursorter.bench import (
     BenchRunner,
     BenchSafetyConfig,
     EncoderConfig,
+    Esp32McuTransport,
     LiveConfig,
     LiveFrameSource,
     MockMcuTransport,
     MockTransportConfig,
     ReplayConfig,
     ReplayFrameSource,
+    SerialMcuTransport,
+    SerialTransportConfig,
     VirtualEncoder,
     default_scenarios,
     scenarios_from_thresholds,
@@ -87,6 +90,39 @@ def _load_available_scenarios(runtime_config: RuntimeConfig | None):
     if runtime_config is None:
         return default_scenarios()
     return scenarios_from_thresholds(runtime_config.scenario_thresholds)
+
+
+def _build_transport(runtime_config: RuntimeConfig | None):
+    """Build bench transport from runtime config or explicit mock fallback."""
+    if runtime_config is None:
+        return MockMcuTransport(
+            MockTransportConfig(
+                max_queue_depth=8,
+                base_round_trip_ms=2.0,
+                per_item_penalty_ms=0.8,
+            )
+        )
+
+    transport_config = runtime_config.transport
+    if transport_config.kind == "mock":
+        return MockMcuTransport(
+            MockTransportConfig(
+                max_queue_depth=transport_config.max_queue_depth,
+                base_round_trip_ms=transport_config.base_round_trip_ms,
+                per_item_penalty_ms=transport_config.per_item_penalty_ms,
+            )
+        )
+
+    serial_config = SerialTransportConfig(
+        port=transport_config.serial_port,
+        baud=transport_config.serial_baud,
+        timeout_s=transport_config.serial_timeout_s,
+    )
+    if transport_config.kind == "serial":
+        return SerialMcuTransport(serial_config)
+    if transport_config.kind == "esp32":
+        return Esp32McuTransport(serial_config)
+    raise ValueError(f"Unsupported transport kind: {transport_config.kind}")
 
 
 def _select_scenarios(names: list[str], runtime_config: RuntimeConfig | None):
@@ -216,7 +252,7 @@ def main() -> int:
     runtime_config = _load_runtime_config(args.runtime_config)
     scenarios = _select_scenarios(args.scenario, runtime_config)
     pipeline = PipelineRunner(lane_config_path=Path(args.lane_config), calibration_path=Path(args.calibration))
-    transport = MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.8))
+    transport = _build_transport(runtime_config)
     encoder = EncoderConfig(
         pulses_per_revolution=2048,
         belt_speed_mm_per_s=140.0,
