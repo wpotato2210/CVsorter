@@ -6,7 +6,7 @@ This ICD defines host-to-MCU wire interfaces and runtime telemetry interfaces us
 ## Host ↔ MCU wire interface
 - Framing: `<CMD|arg1|arg2>` ASCII packets.
 - Commands: `SET_MODE`, `SCHED`, `GET_STATE`, `RESET_QUEUE`.
-- ACK payload: `ACK|mode|queue_depth|scheduler_state|queue_cleared`.
+- ACK payload: `ACK|mode|queue_depth|scheduler_state|queue_cleared|[link_state]` where `link_state` is optional and included when link telemetry is available.
 - NACK payload: `NACK|nack_code|detail`.
 - Canonical NACK code `7` means `BUSY` only (`NACK|7|BUSY`).
 - Non-canonical `NACK|7|WATCHDOG` is interpreted as SAFE by bench transport to prevent misclassifying malformed busy replies.
