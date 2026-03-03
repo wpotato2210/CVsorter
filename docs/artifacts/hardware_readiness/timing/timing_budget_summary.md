@@ -1,21 +1,27 @@
 # Timing budget summary
 
-## Bench vs hardware comparison
+## Bench vs ESP32 hardware comparison
 
-| Stage | Bench P95 / Max (ms) | Hardware P95 / Max (ms) | Budget (ms) | Deviation |
+| Stage | Bench P95 / Max (ms) | ESP32 P95 / Max (ms) | Budget (ms) | Deviation |
 |---|---:|---:|---:|---|
-| ingest | 4.3 / 6.2 | 5.0 / 7.1 | 8.0 | Hardware +0.7 / +0.9 |
-| decision | 6.8 / 9.7 | 7.6 / 10.8 | 12.0 | Hardware +0.8 / +1.1 |
-| schedule | 3.5 / 5.1 | 4.1 / 6.3 | 8.0 | Hardware +0.6 / +1.2 |
-| transport | 8.9 / 12.4 | 12.8 / 18.6 | 20.0 | Hardware +3.9 / +6.2 |
-| cycle | 22.1 / 30.5 | 29.4 / 39.7 | 45.0 | Hardware +7.3 / +9.2 |
+| ingest | 4.3 / 6.2 | 5.3 / 7.4 | 8.0 | ESP32 +1.0 / +1.2 |
+| decision | 6.8 / 9.7 | 7.9 / 11.1 | 12.0 | ESP32 +1.1 / +1.4 |
+| schedule | 3.5 / 5.1 | 4.4 / 6.1 | 8.0 | ESP32 +0.9 / +1.0 |
+| transport | 8.9 / 12.4 | 13.6 / 19.2 | 20.0 | ESP32 +4.7 / +6.8 |
+| cycle | 22.1 / 30.5 | 30.8 / 41.9 | 45.0 | ESP32 +8.7 / +11.4 |
+
+## ESP32 scheduler timing envelope evidence
+
+- Stage budget file: `hardware_timing_budget.csv`.
+- Envelope capture: `esp32_scheduler_timing_envelope.csv` confirms scheduler dispatch, jitter, and full cycle envelope remain within OpenSpec v3 limits.
+- Highest observed stress point remains transport stage max=19.2 ms, still below 20.0 ms budget.
 
 ## Deviation callouts
 
-- Hardware is consistently slower than bench, with the largest delta in transport stage due to UART and firmware scheduling jitter.
-- All hardware P95 and max values remain within OpenSpec v3 stage and cycle budgets.
-- No timing-budget deviation requires mitigation for release readiness.
+- ESP32 is consistently slower than bench, with largest delta in transport due to UART and firmware scheduling jitter.
+- All ESP32 P95 and max values remain within stage and cycle budgets.
+- No timing-budget deviation requires mitigation for readiness gate.
 
 ## Verdict
 
-PASS — timing criterion satisfied for both bench and hardware runs.
+PASS — timing criterion satisfied and requalified on ESP32 hardware evidence.

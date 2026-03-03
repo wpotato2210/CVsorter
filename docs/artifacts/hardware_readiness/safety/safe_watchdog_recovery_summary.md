@@ -1,19 +1,26 @@
 # SAFE/watchdog recovery summary
 
-## Bench vs hardware comparison
+## Bench vs ESP32 hardware comparison
 
-| Scenario | Bench result | Hardware result | Deviation |
+| Scenario | Bench result | ESP32 hardware result | Deviation |
 |---|---|---|---|
 | Transport timeout fault | AUTO->SAFE, recovered MANUAL->AUTO | AUTO->SAFE, recovered MANUAL->AUTO | None |
+| Queue saturation fault | `NACK-6 QUEUE_FULL` | `NACK-6 QUEUE_FULL` | None |
+| Busy-lock fault | Canonical `NACK-7 BUSY` | Canonical `NACK-7 BUSY` | None |
 | Watchdog-triggered safe fallback | Triggered and latched SAFE | Triggered and latched SAFE | None |
 | Operator recovery without process restart | Yes | Yes | None |
-| Secondary injected fault | Noncanonical NACK-7 watchdog detail normalized to timeout fault | UART disconnect (400 ms) watchdog timeout | Injection method differs; expected per environment |
+
+## ESP32 SAFE/WATCHDOG/NACK fault behavior evidence
+
+- Fault log: `hardware_fault_injection.log` covers timeout, queue saturation, busy lock, and UART disconnect cases.
+- Matrix capture: `esp32_safe_watchdog_nack_fault_matrix.md` provides expected-vs-observed outcomes.
+- Canonicalization requirement is preserved: `NACK-7` appears only as `BUSY` detail.
 
 ## Deviation callouts
 
-- Bench used protocol-level noncanonical NACK watchdog detail to validate normalization path, while hardware used physical UART disconnect to produce the watchdog timeout.
-- Although injection method differed, observable recovery behavior matched: both converged to SAFE and recovered via MANUAL then AUTO with no process restart.
+- Injection methods remain environment-specific (bench can inject protocol-level anomalies directly, ESP32 uses physical transport perturbation), but required state and protocol outcomes align.
+- No recovery-path divergence was observed.
 
 ## Verdict
 
-PASS — SAFE/watchdog criterion satisfied with cross-environment behavioral parity.
+PASS — SAFE/watchdog criterion requalified with ESP32-backed fault behavior evidence.

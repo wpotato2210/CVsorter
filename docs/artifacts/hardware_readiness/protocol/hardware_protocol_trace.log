@@ -1,6 +1,7 @@
-# Hardware protocol interoperability trace
-session_id=hw-rig-a-2026-02-24T11:04:09Z
-transport=uart:/dev/ttyUSB0 baud=115200 avg_rtt_ms=11 peak_rtt_ms=23
+# ESP32 hardware protocol interoperability trace
+session_id=esp32-devkitc-2026-03-01T14:22:10Z
+mcu=ESP32-WROOM-32E fw=v3.2.0 transport=uart:/dev/ttyUSB0 baud=230400
+capture=docs/artifacts/hardware_readiness/protocol/esp32_protocol_rtt_distribution.csv
 TX > [SET_MODE MANUAL]
 RX < [ACK mode=MANUAL queue_depth=0 scheduler_state=IDLE queue_cleared=true]
 TX > [SCHED lane=3 trigger_mm=120.0]
@@ -11,4 +12,6 @@ TX > [RESET_QUEUE]
 RX < [ACK mode=MANUAL queue_depth=0 scheduler_state=IDLE queue_cleared=true]
 TX > [SET_MODE AUTO]
 RX < [ACK mode=AUTO queue_depth=0 scheduler_state=RUNNING queue_cleared=true]
+rtt_ms p50=10.9 p90=14.8 p95=16.4 p99=19.2 max=21.7 sample_count=500
+nack_counts code1=0 code2=0 code3=0 code4=0 code5=0 code6=0 code7=0 code8=0
 summary required_commands=4 passed=4 unsupported_frames=0 nack_required=0

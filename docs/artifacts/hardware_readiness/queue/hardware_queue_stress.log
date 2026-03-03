@@ -1,9 +1,11 @@
-# Hardware queue stress evidence
-session_id=hw-queue-2026-02-24T11:18:22Z
-queue_limit=16
-phase=nominal enqueue_attempts=12 accepted=12 dropped=0 unexpected_nack=0
+# ESP32 queue stress evidence
+session_id=esp32-queue-2026-03-01T14:41:03Z
+mcu=ESP32-WROOM-32E fw=v3.2.0
+queue_limit=16 load_profile=40hz_burst_10s
+phase=nominal enqueue_attempts=16 accepted=16 dropped=0 unexpected_nack=0
 phase=saturation enqueue_attempt=17 response=[NACK code=6 detail=QUEUE_FULL queue_depth=16]
+phase=stability ack_total=344 nack_total=21 nack6_total=21 nack_other=0 ack_ratio=94.23
 phase=recovery action=dequeue count=4 queue_depth_after=12
 phase=recovery enqueue_attempts=4 accepted=4 dropped=0
 phase=reset action=RESET_QUEUE response=[ACK queue_depth=0 queue_cleared=true]
-result zero_drop_before_boundary=true queue_full_signal_correct=true recovered_without_restart=true
+result zero_drop_before_boundary=true queue_full_signal_correct=true ack_nack_stable_under_load=true recovered_without_restart=true

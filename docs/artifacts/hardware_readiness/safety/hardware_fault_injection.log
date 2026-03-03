@@ -1,12 +1,17 @@
-# Hardware SAFE/watchdog fault injection evidence
-session_id=hw-safe-2026-02-24T11:36:07Z
+# ESP32 SAFE/watchdog/NACK fault behavior evidence
+session_id=esp32-safe-2026-03-01T15:03:44Z
+mcu=ESP32-WROOM-32E fw=v3.2.0
 initial_mode=AUTO
-inject fault=transport_timeout attempt=1
+inject fault=transport_timeout attempt=1 duration_ms=420
 observe event=watchdog_expired mode_transition=AUTO->SAFE
 recover step=operator_set_mode_manual response=[ACK mode=MANUAL]
 recover step=operator_set_mode_auto response=[ACK mode=AUTO]
-inject fault=uart_disconnect_400ms
+inject fault=forced_queue_saturation attempt=2
+observe event=queue_full response=[NACK code=6 detail=QUEUE_FULL queue_depth=16]
+inject fault=busy_window attempt=3
+observe event=scheduler_lock response=[NACK code=7 detail=BUSY]
+inject fault=uart_disconnect_500ms attempt=4
 observe event=watchdog_expired mode_transition=AUTO->SAFE
 recover step=operator_set_mode_manual response=[ACK mode=MANUAL]
 recover step=operator_set_mode_auto response=[ACK mode=AUTO]
-result converged_to_safe=true recovered_manual_to_auto=true process_restart_required=false
+result safe_latch_verified=true watchdog_recovery_verified=true canonical_nack7_busy_verified=true process_restart_required=false

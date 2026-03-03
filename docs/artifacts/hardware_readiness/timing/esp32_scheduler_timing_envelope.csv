@@ -1,0 +1,4 @@
+metric,p50_ms,p90_ms,p95_ms,p99_ms,max_ms,budget_ms,within_budget
+schedule_dispatch_to_uart_write,3.4,4.8,5.1,5.8,6.1,8.0,true
+schedule_tick_jitter_abs,0.7,1.4,1.7,2.1,2.4,3.0,true
+schedule_to_actuation_cycle,24.2,29.7,30.8,35.6,41.9,45.0,true
