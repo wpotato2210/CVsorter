@@ -55,5 +55,45 @@
   "required": [
     "msg_id",
     "status"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ACK"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "mode",
+          "queue_depth",
+          "scheduler_state",
+          "queue_cleared"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "NACK"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "nack_code"
+        ]
+      }
+    }
   ]
 }
