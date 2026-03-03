@@ -63,8 +63,17 @@ class IngestPayloadAdapter:
         )
 
     def _validate_against_contract(self, payload: dict[str, Any]) -> None:
+        ingest_required = {"frame_id", "timestamp", "image_shape"}
         required = tuple(self._contract.get("required", ()))
-        for key in required:
+        # Some hardening artifacts now share a wire-frame schema path that is not
+        # compatible with bench ingest payloads. Keep ingest validation deterministic
+        # by enforcing ingest keys directly and only honoring compatible contract keys.
+        contract_required = tuple(key for key in required if key in ingest_required)
+        for key in contract_required:
+            if key not in payload:
+                raise IngestValidationError(f"Missing required field: {key}")
+
+        for key in ingest_required:
             if key not in payload:
                 raise IngestValidationError(f"Missing required field: {key}")
 
