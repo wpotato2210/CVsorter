@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from coloursorter.scheduler import ScheduledCommand
-from coloursorter.protocol.constants import CMD_SCHED
+from coloursorter.protocol.constants import (
+    CMD_HEARTBEAT,
+    CMD_HELLO,
+    CMD_SCHED,
+    SUPPORTED_CAPABILITIES,
+    SUPPORTED_PROTOCOL_VERSION,
+)
 from coloursorter.protocol.nack_codes import (
     CANONICAL_NACK_7,
     DETAIL_SAFE,
@@ -35,6 +41,9 @@ class SerialTransportConfig:
     ack_timeout_ms: int = 100
     max_retries: int = 3
     backoff_ms: tuple[int, ...] = (0, 50, 100)
+    heartbeat_interval_s: float = 0.2
+    protocol_version: str = SUPPORTED_PROTOCOL_VERSION
+    capabilities: tuple[str, ...] = tuple(sorted(SUPPORTED_CAPABILITIES))
 
 
 @dataclass(frozen=True)
@@ -75,6 +84,9 @@ class SerialMcuTransport:
         self._last_queue_depth = 0
         self._last_queue_cleared = False
         self._sleep = sleep_fn or time.sleep
+        self._next_msg_id = 1
+        self._handshake_complete = False
+        self._last_heartbeat_sent_at = 0.0
 
     def close(self) -> None:
         if hasattr(self._serial, "close"):
@@ -96,6 +108,7 @@ class SerialMcuTransport:
         return self._last_queue_cleared
 
     def send(self, command: ScheduledCommand) -> TransportResponse:
+        self._ensure_link_ready()
         ack, round_trip_ms = self._send_frame(CMD_SCHED, (command.lane, f"{command.position_mm:.3f}"))
 
         ack_code, fault_state = _map_ack_to_bench_state(ack.status, ack.nack_code, ack.detail)
@@ -115,11 +128,13 @@ class SerialMcuTransport:
         )
 
     def send_command(self, command: str, args: tuple[object, ...] = ()) -> AckResponse:
+        self._ensure_link_ready()
         ack, _ = self._send_frame(command, args)
         return ack
 
     def _send_frame(self, command: str, args: tuple[object, ...] = ()) -> tuple[AckResponse, float]:
-        payload = encode_packet_bytes(command, args)
+        msg_id = self._reserve_msg_id()
+        payload = encode_packet_bytes(command, args, msg_id=msg_id)
 
         for attempt in range(self._config.max_retries + 1):
             started = time.perf_counter()
@@ -154,6 +169,22 @@ class SerialMcuTransport:
             return ack, round_trip_ms
 
         raise AssertionError("unreachable")
+
+    def _ensure_link_ready(self) -> None:
+        now = time.monotonic()
+        if not self._handshake_complete:
+            caps = ";".join(self._config.capabilities)
+            self._send_frame(CMD_HELLO, (self._config.protocol_version, caps))
+            self._handshake_complete = True
+            self._last_heartbeat_sent_at = 0.0
+        if now - self._last_heartbeat_sent_at >= self._config.heartbeat_interval_s:
+            self._send_frame(CMD_HEARTBEAT)
+            self._last_heartbeat_sent_at = now
+
+    def _reserve_msg_id(self) -> str:
+        msg_id = str(self._next_msg_id)
+        self._next_msg_id += 1
+        return msg_id
 
     def _backoff_for_attempt(self, attempt: int) -> int:
         if attempt < len(self._config.backoff_ms):

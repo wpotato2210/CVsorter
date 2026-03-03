@@ -1,6 +1,10 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "msg_id": {
+      "type": "string"
+    },
     "lane_index": {
       "type": "integer"
     },
@@ -12,6 +16,7 @@
     }
   },
   "required": [
+    "msg_id",
     "lane_index",
     "trigger_mm",
     "classification"

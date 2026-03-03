@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import zlib
 from typing import Iterable, Sequence
 
 from coloursorter.protocol.constants import (
@@ -16,6 +17,7 @@ from coloursorter.protocol.constants import (
 FRAME_START = "<"
 FRAME_END = ">"
 FRAME_DELIMITER = "|"
+PAYLOAD_DELIMITER = ","
 
 
 class SerialInterfaceError(ValueError):
@@ -32,7 +34,10 @@ class PacketValidationError(SerialInterfaceError):
 
 @dataclass(frozen=True)
 class FramedPacket:
+    msg_id: str
     command: str
+    payload: str = ""
+    crc: str = ""
     args: tuple[str, ...] = ()
 
 
@@ -45,6 +50,7 @@ class AckResponse:
     queue_depth: int | None = None
     scheduler_state: str | None = None
     queue_cleared: bool = False
+    link_state: str | None = None
 
 
 def _validate_token(token: str, field_name: str) -> None:
@@ -54,8 +60,15 @@ def _validate_token(token: str, field_name: str) -> None:
         raise PacketValidationError(f"{field_name} contains reserved framing characters")
 
 
-def serialize_packet(command: str, args: Sequence[object] = ()) -> str:
-    """Serialize command + args into <CMD|arg1|arg2> wire frame."""
+def _compute_crc(msg_id: str, command: str, payload: str) -> str:
+    body = FRAME_DELIMITER.join((msg_id, command, payload))
+    return f"{zlib.crc32(body.encode('ascii')) & 0xFFFFFFFF:08X}"
+
+
+def serialize_packet(command: str, args: Sequence[object] = (), *, msg_id: str = "0") -> str:
+    """Serialize command + args into <MSG_ID|CMD|payload|CRC> wire frame."""
+    msg_id_token = str(msg_id).strip()
+    _validate_token(msg_id_token, "msg_id")
     command_token = str(command).strip().upper()
     _validate_token(command_token, "command")
 
@@ -65,12 +78,14 @@ def serialize_packet(command: str, args: Sequence[object] = ()) -> str:
         _validate_token(token, f"arg[{index}]")
         arg_tokens.append(token)
 
-    body = FRAME_DELIMITER.join((command_token, *arg_tokens))
+    payload = PAYLOAD_DELIMITER.join(arg_tokens)
+    crc = _compute_crc(msg_id_token, command_token, payload)
+    body = FRAME_DELIMITER.join((msg_id_token, command_token, payload, crc))
     return f"{FRAME_START}{body}{FRAME_END}"
 
 
 def parse_frame(frame: str) -> FramedPacket:
-    """Parse <CMD|arg1|arg2> frame into command and positional args."""
+    """Parse <MSG_ID|CMD|payload|CRC> frame into command and positional args."""
     if len(frame) < 3:
         raise FrameFormatError("frame is too short")
     if not frame.startswith(FRAME_START) or not frame.endswith(FRAME_END):
@@ -81,18 +96,28 @@ def parse_frame(frame: str) -> FramedPacket:
         raise FrameFormatError("frame body is empty")
 
     tokens = body.split(FRAME_DELIMITER)
-    command = tokens[0].strip().upper()
-    args = tuple(token.strip() for token in tokens[1:])
+    if len(tokens) != 4:
+        raise FrameFormatError("frame must provide msg_id|command|payload|crc")
+    msg_id = tokens[0].strip()
+    command = tokens[1].strip().upper()
+    payload = tokens[2].strip()
+    crc = tokens[3].strip().upper()
 
+    _validate_token(msg_id, "msg_id")
     _validate_token(command, "command")
-    for index, arg in enumerate(args):
-        _validate_token(arg, f"arg[{index}]")
+    if payload:
+        for token in payload.split(PAYLOAD_DELIMITER):
+            _validate_token(token.strip(), "payload_token")
+    expected_crc = _compute_crc(msg_id, command, payload)
+    if crc != expected_crc:
+        raise FrameFormatError("frame crc mismatch")
+    args = tuple(token.strip() for token in payload.split(PAYLOAD_DELIMITER) if token.strip())
 
-    return FramedPacket(command=command, args=args)
+    return FramedPacket(msg_id=msg_id, command=command, payload=payload, crc=crc, args=args)
 
 
-def encode_packet_bytes(command: str, args: Sequence[object] = ()) -> bytes:
-    return (serialize_packet(command, args) + "\n").encode("ascii")
+def encode_packet_bytes(command: str, args: Sequence[object] = (), *, msg_id: str = "0") -> bytes:
+    return (serialize_packet(command, args, msg_id=msg_id) + "\n").encode("ascii")
 
 
 def decode_packet_bytes(payload: bytes) -> FramedPacket:
@@ -112,8 +137,8 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
     if status == ACK_TOKEN:
         if len(token_list) == 1:
             return AckResponse(status=ACK_TOKEN)
-        if len(token_list) != 5:
-            raise PacketValidationError("ACK metadata must be mode|queue_depth|scheduler_state|queue_cleared")
+        if len(token_list) not in {5, 6}:
+            raise PacketValidationError("ACK metadata must be mode|queue_depth|scheduler_state|queue_cleared|[link_state]")
         mode = token_list[1].strip().upper()
         if mode not in ALLOWED_MODES:
             raise PacketValidationError("ACK mode must be AUTO, MANUAL, or SAFE")
@@ -129,12 +154,14 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
         raw_queue_cleared = token_list[4].strip().lower()
         if raw_queue_cleared not in {"true", "false"}:
             raise PacketValidationError("ACK queue_cleared must be true or false")
+        link_state = token_list[5].strip().upper() if len(token_list) == 6 else None
         return AckResponse(
             status=ACK_TOKEN,
             mode=mode,
             queue_depth=queue_depth,
             scheduler_state=scheduler_state,
             queue_cleared=raw_queue_cleared == "true",
+            link_state=link_state,
         )
     if status != NACK_TOKEN:
         raise PacketValidationError("response must start with ACK or NACK")

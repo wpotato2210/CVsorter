@@ -15,22 +15,23 @@ from coloursorter.serial_interface import (
 
 
 def test_protocol_framing_round_trip_for_sched_packet() -> None:
-    frame = serialize_packet("SCHED", (4, "301.500"))
+    frame = serialize_packet("SCHED", (4, "301.500"), msg_id="17")
     parsed = parse_frame(frame)
 
-    assert frame == "<SCHED|4|301.500>"
+    assert frame.startswith("<17|SCHED|4,301.500|")
+    assert parsed.msg_id == "17"
     assert parsed.command == "SCHED"
     assert parsed.args == ("4", "301.500")
 
 
-@pytest.mark.parametrize("payload", [b"<SCHED|1|200.000>\n", b"<ACK>\n"])
+@pytest.mark.parametrize("payload", [encode_schedule_command(ScheduledCommand(lane=1, position_mm=200.0)), serialize_packet("ACK", (), msg_id="2").encode() + b"\n"])
 def test_decode_packet_bytes_accepts_ascii_wire_payload(payload: bytes) -> None:
     parsed = decode_packet_bytes(payload)
     assert parsed.command in {"SCHED", "ACK"}
 
 
 def test_ack_and_nack_parsing() -> None:
-    ack = parse_ack_tokens(["ACK", "AUTO", "3", "ACTIVE", "true"])
+    ack = parse_ack_tokens(["ACK", "AUTO", "3", "ACTIVE", "true", "READY"])
     nack = parse_ack_tokens(["NACK", "6", "QUEUE_FULL"])
 
     assert ack.status == "ACK"
@@ -38,10 +39,16 @@ def test_ack_and_nack_parsing() -> None:
     assert ack.queue_depth == 3
     assert ack.scheduler_state == "ACTIVE"
     assert ack.queue_cleared is True
+    assert ack.link_state == "READY"
 
     assert nack.status == "NACK"
     assert nack.nack_code == 6
     assert nack.detail == "QUEUE_FULL"
+
+
+def test_crc_validation_rejects_tampered_frame() -> None:
+    with pytest.raises(FrameFormatError, match="crc mismatch"):
+        parse_frame("<1|SCHED|1,200.000|DEADBEEF>")
 
 
 def test_nack_requires_numeric_code() -> None:
@@ -61,7 +68,7 @@ def test_protocol_framing_rejects_malformed_frame() -> None:
 
 def test_wire_encoder_serializes_sched_command() -> None:
     payload = encode_schedule_command(ScheduledCommand(lane=9, position_mm=412.3456))
-    assert payload == b"<SCHED|9|412.346>\n"
+    assert payload.startswith(b"<0|SCHED|9,412.346|")
 
 
 def test_ack_metadata_rejects_negative_queue_depth() -> None:
