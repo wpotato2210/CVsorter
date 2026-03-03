@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 import time
 
 from coloursorter.deploy import ActuatorTimingCalibrator, PipelineRunner
+from coloursorter.ingest import DeterministicDropPolicy, IngestBoundary
 from coloursorter.model import FrameMetadata, ObjectDetection
 
 from .transport import McuTransport
@@ -26,12 +28,36 @@ class BenchRunner:
         transport: McuTransport,
         encoder: VirtualEncoder,
         calibrator: ActuatorTimingCalibrator | None = None,
+        ingest_boundary: IngestBoundary | None = None,
     ) -> None:
         self._pipeline = pipeline
         self._transport = transport
         self._encoder = encoder
         self._calibrator = calibrator or ActuatorTimingCalibrator()
         self._latency_samples_ms: list[float] = []
+        self._ingest_boundary = ingest_boundary or IngestBoundary(
+            contract_path=Path(__file__).resolve().parents[3] / "contracts" / "frame_schema.json",
+            capacity=1,
+            drop_policy=DeterministicDropPolicy.DROP_OLDEST,
+        )
+
+    def process_ingest_payload(self, payload: dict[str, object]) -> tuple[BenchLogEntry, ...]:
+        self._ingest_boundary.submit(payload)
+        cycle_input = self._ingest_boundary.next_cycle_input()
+        if cycle_input is None:
+            return ()
+        return self.run_cycle(
+            frame_id=cycle_input.frame.frame_id,
+            timestamp_s=cycle_input.frame.timestamp_s,
+            image_height_px=cycle_input.frame.image_height_px,
+            image_width_px=cycle_input.frame.image_width_px,
+            detections=list(cycle_input.detections),
+            previous_timestamp_s=cycle_input.previous_timestamp_s,
+            run_id=cycle_input.run_id,
+            test_batch_id=cycle_input.test_batch_id,
+            frame_snapshot_path=cycle_input.frame_snapshot_path,
+            ground_truth_by_object_id=cycle_input.ground_truth_by_object_id,
+        )
 
     def run_cycle(
         self,

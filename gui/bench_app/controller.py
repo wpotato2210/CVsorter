@@ -386,13 +386,14 @@ class BenchAppController(QObject):
         if any(detection.infection_score >= self.trigger_threshold for detection in detections):
             self._send_poc_fire_command(reason="auto_detect")
         try:
-            logs = self.bench_runner.run_cycle(
-                frame_id=frame.frame_id,
-                timestamp_s=frame.timestamp_s,
-                image_height_px=frame_rgb.shape[0],
-                image_width_px=frame_rgb.shape[1],
-                detections=detections,
-                previous_timestamp_s=self.runtime_state.previous_timestamp_s,
+            logs = self.bench_runner.process_ingest_payload(
+                {
+                    "frame_id": frame.frame_id,
+                    "timestamp": frame.timestamp_s,
+                    "image_shape": [frame_rgb.shape[0], frame_rgb.shape[1], frame_rgb.shape[2]],
+                    "detections": detections,
+                    "previous_timestamp_s": self.runtime_state.previous_timestamp_s,
+                }
             )
         except SerialTransportError as error:
             self.runtime_state.fault_state = error.fault_state

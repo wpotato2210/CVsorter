@@ -163,17 +163,18 @@ def _run_cycles(
             frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
             detections = detector.detect(frame.image_bgr)
             snapshot_path = _snapshot_frame(frame.image_bgr, artifact_root, frame.frame_id, args.enable_snapshots)
-            cycle_logs = runner.run_cycle(
-                frame_id=frame.frame_id,
-                timestamp_s=frame.timestamp_s,
-                image_height_px=frame_rgb.shape[0],
-                image_width_px=frame_rgb.shape[1],
-                detections=detections,
-                previous_timestamp_s=previous_timestamp_s,
-                run_id=args.run_id,
-                test_batch_id=args.test_batch_id,
-                frame_snapshot_path=snapshot_path,
-                ground_truth_by_object_id=ground_truth_by_object_id,
+            cycle_logs = runner.process_ingest_payload(
+                {
+                    "frame_id": frame.frame_id,
+                    "timestamp": frame.timestamp_s,
+                    "image_shape": [frame_rgb.shape[0], frame_rgb.shape[1], frame_rgb.shape[2]],
+                    "detections": detections,
+                    "previous_timestamp_s": previous_timestamp_s,
+                    "run_id": args.run_id,
+                    "test_batch_id": args.test_batch_id,
+                    "frame_snapshot_path": snapshot_path,
+                    "ground_truth_by_object_id": ground_truth_by_object_id,
+                }
             )
             logs.extend(cycle_logs)
             previous_timestamp_s = frame.timestamp_s
