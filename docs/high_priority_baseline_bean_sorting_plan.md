@@ -25,6 +25,14 @@
 | 6 | Detection provider selection/override (`opencv_basic`, `opencv_calibrated`, `model_stub`) | Provider override reliability is **100%**: selected provider matches runtime output metadata for all acceptance executions. |
 | 7 | Mock transport and serial transport paths | Transport-path parity verified with **no protocol-shape mismatches** between mock and serial outputs for the same replay input set. |
 
+## Phase 2 — Usability Upgrades
+
+| Item | Scope (usability upgrade) | Acceptance criteria |
+|---|---|---|
+| 1 | Guided setup wizard | First-time operator setup completion from launch to ready-to-run is **≤ 5 minutes** using the in-app guided flow with no manual config-file edits. |
+| 2 | Live classification preview overlays | Live preview overlays show lane, class, and reject/accept state with **≥ 99% frame-to-frame metadata alignment** in validation sessions. |
+| 3 | Structured report export | End-of-run exports include summary, event timeline, and telemetry in a structured format with **100% schema-valid output** across acceptance runs. |
+
 ## Deferred Enhancements (Non-Confirmed Ideas)
 
-- Any idea not listed in the manual-confirmed baseline table is classified as a **deferred enhancement** and excluded from Phase 1 scope.
+- Any idea not listed in the manual-confirmed baseline table or the approved Phase 2 usability-upgrade table is classified as a **deferred enhancement**.
