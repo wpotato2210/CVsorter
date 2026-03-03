@@ -35,6 +35,7 @@ class BenchRunner:
         self._encoder = encoder
         self._calibrator = calibrator or ActuatorTimingCalibrator()
         self._latency_samples_ms: list[float] = []
+        self._issued_command_keys: set[tuple[int, str]] = set()
         self._ingest_boundary = ingest_boundary or IngestBoundary(
             contract_path=Path(__file__).resolve().parents[3] / "contracts" / "frame_schema.json",
             capacity=1,
@@ -115,11 +116,22 @@ class BenchRunner:
                 schedule_time_s=decision_schedule_time_s,
             )
 
+            command_source = ""
+            if command is not None:
+                command_key = (frame_id, detection.object_id)
+                if command_key in self._issued_command_keys:
+                    command = None
+                    command_position_mm = 0.0
+                    actuator_command_payload = ""
+                else:
+                    self._issued_command_keys.add(command_key)
+
             if command is not None:
                 transport_started = time.perf_counter()
                 response = self._transport.send(command)
                 transport_latency_ms = (time.perf_counter() - transport_started) * 1000.0
                 actuator_issued = True
+                command_source = "auto_pipeline"
             else:
                 transport_latency_ms = 0.0
                 actuator_issued = False
@@ -133,6 +145,12 @@ class BenchRunner:
                     "nack_code": None,
                     "nack_detail": None,
                 })()
+
+            if response.mode == "AUTO":
+                active_sources = {source for source in (command_source,) if source in {"manual_test", "auto_pipeline"}}
+                assert len(active_sources) <= 1, "AUTO mode must have a single command source"
+                if command_source == "manual_test":
+                    raise AssertionError("AUTO mode cannot emit manual_test commands")
 
             cycle_latency_ms = (time.perf_counter() - cycle_started) * 1000.0
             logs.append(
@@ -169,6 +187,7 @@ class BenchRunner:
                     nack_detail=response.nack_detail,
                     actuator_command_issued=actuator_issued,
                     actuator_command_payload=actuator_command_payload,
+                    command_source=command_source,
                     frame_snapshot_path=frame_snapshot_path,
                     ground_truth_label=(ground_truth_by_object_id or {}).get(detection.object_id, ""),
                 )

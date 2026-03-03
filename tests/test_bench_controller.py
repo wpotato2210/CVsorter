@@ -420,6 +420,7 @@ def test_manual_fire_uses_scheduler_transport_send_without_send_command_side_cha
     controller.transport = transport
     controller.window.manual_lane_input.setValue(3)
     controller.window.manual_position_input.setValue(245.0)
+    controller._set_operator_mode(OperatorMode.MANUAL)
 
     ack = controller._send_poc_fire_command(reason="manual_fire_test")
 
@@ -433,8 +434,27 @@ def test_manual_fire_rejects_out_of_range_servo_values(qapp: QApplication, runti
     controller = BenchAppController(qapp, runtime_config)
     controller.window.manual_lane_input.setValue(runtime_config.bench_gui.manual_servo.max_lane)
     controller.window.manual_position_input.setValue(runtime_config.bench_gui.manual_servo.max_position_mm + 1.0)
+    controller._set_operator_mode(OperatorMode.MANUAL)
 
     ack = controller._send_poc_fire_command(reason="manual_fire_test")
 
     assert ack is None
     assert "out of range" in controller.window.last_command_label.text()
+
+
+def test_manual_fire_requires_manual_mode(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    ack = controller._send_poc_fire_command(reason="manual_fire_test")
+
+    assert ack is None
+    assert "requires MANUAL mode" in controller.window.last_command_label.text()
+
+
+def test_manual_fire_rejects_non_manual_test_reason(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller._set_operator_mode(OperatorMode.MANUAL)
+
+    ack = controller._send_poc_fire_command(reason="auto_detect")
+
+    assert ack is None
+    assert "manual-test path only" in controller.window.last_command_label.text()
