@@ -123,6 +123,23 @@ def test_runtime_config_accepts_esp32_transport_kind() -> None:
     assert config.transport.kind == "esp32"
 
 
+@pytest.mark.parametrize(
+    ("field_path", "value", "error_field"),
+    [
+        (("frame_source", "replay_frame_period_s"), float("nan"), "replay_frame_period_s"),
+        (("transport", "base_round_trip_ms"), float("inf"), "base_round_trip_ms"),
+        (("baseline_run", "detector_threshold"), float("-inf"), "detector_threshold"),
+    ],
+)
+def test_runtime_config_rejects_non_finite_numbers(field_path: tuple[str, str], value: float, error_field: str) -> None:
+    from coloursorter.config.runtime import _parse_simple_yaml
+
+    payload = _parse_simple_yaml(_canonical_text())
+    payload[field_path[0]][field_path[1]] = value
+    with pytest.raises(ConfigValidationError, match=f"{error_field} must be finite"):
+        RuntimeConfig.from_dict(payload)
+
+
 def test_runtime_config_esp32_mode_requires_optional_dependency(monkeypatch: pytest.MonkeyPatch) -> None:
     original_find_spec = importlib.util.find_spec
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None if name == "serial" else original_find_spec(name))
