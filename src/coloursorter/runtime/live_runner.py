@@ -185,6 +185,7 @@ class LiveRuntimeRunner:
                         image_width_px=frame.image_bgr.shape[1],
                     ),
                     detections=detections,
+                    thresholds=self.runtime_reject_thresholds,
                 )
                 pipeline_latency_ms = (self._now() - pipeline_start) * 1000.0
 
