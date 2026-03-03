@@ -45,3 +45,32 @@ def test_icd_cross_references_runtime_and_protocol() -> None:
     assert "docs/openspec/v3/protocol/commands.json" in icd
     assert "src/coloursorter/protocol/host.py" in icd
     assert "src/coloursorter/serial_interface/serial_interface.py" in icd
+
+
+def test_gui_layout_contract_is_mirrored_in_openspec() -> None:
+    runtime = json.loads(Path("gui/ui_main_layout.json").read_text(encoding="utf-8"))
+    spec = json.loads(Path("docs/openspec/v3/gui/ui_main_layout.json").read_text(encoding="utf-8"))
+
+    assert spec == runtime
+
+    widget_ids = {widget["id"] for widget in runtime["widgets"]}
+    assert {
+        "sel_mcu",
+        "sel_com_port",
+        "sel_baud",
+        "ctrl_manual_servo_test",
+        "panel_logging",
+    }.issubset(widget_ids)
+
+
+def test_default_config_artifact_is_mirrored_in_openspec() -> None:
+    runtime = Path("configs/default_config.yaml").read_text(encoding="utf-8")
+    spec = Path("docs/openspec/v3/configs/default_config.yaml").read_text(encoding="utf-8")
+
+    assert spec == runtime
+
+    assert "transport:" in runtime
+    assert "kind:" in runtime
+    assert "serial:" in runtime
+    assert "port:" in runtime
+    assert "baud:" in runtime

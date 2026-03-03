@@ -28,6 +28,36 @@
       "type": "label",
       "id": "lbl_status",
       "text": "Status: READY"
+    },
+    {
+      "type": "selector",
+      "id": "sel_mcu",
+      "binding": "transport.kind",
+      "label": "MCU"
+    },
+    {
+      "type": "selector",
+      "id": "sel_com_port",
+      "binding": "transport.serial.port",
+      "label": "COM Port"
+    },
+    {
+      "type": "selector",
+      "id": "sel_baud",
+      "binding": "transport.serial.baud",
+      "label": "Baud"
+    },
+    {
+      "type": "control",
+      "id": "ctrl_manual_servo_test",
+      "binding": "manual.servo_test",
+      "label": "Manual Servo Test"
+    },
+    {
+      "type": "panel",
+      "id": "panel_logging",
+      "binding": "logging.surface",
+      "label": "Logging"
     }
   ]
 }
