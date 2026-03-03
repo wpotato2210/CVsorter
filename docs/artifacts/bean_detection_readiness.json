@@ -1,0 +1,21 @@
+{
+  "hardware_ready": false,
+  "software_ready": false,
+  "dependencies_ready": false,
+  "overall_status": "NOT READY",
+  "issues": [
+    "No webcam device nodes detected (`/dev/video*` absent).",
+    "Camera driver inspection tool missing (`v4l2-ctl` not installed).",
+    "OpenCV import fails: missing system shared library `libGL.so.1`, blocking image capture/analysis runtime.",
+    "Qt/bench readiness smoke check fails for the same missing `libGL.so.1` dependency.",
+    "Optional serial dependency `pyserial` is not installed; required for direct hardware transport workflows."
+  ],
+  "next_steps": [
+    "Attach/enable the webcam and confirm Linux exposes it as `/dev/video0` (or equivalent).",
+    "Install V4L2 userspace tools (e.g., `v4l-utils`) and validate camera enumeration via `v4l2-ctl --list-devices`.",
+    "Install missing OpenGL runtime package providing `libGL.so.1` (distribution-specific package such as `libgl1`/`mesa-libGL`).",
+    "Re-run import and readiness checks: `python -c \"import cv2\"` and `python tools/check_qt_bench_readiness.py`.",
+    "Install serial runtime dependency when targeting physical controller: `python -m pip install pyserial`.",
+    "Once dependencies and hardware are available, run a webcam smoke capture through the live runtime path and verify frame ingestion end-to-end."
+  ]
+}
