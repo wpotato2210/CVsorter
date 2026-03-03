@@ -257,10 +257,9 @@ class BenchAppController(QObject):
         self._set_serial_status(self._serial_connected)
         self._on_controller_state_entered(ControllerState.IDLE)
 
-    def start(self) -> int:
+    def start(self) -> None:
         self.window.resize(1200, 900)
         self.window.show()
-        return self._app.exec()
 
     def _connect_view_actions(self) -> None:
         self.window.replay_button.clicked.connect(self.on_replay_clicked)

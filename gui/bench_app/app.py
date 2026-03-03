@@ -86,7 +86,8 @@ def main(argv: list[str] | None = None) -> int:
     runtime_config = RuntimeConfig.load_startup(args.config)
     app = QApplication(sys.argv if argv is None else [sys.argv[0], *argv])
     controller = BenchAppController(app, runtime_config=runtime_config)
-    return controller.start()
+    controller.start()
+    return app.exec()
 
 
 def run(argv: list[str] | None = None) -> int:
@@ -94,4 +95,4 @@ def run(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())
