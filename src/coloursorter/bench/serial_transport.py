@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 from coloursorter.scheduler import ScheduledCommand
 from coloursorter.protocol.constants import (
+    CMD_GET_STATE,
     CMD_HEARTBEAT,
     CMD_HELLO,
+    CMD_RESET_QUEUE,
     CMD_SCHED,
+    CMD_SET_MODE,
     SUPPORTED_CAPABILITIES,
     SUPPORTED_PROTOCOL_VERSION,
 )
@@ -70,6 +73,16 @@ class SerialTransportError(RuntimeError):
         )
 
 
+@dataclass(frozen=True)
+class InFlightCommandMetadata:
+    command: str
+    args: tuple[object, ...]
+    msg_id: str
+    sent_at_monotonic_s: float
+    uncertain_outcome: bool
+    uncertainty_reason: str | None = None
+
+
 class SerialMcuTransport:
     def __init__(
         self,
@@ -87,6 +100,11 @@ class SerialMcuTransport:
         self._next_msg_id = 1
         self._handshake_complete = False
         self._last_heartbeat_sent_at = 0.0
+        self._last_heartbeat_ok_at: float | None = None
+        self._state_sync_required = True
+        self._expected_mode = "AUTO"
+        self._expected_scheduler_state = "IDLE"
+        self._last_in_flight: InFlightCommandMetadata | None = None
 
     def close(self) -> None:
         if hasattr(self._serial, "close"):
@@ -106,6 +124,9 @@ class SerialMcuTransport:
 
     def transport_last_queue_cleared(self) -> bool:
         return self._last_queue_cleared
+
+    def last_in_flight_command(self) -> InFlightCommandMetadata | None:
+        return self._last_in_flight
 
     def send(self, command: ScheduledCommand) -> TransportResponse:
         self._ensure_link_ready()
@@ -135,6 +156,13 @@ class SerialMcuTransport:
     def _send_frame(self, command: str, args: tuple[object, ...] = ()) -> tuple[AckResponse, float]:
         msg_id = self._reserve_msg_id()
         payload = encode_packet_bytes(command, args, msg_id=msg_id)
+        self._last_in_flight = InFlightCommandMetadata(
+            command=command,
+            args=args,
+            msg_id=msg_id,
+            sent_at_monotonic_s=time.monotonic(),
+            uncertain_outcome=False,
+        )
 
         for attempt in range(self._config.max_retries + 1):
             started = time.perf_counter()
@@ -147,6 +175,15 @@ class SerialMcuTransport:
                     self._sleep(self._backoff_for_attempt(attempt) / 1000.0)
                     continue
                 self._last_fault_state = FaultState.WATCHDOG
+                self._state_sync_required = True
+                self._last_in_flight = InFlightCommandMetadata(
+                    command=command,
+                    args=args,
+                    msg_id=msg_id,
+                    sent_at_monotonic_s=time.monotonic(),
+                    uncertain_outcome=True,
+                    uncertainty_reason="NO_RESPONSE",
+                )
                 raise SerialTransportError.create(
                     category="serial_timeout",
                     detail=f"No MCU response within {self._config.timeout_s:.3f}s",
@@ -158,6 +195,15 @@ class SerialMcuTransport:
                 ack = parse_ack_tokens((parsed.command, *parsed.args))
             except (FrameFormatError, PacketValidationError) as exc:
                 self._last_fault_state = FaultState.SAFE
+                self._state_sync_required = True
+                self._last_in_flight = InFlightCommandMetadata(
+                    command=command,
+                    args=args,
+                    msg_id=msg_id,
+                    sent_at_monotonic_s=time.monotonic(),
+                    uncertain_outcome=True,
+                    uncertainty_reason="PARSE_ERROR",
+                )
                 raise SerialTransportError.create(
                     category="serial_parse_error",
                     detail=str(exc),
@@ -166,6 +212,11 @@ class SerialMcuTransport:
 
             self._last_queue_depth = ack.queue_depth or 0
             self._last_queue_cleared = ack.queue_cleared
+            if command in {CMD_SET_MODE, CMD_SCHED}:
+                self._expected_mode = ack.mode or self._expected_mode
+                self._expected_scheduler_state = ack.scheduler_state or self._expected_scheduler_state
+            if command == CMD_HEARTBEAT:
+                self._last_heartbeat_ok_at = time.monotonic()
             return ack, round_trip_ms
 
         raise AssertionError("unreachable")
@@ -173,13 +224,76 @@ class SerialMcuTransport:
     def _ensure_link_ready(self) -> None:
         now = time.monotonic()
         if not self._handshake_complete:
-            caps = ";".join(self._config.capabilities)
-            self._send_frame(CMD_HELLO, (self._config.protocol_version, caps))
-            self._handshake_complete = True
-            self._last_heartbeat_sent_at = 0.0
+            self._perform_handshake()
         if now - self._last_heartbeat_sent_at >= self._config.heartbeat_interval_s:
-            self._send_frame(CMD_HEARTBEAT)
+            heartbeat_ack, _ = self._send_frame(CMD_HEARTBEAT)
+            if heartbeat_ack.status != "ACK":
+                self._handshake_complete = False
+                self._state_sync_required = True
+                self._perform_handshake()
             self._last_heartbeat_sent_at = now
+        self._poll_heartbeat_health(now)
+        if self._state_sync_required:
+            self._sync_state_before_sched()
+
+    def _perform_handshake(self) -> None:
+        caps = ";".join(self._config.capabilities)
+        hello_ack, _ = self._send_frame(CMD_HELLO, (self._config.protocol_version, caps))
+        if hello_ack.status != "ACK":
+            self._last_fault_state = FaultState.SAFE
+            raise SerialTransportError.create("sync_failed", "HELLO failed", FaultState.SAFE)
+        self._handshake_complete = True
+        self._last_heartbeat_sent_at = 0.0
+        self._state_sync_required = True
+
+    def _poll_heartbeat_health(self, now: float) -> None:
+        if self._last_heartbeat_ok_at is None:
+            return
+        if now - self._last_heartbeat_ok_at < self._config.heartbeat_interval_s * 3:
+            return
+        try:
+            heartbeat_ack, _ = self._send_frame(CMD_HEARTBEAT)
+            if heartbeat_ack.status != "ACK":
+                self._last_fault_state = FaultState.SAFE
+                raise SerialTransportError.create("heartbeat_failed", "HEARTBEAT NACK", FaultState.SAFE)
+            self._last_heartbeat_sent_at = now
+        except SerialTransportError:
+            self._last_fault_state = FaultState.SAFE
+            raise
+
+    def _sync_state_before_sched(self) -> None:
+        ack, _ = self._send_frame(CMD_GET_STATE)
+        if ack.status != "ACK":
+            self._handshake_complete = False
+            self._perform_handshake()
+            ack, _ = self._send_frame(CMD_GET_STATE)
+            if ack.status != "ACK":
+                self._last_fault_state = FaultState.SAFE
+                raise SerialTransportError.create("sync_failed", "GET_STATE failed", FaultState.SAFE)
+
+        mode = ack.mode or "UNKNOWN"
+        queue_depth = ack.queue_depth or 0
+        scheduler_state = ack.scheduler_state or "UNKNOWN"
+        if (
+            mode != self._expected_mode
+            or queue_depth != self._last_queue_depth
+            or scheduler_state != self._expected_scheduler_state
+        ):
+            reset_ack, _ = self._send_frame(CMD_RESET_QUEUE)
+            if reset_ack.status != "ACK":
+                self._last_fault_state = FaultState.SAFE
+                raise SerialTransportError.create("sync_failed", "RESET_QUEUE failed", FaultState.SAFE)
+            if mode != self._expected_mode:
+                mode_ack, _ = self._send_frame(CMD_SET_MODE, (self._expected_mode,))
+                if mode_ack.status != "ACK":
+                    self._last_fault_state = FaultState.SAFE
+                    raise SerialTransportError.create("sync_failed", "SET_MODE failed", FaultState.SAFE)
+            self._expected_scheduler_state = "IDLE"
+            self._last_queue_depth = 0
+        else:
+            self._last_queue_depth = queue_depth
+            self._expected_scheduler_state = scheduler_state
+        self._state_sync_required = False
 
     def _reserve_msg_id(self) -> str:
         msg_id = str(self._next_msg_id)
