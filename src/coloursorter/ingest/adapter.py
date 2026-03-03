@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import json
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,9 @@ class IngestPayloadAdapter:
         )
 
     def _validate_against_contract(self, payload: dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            raise IngestValidationError("payload must be a mapping")
+
         ingest_required = {"frame_id", "timestamp", "image_shape"}
         required = tuple(self._contract.get("required", ()))
         # Some hardening artifacts now share a wire-frame schema path that is not
@@ -77,11 +81,41 @@ class IngestPayloadAdapter:
             if key not in payload:
                 raise IngestValidationError(f"Missing required field: {key}")
 
-        if not isinstance(payload.get("frame_id"), int):
+        frame_id = payload.get("frame_id")
+        if isinstance(frame_id, bool) or not isinstance(frame_id, int):
             raise IngestValidationError("frame_id must be integer")
-        if not isinstance(payload.get("timestamp"), (int, float)):
+
+        if frame_id < 0:
+            raise IngestValidationError("frame_id must be >= 0")
+
+        timestamp = payload.get("timestamp")
+        if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
             raise IngestValidationError("timestamp must be number")
+        if not math.isfinite(float(timestamp)):
+            raise IngestValidationError("timestamp must be finite")
+        if float(timestamp) < 0.0:
+            raise IngestValidationError("timestamp must be >= 0")
 
         image_shape = payload.get("image_shape")
-        if not isinstance(image_shape, list) or len(image_shape) != 3 or not all(isinstance(v, int) for v in image_shape):
+        if (
+            not isinstance(image_shape, list)
+            or len(image_shape) != 3
+            or not all(isinstance(v, int) and not isinstance(v, bool) for v in image_shape)
+        ):
             raise IngestValidationError("image_shape must be integer triplet [height, width, channels]")
+
+        height_px, width_px, channels = image_shape
+        if height_px <= 0 or width_px <= 0:
+            raise IngestValidationError("image_shape height and width must be > 0")
+        if channels not in {1, 3, 4}:
+            raise IngestValidationError("image_shape channels must be one of: 1, 3, 4")
+
+        previous_timestamp_s = payload.get("previous_timestamp_s", 0.0)
+        if isinstance(previous_timestamp_s, bool) or not isinstance(previous_timestamp_s, (int, float)):
+            raise IngestValidationError("previous_timestamp_s must be number")
+        if not math.isfinite(float(previous_timestamp_s)):
+            raise IngestValidationError("previous_timestamp_s must be finite")
+        if float(previous_timestamp_s) < 0.0:
+            raise IngestValidationError("previous_timestamp_s must be >= 0")
+        if float(previous_timestamp_s) > float(timestamp):
+            raise IngestValidationError("previous_timestamp_s must be <= timestamp")

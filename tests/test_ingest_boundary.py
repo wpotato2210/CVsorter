@@ -56,6 +56,23 @@ def test_schema_validation_rejects_bad_payload() -> None:
         adapter.adapt({"frame_id": "bad", "timestamp": 0.1, "image_shape": [1, 2, 3]})
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"frame_id": -1, "timestamp": 0.1, "image_shape": [1, 2, 3]},
+        {"frame_id": 1, "timestamp": -0.1, "image_shape": [1, 2, 3]},
+        {"frame_id": 1, "timestamp": float("nan"), "image_shape": [1, 2, 3]},
+        {"frame_id": 1, "timestamp": 0.1, "image_shape": [0, 2, 3]},
+        {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 2]},
+        {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 3], "previous_timestamp_s": 0.2},
+    ],
+)
+def test_schema_validation_rejects_invalid_ranges_and_shapes(payload: dict[str, object]) -> None:
+    adapter = IngestPayloadAdapter(CONTRACT)
+    with pytest.raises(IngestValidationError):
+        adapter.adapt(payload)
+
+
 def test_scheduler_boundary_timing_semantics_preserved() -> None:
     boundary = IngestBoundary(CONTRACT, capacity=1)
     boundary.submit(_payload(9, 1.5))
