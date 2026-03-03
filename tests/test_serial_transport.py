@@ -95,7 +95,7 @@ def test_serial_transport_raises_structured_timeout_error() -> None:
             return b""
 
     transport = SerialMcuTransport(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05, heartbeat_interval_s=0.0),
         serial_factory=lambda **_: _TimeoutSerial(),
     )
 
@@ -105,12 +105,107 @@ def test_serial_transport_raises_structured_timeout_error() -> None:
     assert exc_info.value.category == "serial_timeout"
 
 
+def test_serial_transport_requires_get_state_sync_and_recovers_with_reset_and_mode_set() -> None:
+    host = OpenSpecV3Host(max_queue_depth=4, mode="MANUAL")
+    host.queue.append((1, 123.0))
+    host.scheduler_state = "ACTIVE"
+    fake = _HostBackedSerial(host)
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05, heartbeat_interval_s=0.0),
+        serial_factory=lambda **_: fake,
+    )
+
+    response = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
+
+    commands = [parse_frame(raw.decode().strip()).command for raw in fake.written]
+    assert commands[:6] == ["HELLO", "HEARTBEAT", "GET_STATE", "RESET_QUEUE", "SET_MODE", "SCHED"]
+    assert response.ack_code == AckCode.ACK
+    assert response.mode == "AUTO"
+    assert response.queue_depth == 1
+
+
+def test_serial_transport_marks_in_flight_uncertain_on_timeout() -> None:
+    class _TimeoutSerial:
+        def write(self, _payload: bytes) -> None:
+            return None
+
+        def readline(self) -> bytes:
+            return b""
+
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.01, max_retries=0),
+        serial_factory=lambda **_: _TimeoutSerial(),
+    )
+
+    with pytest.raises(SerialTransportError):
+        transport.send(ScheduledCommand(lane=3, position_mm=111.0))
+
+    metadata = transport.last_in_flight_command()
+    assert metadata is not None
+    assert metadata.uncertain_outcome is True
+    assert metadata.uncertainty_reason == "NO_RESPONSE"
+
+
+def test_fault_injection_cable_unplug_replug_requires_resync() -> None:
+    host = OpenSpecV3Host(max_queue_depth=4)
+
+    class _FlakySerial(_HostBackedSerial):
+        def __init__(self, mcu_host: OpenSpecV3Host) -> None:
+            super().__init__(mcu_host)
+            self._drop_once = True
+
+        def readline(self) -> bytes:
+            request = self.written[-1].decode().strip()
+            command = parse_frame(request).command
+            if command == "HEARTBEAT" and self._drop_once:
+                self._drop_once = False
+                return b""
+            return self._host.handle_frame(request).encode() + b"\n"
+
+    fake = _FlakySerial(host)
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.01, max_retries=0, heartbeat_interval_s=0.0),
+        serial_factory=lambda **_: fake,
+    )
+
+    with pytest.raises(SerialTransportError):
+        transport.send(ScheduledCommand(lane=1, position_mm=50.0))
+
+    response = transport.send(ScheduledCommand(lane=1, position_mm=51.0))
+    commands = [parse_frame(raw.decode().strip()).command for raw in fake.written]
+    assert "GET_STATE" in commands
+    assert response.ack_code == AckCode.ACK
+
+
+def test_fault_injection_mcu_reset_mid_queue_triggers_deterministic_recovery() -> None:
+    host = OpenSpecV3Host(max_queue_depth=4)
+    fake = _HostBackedSerial(host)
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05, heartbeat_interval_s=0.0),
+        serial_factory=lambda **_: fake,
+    )
+
+    first = transport.send(ScheduledCommand(lane=1, position_mm=80.0))
+    assert first.ack_code == AckCode.ACK
+
+    host.protocol_synced = False
+    host.queue.clear()
+    host.scheduler_state = "IDLE"
+    host.mode = "AUTO"
+
+    second = transport.send(ScheduledCommand(lane=1, position_mm=81.0))
+    commands = [parse_frame(raw.decode().strip()).command for raw in fake.written]
+    assert commands.count("HELLO") >= 2
+    assert commands.count("GET_STATE") >= 2
+    assert second.ack_code == AckCode.ACK
+
+
 @pytest.mark.parametrize("transport_cls", [SerialMcuTransport, Esp32McuTransport])
 def test_esp32_adapter_matches_serial_sched_path(transport_cls: type[SerialMcuTransport] | type[Esp32McuTransport]) -> None:
     host = OpenSpecV3Host(max_queue_depth=4)
     fake = _HostBackedSerial(host)
     transport = transport_cls(
-        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05),
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05, heartbeat_interval_s=0.0),
         serial_factory=lambda **_: fake,
     )
 
