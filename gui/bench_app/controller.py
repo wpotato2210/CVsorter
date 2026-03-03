@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+import threading
+import time
+from typing import Any
 
 import cv2
 import numpy as np
@@ -66,6 +70,84 @@ class QueueConsumptionPolicy(str, Enum):
 class BenchCycleConfig:
     period_ms: int
     queue_consumption_policy: QueueConsumptionPolicy
+
+
+@dataclass(frozen=True)
+class WatchdogBudgetConfig:
+    frame_acquire_detect_ms: float
+    decision_schedule_ms: float
+    transport_ms: float
+    cycle_budget_ms: float
+
+
+@dataclass
+class QueueBackpressureMetrics:
+    offered: int = 0
+    accepted: int = 0
+    dropped_oldest: int = 0
+    dropped_newest: int = 0
+
+
+class BoundedDropQueue:
+    def __init__(self, maxlen: int, *, drop_oldest: bool) -> None:
+        self._queue: deque[Any] = deque(maxlen=maxlen)
+        self._cond = threading.Condition()
+        self._closed = False
+        self._drop_oldest = drop_oldest
+        self.metrics = QueueBackpressureMetrics()
+
+    def put(self, item: Any) -> None:
+        with self._cond:
+            self.metrics.offered += 1
+            if self._closed:
+                self.metrics.dropped_newest += 1
+                return
+            if len(self._queue) == self._queue.maxlen:
+                if self._drop_oldest:
+                    self._queue.popleft()
+                    self.metrics.dropped_oldest += 1
+                else:
+                    self.metrics.dropped_newest += 1
+                    return
+            self._queue.append(item)
+            self.metrics.accepted += 1
+            self._cond.notify()
+
+    def get(self, timeout_s: float | None = None) -> Any | None:
+        with self._cond:
+            if timeout_s is None:
+                while not self._queue and not self._closed:
+                    self._cond.wait()
+            else:
+                end_at = time.monotonic() + timeout_s
+                while not self._queue and not self._closed:
+                    remaining = end_at - time.monotonic()
+                    if remaining <= 0:
+                        return None
+                    self._cond.wait(timeout=remaining)
+            if not self._queue:
+                return None
+            return self._queue.popleft()
+
+    def close(self) -> None:
+        with self._cond:
+            self._closed = True
+            self._cond.notify_all()
+
+
+@dataclass(frozen=True)
+class _DetectedFrameBatch:
+    frame: BenchFrame
+    frame_rgb: object
+    detections: tuple[object, ...]
+    previous_timestamp_s: float
+    stage_ms: dict[str, float]
+
+
+@dataclass(frozen=True)
+class _WorkerEvent:
+    kind: str
+    payload: object
 
 
 class ControllerState(str, Enum):
@@ -196,6 +278,12 @@ class BenchAppController(QObject):
             period_ms=runtime_config.cycle_timing.period_ms,
             queue_consumption_policy=QueueConsumptionPolicy(runtime_config.cycle_timing.queue_consumption_policy),
         )
+        self.watchdog_config = WatchdogBudgetConfig(
+            frame_acquire_detect_ms=float(self.cycle_config.period_ms),
+            decision_schedule_ms=float(self.cycle_config.period_ms),
+            transport_ms=float(self.cycle_config.period_ms),
+            cycle_budget_ms=float(self.cycle_config.period_ms),
+        )
 
         project_root = Path(__file__).resolve().parents[2]
         replay_path = Path(runtime_config.frame_source.replay_path)
@@ -251,6 +339,18 @@ class BenchAppController(QObject):
         self._simulated_frame_id = 0
         self._latest_transport_queue_depth = 0
         self._latest_transport_queue_cleared = False
+        self._frame_transport_queue = BoundedDropQueue(maxlen=2, drop_oldest=True)
+        self._ui_event_queue = BoundedDropQueue(maxlen=64, drop_oldest=True)
+        self._acquire_requests = BoundedDropQueue(maxlen=2, drop_oldest=False)
+        self._worker_stop = threading.Event()
+        self._frame_worker_thread = threading.Thread(target=self._frame_worker_loop, name="bench-frame-worker", daemon=True)
+        self._transport_worker_thread = threading.Thread(
+            target=self._transport_worker_loop,
+            name="bench-transport-worker",
+            daemon=True,
+        )
+        self._frame_worker_thread.start()
+        self._transport_worker_thread.start()
         self._cycle_timer = QTimer(self)
         self._cycle_timer.setInterval(self.cycle_config.period_ms)
         self._cycle_timer.timeout.connect(self._on_cycle_tick)
@@ -258,6 +358,7 @@ class BenchAppController(QObject):
         self._state_machine = BenchControllerStateMachine(self)
         self._state_machine.entered.connect(self._on_controller_state_entered)
 
+        self._app.aboutToQuit.connect(self.shutdown)
         self._connect_view_actions()
         self._connect_view_updates()
         self._init_selector_controls_from_config()
@@ -265,6 +366,17 @@ class BenchAppController(QObject):
         self.transport_response_received.connect(self._on_transport_response_received)
         self._set_serial_status(self._serial_connected)
         self._on_controller_state_entered(ControllerState.IDLE)
+
+    @Slot()
+    def shutdown(self) -> None:
+        self._worker_stop.set()
+        self._acquire_requests.close()
+        self._frame_transport_queue.close()
+        self._ui_event_queue.close()
+        if self._frame_worker_thread.is_alive():
+            self._frame_worker_thread.join(timeout=0.2)
+        if self._transport_worker_thread.is_alive():
+            self._transport_worker_thread.join(timeout=0.2)
 
     def start(self) -> None:
         self.window.resize(1200, 900)
@@ -409,58 +521,145 @@ class BenchAppController(QObject):
     def _on_cycle_tick(self) -> None:
         if self.runtime_state.controller_state not in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
             return
+        self._acquire_requests.put({"requested_at": time.monotonic()})
+        self._drain_ui_worker_events()
+        for _ in range(3):
+            time.sleep(0.001)
+            self._drain_ui_worker_events()
 
-        try:
-            frame = self._next_frame()
-        except FrameSourceError as error:
-            self._handle_source_fault(str(error))
-            return
+    def _drain_ui_worker_events(self) -> None:
+        while True:
+            event = self._ui_event_queue.get(timeout_s=0.0)
+            if event is None:
+                return
+            if not isinstance(event, _WorkerEvent):
+                continue
+            if event.kind == "source_fault":
+                self._handle_source_fault(str(event.payload))
+                continue
+            if event.kind == "replay_complete":
+                self._publish_session_evaluation()
+                self._release_frame_source()
+                self.runtime_state.scheduler_state = "IDLE"
+                self._transition_to(ControllerState.IDLE, overlay_text="Replay complete")
+                continue
+            if event.kind == "faulted":
+                fault_state, detail = event.payload
+                self.runtime_state.fault_state = fault_state
+                self.runtime_state.scheduler_state = "IDLE"
+                self._transition_to(ControllerState.FAULTED, overlay_text=detail)
+                continue
+            if event.kind != "cycle_complete":
+                continue
 
-        if frame is None:
-            self._publish_session_evaluation()
-            self._release_frame_source()
-            self.runtime_state.scheduler_state = "IDLE"
-            self._transition_to(ControllerState.IDLE, overlay_text="Replay complete")
-            return
-
-        frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
-        self.frame_preview_requested.emit(frame_rgb.tobytes(), frame_rgb.shape[1], frame_rgb.shape[0])
-
-        detections = self._detector.detect(frame.image_bgr)
-        try:
-            logs = self.bench_runner.process_ingest_payload(
-                {
-                    "frame_id": frame.frame_id,
-                    "timestamp": frame.timestamp_s,
-                    "image_shape": [frame_rgb.shape[0], frame_rgb.shape[1], frame_rgb.shape[2]],
-                    "detections": detections,
-                    "previous_timestamp_s": self.runtime_state.previous_timestamp_s,
-                }
+            frame, logs, stage_ms, queue_stats = event.payload
+            self.frame_preview_requested.emit(frame.tobytes(), frame.shape[1], frame.shape[0])
+            self.window.statusBar().showMessage(
+                " | ".join(
+                    [
+                        f"acq_q drop_oldest={queue_stats['request_q'].dropped_oldest}",
+                        f"work_q drop_oldest={queue_stats['work_q'].dropped_oldest}",
+                        f"ui_q drop_oldest={queue_stats['ui_q'].dropped_oldest}",
+                        f"cycle_ms={stage_ms['cycle']:.1f}/{self.watchdog_config.cycle_budget_ms:.1f}",
+                    ]
+                )
             )
-        except SerialTransportError as error:
-            self.runtime_state.fault_state = error.fault_state
-            self.runtime_state.scheduler_state = "IDLE"
-            self._transition_to(ControllerState.FAULTED, overlay_text=error.detail)
-            return
-        self._step_transport_queue()
 
-        for log_entry in logs:
-            self._session_logs.append(log_entry)
-            self.transport_response_received.emit(log_entry)
-            self.log_entry_requested.emit(log_entry)
+            for log_entry in logs:
+                self._session_logs.append(log_entry)
+                self.transport_response_received.emit(log_entry)
+                self.log_entry_requested.emit(log_entry)
 
-        self.runtime_state.previous_timestamp_s = frame.timestamp_s
-        self.runtime_state.fault_state = self.transport.current_fault_state()
+            if logs:
+                self.runtime_state.previous_timestamp_s = logs[-1].frame_timestamp_s
+            self.runtime_state.fault_state = self.transport.current_fault_state()
+            if self.runtime_state.fault_state == FaultState.SAFE:
+                self._set_protocol_mode(OperatorMode.SAFE)
+                self._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
+                return
+            if self.runtime_state.fault_state == FaultState.WATCHDOG:
+                self.runtime_state.scheduler_state = "IDLE"
+                self._transition_to(ControllerState.FAULTED, overlay_text="Watchdog fault active")
+                return
+            self._emit_runtime_state()
 
-        if self.runtime_state.fault_state == FaultState.SAFE:
-            self._set_protocol_mode(OperatorMode.SAFE)
-            self._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
-            return
-        if self.runtime_state.fault_state == FaultState.WATCHDOG:
-            self.runtime_state.scheduler_state = "IDLE"
-            self._transition_to(ControllerState.FAULTED, overlay_text="Watchdog fault active")
-            return
-        self._emit_runtime_state()
+    def _frame_worker_loop(self) -> None:
+        while not self._worker_stop.is_set():
+            request = self._acquire_requests.get(timeout_s=0.1)
+            if request is None:
+                continue
+            try:
+                started = time.perf_counter()
+                frame = self._next_frame()
+                if frame is None:
+                    self._ui_event_queue.put(_WorkerEvent(kind="replay_complete", payload=None))
+                    continue
+                frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
+                detections = tuple(self._detector.detect(frame.image_bgr))
+                frame_stage_ms = (time.perf_counter() - started) * 1000.0
+                if frame_stage_ms > self.watchdog_config.frame_acquire_detect_ms:
+                    self._ui_event_queue.put(
+                        _WorkerEvent(kind="faulted", payload=(FaultState.WATCHDOG, "acquire/detect watchdog exceeded"))
+                    )
+                    continue
+                self._frame_transport_queue.put(
+                    _DetectedFrameBatch(
+                        frame=frame,
+                        frame_rgb=frame_rgb,
+                        detections=detections,
+                        previous_timestamp_s=self.runtime_state.previous_timestamp_s,
+                        stage_ms={"acquire_detect": frame_stage_ms},
+                    )
+                )
+            except FrameSourceError as error:
+                self._ui_event_queue.put(_WorkerEvent(kind="source_fault", payload=str(error)))
+
+    def _transport_worker_loop(self) -> None:
+        while not self._worker_stop.is_set():
+            batch = self._frame_transport_queue.get(timeout_s=0.1)
+            if batch is None or not isinstance(batch, _DetectedFrameBatch):
+                continue
+            decision_started = time.perf_counter()
+            ordered_detections = tuple(sorted(batch.detections, key=lambda det: (batch.frame.timestamp_s, det.object_id)))
+            try:
+                logs = self.bench_runner.process_ingest_payload(
+                    {
+                        "frame_id": batch.frame.frame_id,
+                        "timestamp": batch.frame.timestamp_s,
+                        "image_shape": [batch.frame_rgb.shape[0], batch.frame_rgb.shape[1], batch.frame_rgb.shape[2]],
+                        "detections": ordered_detections,
+                        "previous_timestamp_s": batch.previous_timestamp_s,
+                    }
+                )
+            except SerialTransportError as error:
+                self._ui_event_queue.put(_WorkerEvent(kind="faulted", payload=(error.fault_state, error.detail)))
+                continue
+            self._step_transport_queue()
+            decision_transport_ms = (time.perf_counter() - decision_started) * 1000.0
+            stage_ms = {
+                "acquire_detect": batch.stage_ms["acquire_detect"],
+                "decision_transport": decision_transport_ms,
+                "cycle": batch.stage_ms["acquire_detect"] + decision_transport_ms,
+            }
+            if decision_transport_ms > self.watchdog_config.transport_ms or stage_ms["cycle"] > self.watchdog_config.cycle_budget_ms:
+                self._ui_event_queue.put(
+                    _WorkerEvent(kind="faulted", payload=(FaultState.WATCHDOG, "cycle budget exceeded before command emit"))
+                )
+                continue
+            queue_stats = {
+                "request_q": self._acquire_requests.metrics,
+                "work_q": self._frame_transport_queue.metrics,
+                "ui_q": self._ui_event_queue.metrics,
+            }
+            self._ui_event_queue.put(_WorkerEvent(kind="cycle_complete", payload=(batch.frame_rgb, logs, stage_ms, queue_stats)))
+
+    def _clear_worker_backlog(self) -> None:
+        while self._acquire_requests.get(timeout_s=0.0) is not None:
+            pass
+        while self._frame_transport_queue.get(timeout_s=0.0) is not None:
+            pass
+        while self._ui_event_queue.get(timeout_s=0.0) is not None:
+            pass
 
     def _next_frame(self):
         # Temporary POC simplification: if no camera is available in LIVE mode,
@@ -725,6 +924,7 @@ class BenchAppController(QObject):
             return
         self.runtime_state.mode = BenchMode.REPLAY
         self._session_logs.clear()
+        self._clear_worker_backlog()
         if not self._activate_frame_source(BenchMode.REPLAY):
             return
         self._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
@@ -735,6 +935,7 @@ class BenchAppController(QObject):
             return
         self.runtime_state.mode = BenchMode.LIVE
         self._session_logs.clear()
+        self._clear_worker_backlog()
         if not self._activate_frame_source(BenchMode.LIVE):
             return
         self._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
@@ -747,6 +948,7 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
             self._publish_session_evaluation()
         self._cycle_timer.stop()
+        self._clear_worker_backlog()
         self._reset_protocol_queue()
         self._release_frame_source()
         self.runtime_state.previous_timestamp_s = 0.0
