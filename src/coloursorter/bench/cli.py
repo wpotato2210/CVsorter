@@ -1,3 +1,9 @@
+"""Command-line bench runner for replay and live ColourSorter validation.
+
+This module wires frame sources, detection providers, the deterministic pipeline,
+and artifact generation into a single executable workflow.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -33,6 +39,7 @@ from coloursorter.deploy import (
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for a bench execution session."""
     parser = argparse.ArgumentParser(description="Run ColourSorter bench scenarios.")
     parser.add_argument("--mode", choices=[BenchMode.REPLAY.value, BenchMode.LIVE.value], default=BenchMode.REPLAY.value)
     parser.add_argument("--source", default="data", help="Replay source path (directory/video/image).")
@@ -56,6 +63,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_runtime_config(runtime_config_path: str | Path) -> RuntimeConfig | None:
+    """Load startup configuration when the provided path exists."""
     config_path = Path(runtime_config_path)
     if not config_path.exists():
         return None
@@ -63,18 +71,25 @@ def _load_runtime_config(runtime_config_path: str | Path) -> RuntimeConfig | Non
 
 
 def _load_ground_truth(path: str) -> dict[str, str]:
+    """Load an optional object-id to label map from a JSON manifest."""
     if not path:
         return {}
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def _load_available_scenarios(runtime_config: RuntimeConfig | None):
+    """Return scenario definitions from config thresholds or built-in defaults."""
     if runtime_config is None:
         return default_scenarios()
     return scenarios_from_thresholds(runtime_config.scenario_thresholds)
 
 
 def _select_scenarios(names: list[str], runtime_config: RuntimeConfig | None):
+    """Resolve scenario names into a concrete scenario tuple.
+
+    Raises:
+        ValueError: If any requested scenario name is unknown.
+    """
     available = {scenario.name: scenario for scenario in _load_available_scenarios(runtime_config)}
     selected_names = names or ["nominal"]
     missing = [name for name in selected_names if name not in available]
@@ -84,6 +99,7 @@ def _select_scenarios(names: list[str], runtime_config: RuntimeConfig | None):
 
 
 def _build_detector(runtime_config: RuntimeConfig | None, provider_override: str, threshold_override: float):
+    """Build a detection provider based on config values and optional CLI overrides."""
     if runtime_config is None:
         provider = provider_override or "opencv_basic"
         return build_detection_provider(provider)
@@ -111,6 +127,7 @@ def _build_detector(runtime_config: RuntimeConfig | None, provider_override: str
 
 
 def _snapshot_frame(frame_bgr: object, output_root: Path, frame_id: int, enabled: bool) -> str:
+    """Persist a frame snapshot to the artifacts directory when enabled."""
     if not enabled:
         return ""
     frames_dir = output_root / "frames"
@@ -127,6 +144,7 @@ def _run_cycles(
     artifact_root: Path,
     ground_truth_by_object_id: dict[str, str],
 ) -> tuple[BenchLogEntry, ...]:
+    """Execute bench cycles and collect emitted bench log entries."""
     mode = BenchMode(args.mode)
     frame_source = (
         ReplayFrameSource(args.source, ReplayConfig(frame_period_s=args.frame_period_s))
@@ -165,6 +183,7 @@ def _run_cycles(
 
 
 def main() -> int:
+    """Run the bench CLI entry point and return a process-compatible exit code."""
     args = _parse_args()
     runtime_config = _load_runtime_config(args.runtime_config)
     scenarios = _select_scenarios(args.scenario, runtime_config)

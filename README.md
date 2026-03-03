@@ -1,127 +1,75 @@
-# Computer Vision Sorter
+# ColourSorter
 
-Computer vision sorter project beginning with ChatGPT generated OpenSpec.
+[![CI](https://img.shields.io/badge/ci-placeholder-lightgrey)](#) [![PyPI](https://img.shields.io/badge/pypi-placeholder-lightgrey)](#) [![License](https://img.shields.io/badge/license-placeholder-lightgrey)](#)
 
-## Scope statement
+Deterministic computer-vision bench tooling for lane-based sort decisioning, scheduling, and transport validation.
 
-- Product scope is a **computer vision sorter** with deterministic lane scheduling and actuation.
-- Runtime namespace and CLI retain legacy `coloursorter` names for compatibility in this release.
-- Frozen I/O contracts, dependencies, and named variables are unchanged.
+## Features
+
+- Replay and live frame execution modes.
+- Config-driven runtime behavior (`bench_runtime.yaml`).
+- Multiple detection providers (`opencv_basic`, `opencv_calibrated`, `model_stub`).
+- Scenario evaluation with pass/fail thresholds.
+- Artifact generation (`summary.json`, `events.jsonl`, `telemetry.csv`, optional snapshots/report).
+- Optional PySide6 bench GUI.
 
 ## Installation
 
 ```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-For serial hardware mode:
+Optional extras:
 
 ```bash
 python -m pip install -e .[serial]
-```
-
-For test/lint tooling:
-
-```bash
 python -m pip install -e .[dev]
 ```
 
-## Launch commands
+## Quick start
+
+GUI:
 
 ```bash
 coloursorter-bench-gui --config configs/bench_runtime.yaml
 ```
 
+Scenario evaluator:
+
 ```bash
 coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
-## Open in Qt Creator
-
-1. Open `ColourSorter.pro` in Qt Creator.
-2. Select any Desktop kit (no C++ build is required).
-3. Add a **Custom Executable** run configuration:
-   - Executable: `qtcreator/run_bench_gui.sh`
-   - Working directory: repository root
-4. Run the configuration.
-
-Reference: `qtcreator/README.md`.
-
-## Bench bring-up
-
-1. Install project dependencies: `python -m pip install -e .` (or `python -m pip install -e .[serial]` for serial hardware mode).
-2. Validate bench scenarios quickly: `coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20`.
-3. Start the GUI bench app with canonical runtime config: `coloursorter-bench-gui --config configs/bench_runtime.yaml`.
-
-## Runtime configuration
-
-- Canonical bench startup config: `configs/bench_runtime.yaml`.
-- Migration notes from legacy startup keys: `docs/bench_runtime_config_migration.md`.
-- Enum migration notes: `docs/config_migration_v4.md`.
-
-## Release done definition
-
-A release is only considered finished after the hardware readiness gate passes.
-
-1. Ensure required evidence is checked into `docs/artifacts/hardware_readiness/` per `docs/hardware_readiness_gate.md`.
-2. Run `python tools/hardware_readiness_report.py --strict`.
-3. Declare release complete only when the report returns `Overall status: PASS`.
-
-## Baseline CV sorting run (logged artifacts)
-
-Run the baseline pipeline in replay mode with explicit run metadata:
+Replay bench run:
 
 ```bash
-PYTHONPATH=src python -m coloursorter.bench.cli \
-  --mode replay \
-  --source data \
-  --max-cycles 100 \
-  --run-id baseline-001 \
-  --test-batch-id batch-a \
-  --artifact-root artifacts/baseline \
-  --enable-snapshots \
-  --detector-provider opencv_basic \
-  --detector-threshold 0.5 \
-  --calibration-mode fixed \
-  --text-report
+PYTHONPATH=src python -m coloursorter.bench.cli --mode replay --source data --artifact-root artifacts/bench --text-report
 ```
 
-Artifacts generated per run include:
-- `summary.json`
-- `events.jsonl`
-- `telemetry.csv`
-- `config_snapshot.json`
-- `frames/` (if `--enable-snapshots`)
+## CLI usage example
 
-### Threshold tuning and retraining
+```bash
+coloursorter-bench-cli --scenario nominal --avg-rtt-ms 9 --peak-rtt-ms 15
+```
 
-- Start with conservative reject threshold (`--detector-threshold` near `0.5` or higher).
-- Inspect confidence distribution in `events.jsonl` before adjusting thresholds.
-- Tune one variable at a time: threshold, provider mapping, calibration mode.
-- For retraining preparation, use deterministic augmentation in `coloursorter.train.augment_dataset(...)` and record train artifact metadata with `coloursorter.train.run_baseline_training(...)`.
+## Documentation
 
-## Development Setup
+- [Quick Start](QUICK_START.md)
+- [User Manual](USER_MANUAL.md)
+- [Developer Guide](DEVELOPER_GUIDE.md)
 
-1. Create and activate a virtual environment.
+## Developer setup
 
-   ```bash
-   python3.12 -m venv .venv
-   source .venv/bin/activate
-   ```
+```bash
+python -m pip install -e .[dev]
+pytest -q
+```
 
-2. Install the project in editable mode.
+Use installed entry points (`coloursorter-bench-gui`, `coloursorter-bench-cli`) to validate packaging/import behavior.
 
-   ```bash
-   python -m pip install --upgrade pip
-   python -m pip install -e .
-   ```
+## License
 
-3. Run the installed console entry point.
-
-   ```bash
-   coloursorter-bench-gui --config configs/bench_runtime.yaml
-   ```
-
-4. Do **not** run package modules directly (for example, `python gui/bench_app/app.py`).
-
-Direct module execution can inject repository paths into `sys.path`, which may make invalid imports appear to work locally. Running via the installed entry point validates package import paths exactly as they will run after `pip install -e .`.
+License placeholder.
