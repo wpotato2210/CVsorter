@@ -21,6 +21,9 @@ class IngestCycleInput:
     test_batch_id: str = "default-batch"
     frame_snapshot_path: str = ""
     ground_truth_by_object_id: dict[str, str] | None = None
+    captured_monotonic_s: float = 0.0
+    enqueued_monotonic_s: float = 0.0
+    detect_latency_ms: float = 0.0
 
 
 class IngestPayloadAdapter:
@@ -47,6 +50,8 @@ class IngestPayloadAdapter:
             test_batch_id=str(payload.get("test_batch_id", "default-batch")),
             frame_snapshot_path=str(payload.get("frame_snapshot_path", "")),
             ground_truth_by_object_id=payload.get("ground_truth_by_object_id"),
+            captured_monotonic_s=float(payload.get("captured_monotonic_s", 0.0)),
+            detect_latency_ms=float(payload.get("detect_latency_ms", 0.0)),
         )
 
     def _validate_against_contract(self, payload: dict[str, Any]) -> None:

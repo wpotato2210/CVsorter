@@ -4,7 +4,7 @@ from .live_source import LiveConfig, LiveFrameSource
 from .esp32_transport import Esp32McuTransport
 from .mock_transport import MockMcuTransport, MockTransportConfig
 from .replay_source import ReplayConfig, ReplayFrameSource
-from .runner import BenchRunner, BenchRunResult
+from .runner import BenchRunner, BenchRunResult, BenchSafetyConfig
 from .scenarios import (
     BenchScenario,
     BenchSummary,
@@ -32,6 +32,7 @@ __all__ = [
     "BenchMode",
     "BenchRunResult",
     "BenchRunner",
+    "BenchSafetyConfig",
     "BenchEvaluation",
     "BenchScenario",
     "BenchSummary",

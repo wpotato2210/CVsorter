@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from coloursorter.bench import AckCode, BenchLogEntry, BenchScenario
 from coloursorter.bench.evaluation import evaluate_logs, write_artifacts
 
@@ -41,6 +43,9 @@ def test_evaluate_logs_applies_scenarios() -> None:
 
     assert evaluation.passed
     assert evaluation.summary["avg_round_trip_ms"] == 11.0
+    assert evaluation.summary["p50_round_trip_ms"] == 11.0
+    assert evaluation.summary["p95_round_trip_ms"] == pytest.approx(11.9)
+    assert evaluation.summary["p99_round_trip_ms"] == pytest.approx(11.98)
     assert evaluation.scenarios[0].name == "tight"
 
 
