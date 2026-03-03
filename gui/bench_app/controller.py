@@ -4,15 +4,16 @@ from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+import logging
 import threading
 import time
-from typing import Any
+from typing import Any, Callable
 
 import cv2
 import numpy as np
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtStateMachine import QState, QStateMachine
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from coloursorter.bench import (
     AckCode,
@@ -43,6 +44,9 @@ from coloursorter.protocol import OpenSpecV3Host, is_mode_transition_allowed
 from coloursorter.serial_interface import AckResponse, parse_ack_tokens, parse_frame, serialize_packet
 
 from .app import BenchMainWindow, QueueState
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -146,6 +150,12 @@ class _DetectedFrameBatch:
 
 @dataclass(frozen=True)
 class _WorkerEvent:
+    kind: str
+    payload: object
+
+
+@dataclass(frozen=True)
+class _UiActionEvent:
     kind: str
     payload: object
 
@@ -336,11 +346,13 @@ class BenchAppController(QObject):
         self._session_logs: list[BenchLogEntry] = []
         self._frame_source: BenchFrameSource | None = None
         self._use_simulated_live_feed = False
+        self._degraded_mode_active = False
         self._simulated_frame_id = 0
         self._latest_transport_queue_depth = 0
         self._latest_transport_queue_cleared = False
         self._frame_transport_queue = BoundedDropQueue(maxlen=2, drop_oldest=True)
         self._ui_event_queue = BoundedDropQueue(maxlen=64, drop_oldest=True)
+        self._ui_action_queue = BoundedDropQueue(maxlen=128, drop_oldest=False)
         self._acquire_requests = BoundedDropQueue(maxlen=2, drop_oldest=False)
         self._worker_stop = threading.Event()
         self._frame_worker_thread = threading.Thread(target=self._frame_worker_loop, name="bench-frame-worker", daemon=True)
@@ -352,6 +364,9 @@ class BenchAppController(QObject):
         self._frame_worker_thread.start()
         self._transport_worker_thread.start()
         self._cycle_timer = QTimer(self)
+        self._ui_action_timer = QTimer(self)
+        self._ui_action_timer.setInterval(0)
+        self._ui_action_timer.timeout.connect(self._drain_ui_action_events)
         self._cycle_timer.setInterval(self.cycle_config.period_ms)
         self._cycle_timer.timeout.connect(self._on_cycle_tick)
 
@@ -373,6 +388,7 @@ class BenchAppController(QObject):
         self._acquire_requests.close()
         self._frame_transport_queue.close()
         self._ui_event_queue.close()
+        self._ui_action_queue.close()
         if self._frame_worker_thread.is_alive():
             self._frame_worker_thread.join(timeout=0.2)
         if self._transport_worker_thread.is_alive():
@@ -383,19 +399,53 @@ class BenchAppController(QObject):
         self.window.show()
 
     def _connect_view_actions(self) -> None:
-        self.window.replay_button.clicked.connect(self.on_replay_clicked)
-        self.window.live_button.clicked.connect(self.on_live_clicked)
-        self.window.home_button.clicked.connect(self.on_home_clicked)
-        self.window.serial_connect_button.clicked.connect(self.on_serial_connect_clicked)
-        self.window.serial_disconnect_button.clicked.connect(self.on_serial_disconnect_clicked)
-        self.window.fire_test_button.clicked.connect(self.on_fire_test_clicked)
-        self.window.trigger_threshold_input.valueChanged.connect(self.on_trigger_threshold_changed)
-        self.window.belt_speed_input.valueChanged.connect(self.on_belt_speed_changed)
-        self.window.mcu_selector.currentTextChanged.connect(self.on_mcu_selector_changed)
-        self.window.com_selector.currentTextChanged.connect(self.on_com_selector_changed)
-        self.window.baud_selector.currentTextChanged.connect(self.on_baud_selector_changed)
-        self.window.log_level_selector.currentTextChanged.connect(self.on_log_level_changed)
-        self.window.clear_log_button.clicked.connect(self.on_clear_log_clicked)
+        self.window.replay_button.clicked.connect(lambda: self._enqueue_ui_action("replay", None))
+        self.window.live_button.clicked.connect(lambda: self._enqueue_ui_action("live", None))
+        self.window.home_button.clicked.connect(lambda: self._enqueue_ui_action("home", None))
+        self.window.serial_connect_button.clicked.connect(lambda: self._enqueue_ui_action("serial_connect", None))
+        self.window.serial_disconnect_button.clicked.connect(lambda: self._enqueue_ui_action("serial_disconnect", None))
+        self.window.fire_test_button.clicked.connect(lambda: self._enqueue_ui_action("fire_test", None))
+        self.window.trigger_threshold_input.valueChanged.connect(
+            lambda value: self._enqueue_ui_action("trigger_threshold", float(value))
+        )
+        self.window.belt_speed_input.valueChanged.connect(lambda value: self._enqueue_ui_action("belt_speed", float(value)))
+        self.window.mcu_selector.currentTextChanged.connect(lambda value: self._enqueue_ui_action("mcu_selector", value))
+        self.window.com_selector.currentTextChanged.connect(lambda value: self._enqueue_ui_action("com_selector", value))
+        self.window.baud_selector.currentTextChanged.connect(lambda value: self._enqueue_ui_action("baud_selector", value))
+        self.window.log_level_selector.currentTextChanged.connect(lambda value: self._enqueue_ui_action("log_level", value))
+        self.window.clear_log_button.clicked.connect(lambda: self._enqueue_ui_action("clear_log", None))
+
+    def _enqueue_ui_action(self, kind: str, payload: object) -> None:
+        self._ui_action_queue.put(_UiActionEvent(kind=kind, payload=payload))
+        if not self._ui_action_timer.isActive():
+            self._ui_action_timer.start()
+
+    def _drain_ui_action_events(self) -> None:
+        handlers: dict[str, Callable[[object], None]] = {
+            "replay": lambda _payload: self.on_replay_clicked(),
+            "live": lambda _payload: self.on_live_clicked(),
+            "home": lambda _payload: self.on_home_clicked(),
+            "serial_connect": lambda _payload: self.on_serial_connect_clicked(),
+            "serial_disconnect": lambda _payload: self.on_serial_disconnect_clicked(),
+            "fire_test": lambda _payload: self.on_fire_test_clicked(),
+            "trigger_threshold": lambda payload: self.on_trigger_threshold_changed(float(payload)),
+            "belt_speed": lambda payload: self.on_belt_speed_changed(float(payload)),
+            "mcu_selector": lambda payload: self.on_mcu_selector_changed(str(payload)),
+            "com_selector": lambda payload: self.on_com_selector_changed(str(payload)),
+            "baud_selector": lambda payload: self.on_baud_selector_changed(str(payload)),
+            "log_level": lambda payload: self.on_log_level_changed(str(payload)),
+            "clear_log": lambda _payload: self.on_clear_log_clicked(),
+        }
+        while True:
+            event = self._ui_action_queue.get(timeout_s=0.0)
+            if event is None:
+                self._ui_action_timer.stop()
+                return
+            if not isinstance(event, _UiActionEvent):
+                continue
+            handler = handlers.get(event.kind)
+            if handler is not None:
+                handler(event.payload)
 
     def _connect_view_updates(self) -> None:
         self.frame_preview_requested.connect(self.window.update_frame_preview)
@@ -452,6 +502,7 @@ class BenchAppController(QObject):
                 controller_state=self.runtime_state.controller_state.value,
                 scheduler_state=self.runtime_state.scheduler_state,
                 mode=GUI_TO_HOST_MODE[self.runtime_state.operator_mode],
+                degraded_mode=self._degraded_mode_active,
             )
         )
         self.fault_state_requested.emit(self.runtime_state.fault_state)
@@ -497,6 +548,47 @@ class BenchAppController(QObject):
             self.window.home_button.setText("Clear SAFE")
         else:
             self.window.home_button.setText("Home")
+
+    def _is_auto_cycle_active(self) -> bool:
+        return (
+            self.runtime_state.operator_mode == OperatorMode.AUTO
+            and self.runtime_state.controller_state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}
+        )
+
+    def _capture_queue_state(self) -> dict[str, object]:
+        return {
+            "depth": self._transport_queue_depth(),
+            "scheduler_state": self.runtime_state.scheduler_state,
+            "controller_state": self.runtime_state.controller_state.value,
+        }
+
+    def _audit_operator_command(
+        self,
+        command: str,
+        *,
+        outcome: str,
+        before_mode: OperatorMode,
+        queue_before: dict[str, object],
+    ) -> None:
+        LOGGER.info(
+            "operator_command=%s outcome=%s before_mode=%s after_mode=%s queue_before=%s queue_after=%s",
+            command,
+            outcome,
+            before_mode.value,
+            self.runtime_state.operator_mode.value,
+            queue_before,
+            self._capture_queue_state(),
+        )
+
+    def _set_degraded_mode(self, active: bool, reason: str = "") -> None:
+        self._degraded_mode_active = active
+        if active:
+            self.window.statusBar().showMessage(f"DEGRADED MODE: {reason}")
+            self.lane_overlay_requested.emit(f"DEGRADED: {reason}")
+            if self.runtime_state.operator_mode == OperatorMode.AUTO:
+                self._set_protocol_mode(OperatorMode.SAFE)
+                self.runtime_state.scheduler_state = "IDLE"
+        self._emit_runtime_state()
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
         if state == self.runtime_state.controller_state:
@@ -621,19 +713,36 @@ class BenchAppController(QObject):
                 continue
             decision_started = time.perf_counter()
             ordered_detections = tuple(sorted(batch.detections, key=lambda det: (batch.frame.timestamp_s, det.object_id)))
-            try:
-                logs = self.bench_runner.process_ingest_payload(
-                    {
-                        "frame_id": batch.frame.frame_id,
-                        "timestamp": batch.frame.timestamp_s,
-                        "image_shape": [batch.frame_rgb.shape[0], batch.frame_rgb.shape[1], batch.frame_rgb.shape[2]],
-                        "detections": ordered_detections,
-                        "previous_timestamp_s": batch.previous_timestamp_s,
-                    }
+            if self._degraded_mode_active and self.runtime_state.operator_mode == OperatorMode.AUTO:
+                logs = (
+                    BenchLogEntry(
+                        frame_timestamp_s=batch.frame.timestamp_s,
+                        trigger_generation_s=batch.frame.timestamp_s,
+                        lane=-1,
+                        decision="autonomy_inhibited_degraded_camera",
+                        rejection_reason="synthetic_or_unverified_camera",
+                        protocol_round_trip_ms=0.0,
+                        ack_code="-",
+                        queue_depth=self._transport_queue_depth(),
+                        scheduler_state=self.runtime_state.scheduler_state,
+                        mode=GUI_TO_HOST_MODE[self.runtime_state.operator_mode],
+                        command_source="degraded_guard",
+                    ),
                 )
-            except SerialTransportError as error:
-                self._ui_event_queue.put(_WorkerEvent(kind="faulted", payload=(error.fault_state, error.detail)))
-                continue
+            else:
+                try:
+                    logs = self.bench_runner.process_ingest_payload(
+                        {
+                            "frame_id": batch.frame.frame_id,
+                            "timestamp": batch.frame.timestamp_s,
+                            "image_shape": [batch.frame_rgb.shape[0], batch.frame_rgb.shape[1], batch.frame_rgb.shape[2]],
+                            "detections": ordered_detections,
+                            "previous_timestamp_s": batch.previous_timestamp_s,
+                        }
+                    )
+                except SerialTransportError as error:
+                    self._ui_event_queue.put(_WorkerEvent(kind="faulted", payload=(error.fault_state, error.detail)))
+                    continue
             self._step_transport_queue()
             decision_transport_ms = (time.perf_counter() - decision_started) * 1000.0
             stage_ms = {
@@ -693,14 +802,28 @@ class BenchAppController(QObject):
             source.open()
         except FrameSourceError as error:
             if mode == BenchMode.LIVE:
+                if not self._operator_acknowledges_simulated_feed(str(error)):
+                    self._handle_source_fault("LIVE camera unavailable; simulated feed not acknowledged")
+                    return False
                 self._use_simulated_live_feed = True
                 self._simulated_frame_id = 0
-                self.lane_overlay_requested.emit("LIVE mode (simulated camera feed)")
+                self._set_degraded_mode(True, "Synthetic camera feed in LIVE mode")
                 return True
             self._handle_source_fault(str(error))
             return False
         self._frame_source = source
+        self._set_degraded_mode(False)
         return True
+
+    def _operator_acknowledges_simulated_feed(self, detail: str) -> bool:
+        response = QMessageBox.question(
+            self.window,
+            "Acknowledge simulated feed",
+            f"LIVE camera unavailable ({detail}). Use simulated feed and enter degraded mode?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return response == QMessageBox.StandardButton.Yes
 
     def _handle_source_fault(self, message: str) -> None:
         self._release_frame_source()
@@ -843,12 +966,17 @@ class BenchAppController(QObject):
         return is_mode_transition_allowed(GUI_TO_HOST_MODE[current_mode], GUI_TO_HOST_MODE[target_mode])
 
     def recover_safe_to_manual(self) -> bool:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
         if self.runtime_state.controller_state != ControllerState.SAFE:
+            self._audit_operator_command("recover_safe_to_manual", outcome="rejected_not_safe", before_mode=before_mode, queue_before=queue_before)
             return False
         if not self._is_mode_transition_allowed(self.runtime_state.operator_mode, OperatorMode.MANUAL):
+            self._audit_operator_command("recover_safe_to_manual", outcome="rejected_transition", before_mode=before_mode, queue_before=queue_before)
             return False
         ack = self._set_protocol_mode(OperatorMode.MANUAL)
         if ack is None:
+            self._audit_operator_command("recover_safe_to_manual", outcome="nack", before_mode=before_mode, queue_before=queue_before)
             return False
         self.runtime_state.fault_state = FaultState.NORMAL
         self._transition_to(ControllerState.IDLE, overlay_text="SAFE cleared; MANUAL mode")
@@ -863,15 +991,21 @@ class BenchAppController(QObject):
                 ack_code="-",
             )
         )
+        self._audit_operator_command("recover_safe_to_manual", outcome="processed", before_mode=before_mode, queue_before=queue_before)
         return True
 
     def recover_to_auto(self) -> bool:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
         if self.runtime_state.controller_state != ControllerState.IDLE:
+            self._audit_operator_command("recover_to_auto", outcome="rejected_non_idle", before_mode=before_mode, queue_before=queue_before)
             return False
         if not self._is_mode_transition_allowed(self.runtime_state.operator_mode, OperatorMode.AUTO):
+            self._audit_operator_command("recover_to_auto", outcome="rejected_transition", before_mode=before_mode, queue_before=queue_before)
             return False
         ack = self._set_protocol_mode(OperatorMode.AUTO)
         if ack is None:
+            self._audit_operator_command("recover_to_auto", outcome="nack", before_mode=before_mode, queue_before=queue_before)
             return False
         self.runtime_state.fault_state = FaultState.NORMAL
         self._transition_to(ControllerState.IDLE, overlay_text="AUTO mode active")
@@ -886,6 +1020,7 @@ class BenchAppController(QObject):
                 ack_code="-",
             )
         )
+        self._audit_operator_command("recover_to_auto", outcome="processed", before_mode=before_mode, queue_before=queue_before)
         return True
 
     def _transport_queue_depth(self) -> int:
@@ -920,30 +1055,43 @@ class BenchAppController(QObject):
 
     @Slot()
     def on_replay_clicked(self) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
         if self.runtime_state.controller_state != ControllerState.IDLE:
+            self._audit_operator_command("replay", outcome="ignored_non_idle", before_mode=before_mode, queue_before=queue_before)
             return
         self.runtime_state.mode = BenchMode.REPLAY
         self._session_logs.clear()
         self._clear_worker_backlog()
         if not self._activate_frame_source(BenchMode.REPLAY):
+            self._audit_operator_command("replay", outcome="source_activation_failed", before_mode=before_mode, queue_before=queue_before)
             return
         self._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+        self._audit_operator_command("replay", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
     def on_live_clicked(self) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
         if self.runtime_state.controller_state != ControllerState.IDLE:
+            self._audit_operator_command("live", outcome="ignored_non_idle", before_mode=before_mode, queue_before=queue_before)
             return
         self.runtime_state.mode = BenchMode.LIVE
         self._session_logs.clear()
         self._clear_worker_backlog()
         if not self._activate_frame_source(BenchMode.LIVE):
+            self._audit_operator_command("live", outcome="source_activation_failed", before_mode=before_mode, queue_before=queue_before)
             return
         self._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+        self._audit_operator_command("live", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
     def on_home_clicked(self) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
         if self.runtime_state.controller_state == ControllerState.SAFE:
             self.recover_safe_to_manual()
+            self._audit_operator_command("home", outcome="safe_recovery", before_mode=before_mode, queue_before=queue_before)
             return
         if self.runtime_state.controller_state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
             self._publish_session_evaluation()
@@ -966,44 +1114,89 @@ class BenchAppController(QObject):
                 ack_code="-",
             )
         )
+        self._audit_operator_command("home", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot(float)
     def on_trigger_threshold_changed(self, value: float) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
         self.trigger_threshold = value
+        self._audit_operator_command("trigger_threshold", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot(float)
     def on_belt_speed_changed(self, value: float) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
         self.belt_speed_mm_s = value
+        self._audit_operator_command("belt_speed", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot(str)
     def on_mcu_selector_changed(self, value: str) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
+        if self._is_auto_cycle_active():
+            self._audit_operator_command("mcu_selector", outcome="blocked_auto_cycle", before_mode=before_mode, queue_before=queue_before)
+            return
         self._selected_transport_kind = value
+        self._audit_operator_command("mcu_selector", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot(str)
     def on_com_selector_changed(self, value: str) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
+        if self._is_auto_cycle_active():
+            self._audit_operator_command("com_selector", outcome="blocked_auto_cycle", before_mode=before_mode, queue_before=queue_before)
+            return
         self._selected_serial_port = value
+        self._audit_operator_command("com_selector", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot(str)
     def on_baud_selector_changed(self, value: str) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
+        if self._is_auto_cycle_active():
+            self._audit_operator_command("baud_selector", outcome="blocked_auto_cycle", before_mode=before_mode, queue_before=queue_before)
+            return
         try:
             self._selected_serial_baud = int(value)
         except ValueError:
+            self._audit_operator_command("baud_selector", outcome="invalid_value", before_mode=before_mode, queue_before=queue_before)
             return
+        self._audit_operator_command("baud_selector", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot(str)
     def on_log_level_changed(self, value: str) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
         self._selected_log_level = value
+        self._audit_operator_command("log_level", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
     def on_clear_log_clicked(self) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
         self.window.log_table.setRowCount(0)
+        self._audit_operator_command("clear_log", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
     def on_fire_test_clicked(self) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
+        if self._is_auto_cycle_active():
+            self._set_last_command_status("manual fire rejected: AUTO cycle active")
+            self._audit_operator_command("fire_test", outcome="blocked_auto_cycle", before_mode=before_mode, queue_before=queue_before)
+            return
         self._send_poc_fire_command(reason="manual_fire_test")
+        self._audit_operator_command("fire_test", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
     def on_serial_connect_clicked(self) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
+        if self._is_auto_cycle_active():
+            self._set_serial_status(self._serial_connected, "blocked: AUTO cycle active")
+            self._audit_operator_command("serial_connect", outcome="blocked_auto_cycle", before_mode=before_mode, queue_before=queue_before)
+            return
         selected_kind = self._selected_transport_kind
         if selected_kind == "mock":
             self.transport = MockMcuTransport(
@@ -1015,10 +1208,12 @@ class BenchAppController(QObject):
             )
             self._serial_connected = False
             self._set_serial_status(False, "mock transport")
+            self._audit_operator_command("serial_connect", outcome="processed", before_mode=before_mode, queue_before=queue_before)
             return
 
         if self._serial_connected:
             self._set_serial_status(True)
+            self._audit_operator_command("serial_connect", outcome="already_connected", before_mode=before_mode, queue_before=queue_before)
             return
         try:
             transport_cls = SerialMcuTransport if selected_kind == "serial" else Esp32McuTransport
@@ -1031,15 +1226,24 @@ class BenchAppController(QObject):
             )
             self._serial_connected = True
             self._set_serial_status(True)
+            self._audit_operator_command("serial_connect", outcome="processed", before_mode=before_mode, queue_before=queue_before)
         except RuntimeError as exc:
             self._set_serial_status(False, self._serial_connect_error_detail(exc))
+            self._audit_operator_command("serial_connect", outcome="error", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
     def on_serial_disconnect_clicked(self) -> None:
+        before_mode = self.runtime_state.operator_mode
+        queue_before = self._capture_queue_state()
+        if self._is_auto_cycle_active():
+            self._set_serial_status(self._serial_connected, "blocked: AUTO cycle active")
+            self._audit_operator_command("serial_disconnect", outcome="blocked_auto_cycle", before_mode=before_mode, queue_before=queue_before)
+            return
         if hasattr(self.transport, "close") and callable(self.transport.close):
             self.transport.close()
         self._serial_connected = False
         self._set_serial_status(False)
+        self._audit_operator_command("serial_disconnect", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     def _serial_connect_error_detail(self, error: RuntimeError) -> str:
         error_text = str(error)

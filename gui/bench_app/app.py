@@ -22,6 +22,7 @@ class QueueState:
     controller_state: str
     scheduler_state: str
     mode: str
+    degraded_mode: bool = False
 
 
 class BenchMainWindow(QMainWindow):
@@ -43,8 +44,9 @@ class BenchMainWindow(QMainWindow):
         self.queue_state_label.setText(f"State: {queue_state.controller_state}")
         self.scheduler_state_label.setText(f"Scheduler: {queue_state.scheduler_state}")
         self.mode_label.setText(f"Mode: {queue_state.mode}")
+        degraded_prefix = "DEGRADED | " if queue_state.degraded_mode else ""
         self.statusBar().showMessage(
-            f"{queue_state.controller_state} | mode={queue_state.mode} | sched={queue_state.scheduler_state} | queue={queue_state.depth}/{queue_state.capacity}"
+            f"{degraded_prefix}{queue_state.controller_state} | mode={queue_state.mode} | sched={queue_state.scheduler_state} | queue={queue_state.depth}/{queue_state.capacity}"
         )
 
     def set_fault_state(self, fault_state: FaultState) -> None:
