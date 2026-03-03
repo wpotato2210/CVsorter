@@ -75,7 +75,12 @@
           "queue_depth",
           "scheduler_state",
           "queue_cleared"
-        ]
+        ],
+        "not": {
+          "required": [
+            "nack_code"
+          ]
+        }
       }
     },
     {
@@ -92,7 +97,31 @@
       "then": {
         "required": [
           "nack_code"
-        ]
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "mode"
+              ]
+            },
+            {
+              "required": [
+                "queue_depth"
+              ]
+            },
+            {
+              "required": [
+                "scheduler_state"
+              ]
+            },
+            {
+              "required": [
+                "queue_cleared"
+              ]
+            }
+          ]
+        }
       }
     }
   ]
