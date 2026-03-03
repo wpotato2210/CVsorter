@@ -40,6 +40,12 @@ from coloursorter.bench.serial_transport import SerialMcuTransport, SerialTransp
 from coloursorter.config import RuntimeConfig
 from coloursorter.scheduler import ScheduledCommand
 from coloursorter.deploy import OpenCvDetectionProvider, PipelineRunner
+from coloursorter.eval.reject_profiles import (
+    RejectProfileValidationError,
+    default_profile,
+    load_reject_profiles,
+    selected_thresholds,
+)
 from coloursorter.protocol import OpenSpecV3Host, is_mode_transition_allowed
 from coloursorter.serial_interface import AckResponse, parse_ack_tokens, parse_frame, serialize_packet
 
@@ -47,6 +53,21 @@ from .app import BenchMainWindow, QueueState
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _resolve_runtime_reject_thresholds(project_root: Path) -> dict[str, float]:
+    profiles_path = project_root / "configs" / "reject_profiles.yaml"
+    try:
+        profiles, selected_name = load_reject_profiles(profiles_path)
+        resolved = selected_thresholds(profiles, selected_name)
+    except RejectProfileValidationError as exc:
+        resolved = default_profile().thresholds
+        LOGGER.warning(
+            "Failed to load reject profiles from %s: %s. Falling back to default reject thresholds.",
+            profiles_path,
+            exc,
+        )
+    return {key: float(resolved[key]) for key in sorted(resolved)}
 
 
 @dataclass(frozen=True)
@@ -257,6 +278,8 @@ class BenchAppController(QObject):
         super().__init__()
         self._app = app
         self._runtime_config = runtime_config
+        project_root = Path(__file__).resolve().parents[2]
+        self.runtime_reject_thresholds = _resolve_runtime_reject_thresholds(project_root)
         self.window = BenchMainWindow()
         self.trigger_threshold = runtime_config.baseline_run.detector_threshold
         self.belt_speed_mm_s = 140.0
@@ -295,7 +318,6 @@ class BenchAppController(QObject):
             cycle_budget_ms=float(self.cycle_config.period_ms),
         )
 
-        project_root = Path(__file__).resolve().parents[2]
         replay_path = Path(runtime_config.frame_source.replay_path)
         if not replay_path.is_absolute():
             replay_path = project_root / replay_path
@@ -311,6 +333,7 @@ class BenchAppController(QObject):
             lane_config_path=project_root / "configs" / "lane_geometry.yaml",
             calibration_path=project_root / "configs" / "calibration.json",
         )
+        setattr(self.pipeline, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
         if runtime_config.transport.kind in {"serial", "esp32"}:
             transport_cls = SerialMcuTransport if runtime_config.transport.kind == "serial" else Esp32McuTransport
             self.transport = transport_cls(
@@ -340,6 +363,7 @@ class BenchAppController(QObject):
         self.bench_runner = BenchRunner(self.pipeline, self.transport, self.encoder)
         self._protocol_host = OpenSpecV3Host(max_queue_depth=self.transport_config.max_queue_depth)
         self._detector = OpenCvDetectionProvider()
+        setattr(self._detector, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
         self._selected_scenarios = tuple(
             s for s in scenarios_from_thresholds(runtime_config.scenario_thresholds) if s.name == "nominal"
         )

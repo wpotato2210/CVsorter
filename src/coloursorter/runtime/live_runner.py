@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +25,31 @@ from coloursorter.deploy import (
     PreprocessConfig,
     build_detection_provider,
 )
+from coloursorter.eval.reject_profiles import (
+    RejectProfileValidationError,
+    default_profile,
+    load_reject_profiles,
+    selected_thresholds,
+)
 from coloursorter.model import FrameMetadata
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _resolve_runtime_reject_thresholds(project_root: Path) -> dict[str, float]:
+    profiles_path = project_root / "configs" / "reject_profiles.yaml"
+    try:
+        profiles, selected_name = load_reject_profiles(profiles_path)
+        resolved = selected_thresholds(profiles, selected_name)
+    except RejectProfileValidationError as exc:
+        resolved = default_profile().thresholds
+        LOGGER.warning(
+            "Failed to load reject profiles from %s: %s. Falling back to default reject thresholds.",
+            profiles_path,
+            exc,
+        )
+    return {key: float(resolved[key]) for key in sorted(resolved)}
 
 
 @dataclass(frozen=True)
@@ -110,9 +135,12 @@ class LiveRuntimeRunner:
         now_fn: Callable[[], float] | None = None,
     ) -> None:
         self._runtime_config = RuntimeConfig.load_startup(runtime_config_path)
+        project_root = Path(__file__).resolve().parents[3]
+        self.runtime_reject_thresholds = _resolve_runtime_reject_thresholds(project_root)
         if self._runtime_config.frame_source.mode != "live":
             raise ValueError("LiveRuntimeRunner requires frame_source.mode=live")
         self._pipeline = PipelineRunner(lane_config_path=lane_config_path, calibration_path=calibration_path)
+        setattr(self._pipeline, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
         self._frame_source = LiveFrameSource(
             LiveConfig(
                 camera_index=self._runtime_config.camera.camera_index,
@@ -120,6 +148,7 @@ class LiveRuntimeRunner:
             )
         )
         self._detector = build_live_detection_provider(self._runtime_config)
+        setattr(self._detector, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
         self._transport = build_live_transport(self._runtime_config)
         self._sleep = sleep_fn or time.sleep
         self._now = now_fn or time.perf_counter
