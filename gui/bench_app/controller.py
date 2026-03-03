@@ -11,6 +11,7 @@ from PySide6.QtStateMachine import QState, QStateMachine
 from PySide6.QtWidgets import QApplication
 
 from coloursorter.bench import (
+    AckCode,
     BenchFrameSource,
     BenchFrame,
     BenchLogEntry,
@@ -32,6 +33,7 @@ from coloursorter.bench import (
 )
 from coloursorter.bench.serial_transport import SerialMcuTransport, SerialTransportConfig, SerialTransportError
 from coloursorter.config import RuntimeConfig
+from coloursorter.scheduler import ScheduledCommand
 from coloursorter.deploy import OpenCvDetectionProvider, PipelineRunner
 from coloursorter.protocol import OpenSpecV3Host, is_mode_transition_allowed
 from coloursorter.serial_interface import AckResponse, parse_ack_tokens, parse_frame, serialize_packet
@@ -164,9 +166,13 @@ class BenchAppController(QObject):
         self._app = app
         self._runtime_config = runtime_config
         self.window = BenchMainWindow()
-        self.trigger_threshold = 0.5
+        self.trigger_threshold = runtime_config.baseline_run.detector_threshold
         self.belt_speed_mm_s = 140.0
         self._serial_connected = False
+        self._selected_transport_kind = runtime_config.transport.kind
+        self._selected_serial_port = runtime_config.transport.serial_port
+        self._selected_serial_baud = runtime_config.transport.serial_baud
+        self._selected_log_level = runtime_config.bench_gui.default_log_level
 
         self.transport_config = BenchTransportConfig(
             max_queue_depth=runtime_config.transport.max_queue_depth,
@@ -254,6 +260,7 @@ class BenchAppController(QObject):
 
         self._connect_view_actions()
         self._connect_view_updates()
+        self._init_selector_controls_from_config()
         self.mode_changed.connect(self._on_mode_changed)
         self.transport_response_received.connect(self._on_transport_response_received)
         self._set_serial_status(self._serial_connected)
@@ -272,6 +279,11 @@ class BenchAppController(QObject):
         self.window.fire_test_button.clicked.connect(self.on_fire_test_clicked)
         self.window.trigger_threshold_input.valueChanged.connect(self.on_trigger_threshold_changed)
         self.window.belt_speed_input.valueChanged.connect(self.on_belt_speed_changed)
+        self.window.mcu_selector.currentTextChanged.connect(self.on_mcu_selector_changed)
+        self.window.com_selector.currentTextChanged.connect(self.on_com_selector_changed)
+        self.window.baud_selector.currentTextChanged.connect(self.on_baud_selector_changed)
+        self.window.log_level_selector.currentTextChanged.connect(self.on_log_level_changed)
+        self.window.clear_log_button.clicked.connect(self.on_clear_log_clicked)
 
     def _connect_view_updates(self) -> None:
         self.frame_preview_requested.connect(self.window.update_frame_preview)
@@ -279,6 +291,38 @@ class BenchAppController(QObject):
         self.queue_state_requested.connect(self.window.set_queue_state)
         self.fault_state_requested.connect(self.window.set_fault_state)
         self.log_entry_requested.connect(self.window.append_log_entry)
+
+    def _init_selector_controls_from_config(self) -> None:
+        gui = self._runtime_config.bench_gui
+
+        self.window.mcu_selector.clear()
+        self.window.mcu_selector.addItems(list(gui.mcu_options))
+        self._set_combo_value(self.window.mcu_selector, self._selected_transport_kind)
+
+        self.window.com_selector.clear()
+        self.window.com_selector.addItems(list(gui.com_port_options))
+        self._set_combo_value(self.window.com_selector, self._selected_serial_port)
+
+        self.window.baud_selector.clear()
+        self.window.baud_selector.addItems([str(v) for v in gui.baud_options])
+        self._set_combo_value(self.window.baud_selector, str(self._selected_serial_baud))
+
+        self.window.log_level_selector.clear()
+        self.window.log_level_selector.addItems(list(gui.log_level_options))
+        self._set_combo_value(self.window.log_level_selector, gui.default_log_level)
+
+        manual = gui.manual_servo
+        self.window.manual_lane_input.setRange(manual.min_lane, manual.max_lane)
+        self.window.manual_lane_input.setValue(manual.default_lane)
+        self.window.manual_position_input.setRange(manual.min_position_mm, manual.max_position_mm)
+        self.window.manual_position_input.setValue(manual.default_position_mm)
+        self.window.log_autoscroll_checkbox.setChecked(True)
+
+    @staticmethod
+    def _set_combo_value(combo, value: str) -> None:
+        idx = combo.findText(value)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
+
 
     def _set_last_command_status(self, status: str) -> None:
         self.window.set_last_command_status(status)
@@ -502,15 +546,31 @@ class BenchAppController(QObject):
         return parse_ack_tokens((parsed_response.command, *parsed_response.args))
 
     def _send_poc_fire_command(self, reason: str) -> AckResponse | None:
-        ack = self._send_protocol_command("SCHED", (0, 100))
-        if ack is None:
-            self._set_last_command_status(f"<SCHED|0|100> ({reason}) -> no response")
+        lane = int(self.window.manual_lane_input.value())
+        position_mm = float(self.window.manual_position_input.value())
+        manual_cfg = self._runtime_config.bench_gui.manual_servo
+        if lane < manual_cfg.min_lane or lane > manual_cfg.max_lane:
+            self._set_last_command_status(f"manual fire rejected: lane {lane} out of range")
             return None
-        if ack.status == "ACK":
-            self._set_last_command_status(f"<SCHED|0|100> ({reason}) -> ACK")
-        else:
-            detail = f"NACK({ack.nack_code})"
-            self._set_last_command_status(f"<SCHED|0|100> ({reason}) -> {detail}")
+        if position_mm < manual_cfg.min_position_mm or position_mm > manual_cfg.max_position_mm:
+            self._set_last_command_status(f"manual fire rejected: position {position_mm:.1f} out of range")
+            return None
+
+        response = self.transport.send(ScheduledCommand(lane=lane, position_mm=position_mm))
+        ack = AckResponse(
+            status="ACK" if response.ack_code == AckCode.ACK else "NACK",
+            nack_code=response.nack_code,
+            detail=response.nack_detail,
+            queue_depth=response.queue_depth,
+            scheduler_state=response.scheduler_state,
+            mode=response.mode,
+            queue_cleared=response.queue_cleared,
+        )
+        self._update_transport_queue_observation(response.queue_depth, response.queue_cleared)
+        self.runtime_state.scheduler_state = response.scheduler_state
+        detail = "ACK" if ack.status == "ACK" else f"NACK({ack.nack_code})"
+        self._set_last_command_status(f"<SCHED|{lane}|{position_mm:.1f}> ({reason}) -> {detail}")
+        self._emit_runtime_state()
         return ack
 
     def _reset_protocol_queue(self) -> AckResponse | None:
@@ -692,24 +752,57 @@ class BenchAppController(QObject):
     def on_belt_speed_changed(self, value: float) -> None:
         self.belt_speed_mm_s = value
 
+    @Slot(str)
+    def on_mcu_selector_changed(self, value: str) -> None:
+        self._selected_transport_kind = value
+
+    @Slot(str)
+    def on_com_selector_changed(self, value: str) -> None:
+        self._selected_serial_port = value
+
+    @Slot(str)
+    def on_baud_selector_changed(self, value: str) -> None:
+        try:
+            self._selected_serial_baud = int(value)
+        except ValueError:
+            return
+
+    @Slot(str)
+    def on_log_level_changed(self, value: str) -> None:
+        self._selected_log_level = value
+
+    @Slot()
+    def on_clear_log_clicked(self) -> None:
+        self.window.log_table.setRowCount(0)
+
     @Slot()
     def on_fire_test_clicked(self) -> None:
         self._send_poc_fire_command(reason="manual_fire_test")
 
     @Slot()
     def on_serial_connect_clicked(self) -> None:
-        if self._runtime_config.transport.kind not in {"serial", "esp32"}:
+        selected_kind = self._selected_transport_kind
+        if selected_kind == "mock":
+            self.transport = MockMcuTransport(
+                config=MockTransportConfig(
+                    max_queue_depth=self.transport_config.max_queue_depth,
+                    base_round_trip_ms=self.transport_config.base_round_trip_ms,
+                    per_item_penalty_ms=self.transport_config.per_item_penalty_ms,
+                )
+            )
+            self._serial_connected = False
             self._set_serial_status(False, "mock transport")
             return
+
         if self._serial_connected:
             self._set_serial_status(True)
             return
         try:
-            transport_cls = SerialMcuTransport if self._runtime_config.transport.kind == "serial" else Esp32McuTransport
+            transport_cls = SerialMcuTransport if selected_kind == "serial" else Esp32McuTransport
             self.transport = transport_cls(
                 config=SerialTransportConfig(
-                    port=self._runtime_config.transport.serial_port,
-                    baud=self._runtime_config.transport.serial_baud,
+                    port=self._selected_serial_port,
+                    baud=self._selected_serial_baud,
                     timeout_s=self._runtime_config.transport.serial_timeout_s,
                 )
             )

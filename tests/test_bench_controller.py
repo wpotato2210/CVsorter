@@ -390,3 +390,51 @@ def test_controller_uses_esp32_transport_when_configured(
     controller = BenchAppController(qapp, esp32_runtime)
 
     assert isinstance(controller.transport, _StubSerialTransport)
+
+
+def test_manual_fire_uses_scheduler_transport_send_without_send_command_side_channel(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    class _NoBypassTransport:
+        def __init__(self) -> None:
+            self.sent: list[ScheduledCommand] = []
+
+        def send(self, command: ScheduledCommand) -> TransportResponse:
+            self.sent.append(command)
+            return TransportResponse(
+                ack_code=AckCode.ACK,
+                queue_depth=1,
+                round_trip_ms=1.0,
+                fault_state=FaultState.NORMAL,
+                scheduler_state="ACTIVE",
+                mode="MANUAL",
+                queue_cleared=False,
+            )
+
+        def send_command(self, _command: str, _args: tuple[object, ...] = ()) -> None:
+            raise AssertionError("manual fire must not bypass scheduler via send_command")
+
+    transport = _NoBypassTransport()
+    controller.transport = transport
+    controller.window.manual_lane_input.setValue(3)
+    controller.window.manual_position_input.setValue(245.0)
+
+    ack = controller._send_poc_fire_command(reason="manual_fire_test")
+
+    assert ack is not None and ack.status == "ACK"
+    assert len(transport.sent) == 1
+    assert transport.sent[0].lane == 3
+    assert transport.sent[0].position_mm == pytest.approx(245.0)
+
+
+def test_manual_fire_rejects_out_of_range_servo_values(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller.window.manual_lane_input.setValue(runtime_config.bench_gui.manual_servo.max_lane)
+    controller.window.manual_position_input.setValue(runtime_config.bench_gui.manual_servo.max_position_mm + 1.0)
+
+    ack = controller._send_poc_fire_command(reason="manual_fire_test")
+
+    assert ack is None
+    assert "out of range" in controller.window.last_command_label.text()

@@ -26,6 +26,9 @@ QUEUE_CONSUMPTION_VALUES = ("none", "one_per_tick", "all")
 DEFAULT_SERIAL_PORT = "/dev/ttyACM0"
 DEFAULT_SERIAL_BAUD = 115200
 DEFAULT_SERIAL_TIMEOUT_S = 0.100
+DEFAULT_MCU_OPTIONS = ("mock", "serial", "esp32")
+DEFAULT_BAUD_OPTIONS = (9600, 57600, 115200, 230400)
+DEFAULT_LOG_LEVEL_OPTIONS = ("DEBUG", "INFO", "WARN", "ERROR")
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,26 @@ class BaselineRunConfig:
 
 
 @dataclass(frozen=True)
+class ManualServoConfig:
+    default_lane: int
+    default_position_mm: float
+    min_lane: int
+    max_lane: int
+    min_position_mm: float
+    max_position_mm: float
+
+
+@dataclass(frozen=True)
+class BenchGuiConfig:
+    mcu_options: tuple[str, ...]
+    com_port_options: tuple[str, ...]
+    baud_options: tuple[int, ...]
+    log_level_options: tuple[str, ...]
+    default_log_level: str
+    manual_servo: ManualServoConfig
+
+
+@dataclass(frozen=True)
 class RuntimeConfig:
     motion_mode: str
     homing_mode: str
@@ -113,6 +136,7 @@ class RuntimeConfig:
     scenario_thresholds: ScenarioThresholdsConfig
     detection: DetectionConfig
     baseline_run: BaselineRunConfig
+    bench_gui: BenchGuiConfig
 
     @classmethod
     def from_text(cls, raw_text: str) -> "RuntimeConfig":
@@ -222,6 +246,64 @@ class RuntimeConfig:
         calibration_mode = _required_str(baseline_payload, "calibration_mode")
         _validate_enum("baseline_run.calibration_mode", calibration_mode, ("fixed", "adaptive"))
 
+        gui_payload = payload.get("bench_gui")
+        if gui_payload is not None and not isinstance(gui_payload, dict):
+            raise ConfigValidationError("bench_gui must be a mapping when provided")
+        gui_payload = gui_payload or {}
+
+        serial_options_payload = gui_payload.get("serial_options")
+        if serial_options_payload is not None and not isinstance(serial_options_payload, dict):
+            raise ConfigValidationError("bench_gui.serial_options must be a mapping when provided")
+        serial_options_payload = serial_options_payload or {}
+
+        mcu_options = _optional_list_of_str(serial_options_payload, "mcu_options", DEFAULT_MCU_OPTIONS)
+        if not mcu_options:
+            raise ConfigValidationError("bench_gui.serial_options.mcu_options must not be empty")
+
+        com_port_options = _optional_list_of_str(serial_options_payload, "com_port_options", (serial_port,))
+        if not com_port_options:
+            raise ConfigValidationError("bench_gui.serial_options.com_port_options must not be empty")
+
+        baud_options = _optional_list_of_int(serial_options_payload, "baud_options", DEFAULT_BAUD_OPTIONS)
+        if not baud_options:
+            raise ConfigValidationError("bench_gui.serial_options.baud_options must not be empty")
+        for baud in baud_options:
+            _validate_range("bench_gui.serial_options.baud_options[]", baud, min_value=1)
+
+        logging_payload = gui_payload.get("logging")
+        if logging_payload is not None and not isinstance(logging_payload, dict):
+            raise ConfigValidationError("bench_gui.logging must be a mapping when provided")
+        logging_payload = logging_payload or {}
+        log_level_options = _optional_list_of_str(logging_payload, "levels", DEFAULT_LOG_LEVEL_OPTIONS)
+        if not log_level_options:
+            raise ConfigValidationError("bench_gui.logging.levels must not be empty")
+        default_log_level = _optional_str(logging_payload, "default_level", log_level_options[0])
+        if default_log_level not in log_level_options:
+            raise ConfigValidationError("bench_gui.logging.default_level must be present in bench_gui.logging.levels")
+
+        manual_payload = gui_payload.get("manual_servo")
+        if manual_payload is not None and not isinstance(manual_payload, dict):
+            raise ConfigValidationError("bench_gui.manual_servo must be a mapping when provided")
+        manual_payload = manual_payload or {}
+        min_lane = _optional_int(manual_payload, "min_lane", 0)
+        max_lane = _optional_int(manual_payload, "max_lane", 7)
+        _validate_range("bench_gui.manual_servo.min_lane", min_lane, min_value=0)
+        _validate_range("bench_gui.manual_servo.max_lane", max_lane, min_value=min_lane)
+        default_lane = _optional_int(manual_payload, "default_lane", min_lane)
+        _validate_range("bench_gui.manual_servo.default_lane", default_lane, min_value=min_lane, max_value=max_lane)
+
+        min_position_mm = _optional_float(manual_payload, "min_position_mm", 0.0)
+        max_position_mm = _optional_float(manual_payload, "max_position_mm", 1000.0)
+        _validate_range("bench_gui.manual_servo.min_position_mm", min_position_mm, min_value=0.0)
+        _validate_range("bench_gui.manual_servo.max_position_mm", max_position_mm, min_value=min_position_mm)
+        default_position_mm = _optional_float(manual_payload, "default_position_mm", 100.0)
+        _validate_range(
+            "bench_gui.manual_servo.default_position_mm",
+            default_position_mm,
+            min_value=min_position_mm,
+            max_value=max_position_mm,
+        )
+
         return cls(
             motion_mode=motion_mode,
             homing_mode=homing_mode,
@@ -252,6 +334,21 @@ class RuntimeConfig:
                 detector_threshold=detector_threshold,
                 calibration_mode=calibration_mode,
             ),
+            bench_gui=BenchGuiConfig(
+                mcu_options=tuple(mcu_options),
+                com_port_options=tuple(com_port_options),
+                baud_options=tuple(baud_options),
+                log_level_options=tuple(log_level_options),
+                default_log_level=default_log_level,
+                manual_servo=ManualServoConfig(
+                    default_lane=default_lane,
+                    default_position_mm=default_position_mm,
+                    min_lane=min_lane,
+                    max_lane=max_lane,
+                    min_position_mm=min_position_mm,
+                    max_position_mm=max_position_mm,
+                ),
+            ),
         )
 
     @classmethod
@@ -274,13 +371,14 @@ class RuntimeConfig:
             scenario_thresholds=self.scenario_thresholds,
             detection=self.detection,
             baseline_run=self.baseline_run,
+            bench_gui=self.bench_gui,
         )
 
 
 
 def _parse_simple_yaml(raw_text: str) -> dict[str, Any]:
     root: dict[str, Any] = {}
-    stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
+    stack: list[tuple[int, Any]] = [(-1, root)]
 
     for line_no, raw_line in enumerate(raw_text.splitlines(), start=1):
         stripped = raw_line.strip()
@@ -290,12 +388,23 @@ def _parse_simple_yaml(raw_text: str) -> dict[str, Any]:
         indent = len(raw_line) - len(raw_line.lstrip(" "))
         if indent % 2 != 0:
             raise ConfigValidationError(f"Invalid indentation at line {line_no}")
-        if ":" not in stripped:
-            raise ConfigValidationError(f"Expected key/value at line {line_no}")
 
         while len(stack) > 1 and indent <= stack[-1][0]:
             stack.pop()
+
         parent = stack[-1][1]
+
+        if stripped.startswith("- "):
+            if not isinstance(parent, list):
+                raise ConfigValidationError(f"List item is not under a list key at line {line_no}")
+            item_text = stripped[2:].strip()
+            if not item_text:
+                raise ConfigValidationError(f"List item value missing at line {line_no}")
+            parent.append(_parse_scalar(item_text))
+            continue
+
+        if ":" not in stripped:
+            raise ConfigValidationError(f"Expected key/value at line {line_no}")
 
         key, raw_value = stripped.split(":", 1)
         key = key.strip()
@@ -303,13 +412,18 @@ def _parse_simple_yaml(raw_text: str) -> dict[str, Any]:
         if not key:
             raise ConfigValidationError(f"Missing key at line {line_no}")
 
+        if not isinstance(parent, dict):
+            raise ConfigValidationError(f"Mapping entry is not under a map at line {line_no}")
+
         if not value_text:
-            child: dict[str, Any] = {}
-            parent[key] = child
-            stack.append((indent, child))
+            parent[key] = {}
+            stack.append((indent, parent[key]))
             continue
 
         parent[key] = _parse_scalar(value_text)
+
+        if parent[key] == []:
+            stack.append((indent, parent[key]))
 
     if not isinstance(root, dict):
         raise ConfigValidationError("Startup config must be a YAML mapping")
@@ -317,6 +431,13 @@ def _parse_simple_yaml(raw_text: str) -> dict[str, Any]:
 
 
 def _parse_scalar(raw_value: str) -> Any:
+    if raw_value == "[]":
+        return []
+    if raw_value.startswith("[") and raw_value.endswith("]"):
+        inner = raw_value[1:-1].strip()
+        if not inner:
+            return []
+        return [_parse_scalar(item.strip()) for item in inner.split(",")]
     if raw_value.lower() in {"true", "false"}:
         return raw_value.lower() == "true"
     if (raw_value.startswith('"') and raw_value.endswith('"')) or (raw_value.startswith("'") and raw_value.endswith("'")):
@@ -382,6 +503,35 @@ def _optional_float(payload: dict[str, Any], key: str, fallback: float) -> float
         raise ConfigValidationError(f"{key} must be a number")
     return float(value)
 
+
+
+
+def _optional_list_of_str(payload: dict[str, Any], key: str, fallback: tuple[str, ...]) -> list[str]:
+    if key not in payload:
+        return list(fallback)
+    value = payload[key]
+    if not isinstance(value, list):
+        raise ConfigValidationError(f"{key} must be a list")
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ConfigValidationError(f"{key} entries must be non-empty strings")
+        out.append(item.strip())
+    return out
+
+
+def _optional_list_of_int(payload: dict[str, Any], key: str, fallback: tuple[int, ...]) -> list[int]:
+    if key not in payload:
+        return list(fallback)
+    value = payload[key]
+    if not isinstance(value, list):
+        raise ConfigValidationError(f"{key} must be a list")
+    out: list[int] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int):
+            raise ConfigValidationError(f"{key} entries must be integers")
+        out.append(item)
+    return out
 
 def _validate_range(field_name: str, value: float, *, min_value: float | None = None, max_value: float | None = None) -> None:
     if min_value is not None and value < min_value:

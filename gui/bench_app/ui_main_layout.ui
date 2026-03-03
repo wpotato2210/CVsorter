@@ -100,7 +100,7 @@
       </layout>
      </widget>
     </item>
-    <item row="1" column="1">
+    <item row="3" column="1">
      <widget class="QGroupBox" name="controls_group">
       <property name="title">
        <string>Mode / Homing Controls</string>
@@ -137,41 +137,100 @@
       </property>
       <layout class="QGridLayout" name="poc_layout">
        <item row="0" column="0">
+        <widget class="QLabel" name="mcu_selector_text_label">
+         <property name="text">
+          <string>MCU</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="mcu_selector"/>
+       </item>
+       <item row="0" column="2">
+        <widget class="QLabel" name="com_selector_text_label">
+         <property name="text">
+          <string>COM</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="3">
+        <widget class="QComboBox" name="com_selector"/>
+       </item>
+       <item row="0" column="4">
+        <widget class="QLabel" name="baud_selector_text_label">
+         <property name="text">
+          <string>Baud</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="5">
+        <widget class="QComboBox" name="baud_selector"/>
+       </item>
+       <item row="1" column="0">
         <widget class="QPushButton" name="serial_connect_button">
          <property name="text">
           <string>Serial Connect</string>
          </property>
         </widget>
        </item>
-       <item row="0" column="1">
+       <item row="1" column="1">
         <widget class="QPushButton" name="serial_disconnect_button">
          <property name="text">
           <string>Serial Disconnect</string>
          </property>
         </widget>
        </item>
-       <item row="0" column="2">
+       <item row="1" column="2">
         <widget class="QPushButton" name="fire_test_button">
          <property name="text">
           <string>FIRE TEST</string>
          </property>
         </widget>
        </item>
-       <item row="0" column="3">
+       <item row="1" column="3" colspan="3">
         <widget class="QLabel" name="serial_status_label">
          <property name="text">
           <string>Serial: disconnected</string>
          </property>
         </widget>
        </item>
-       <item row="1" column="0">
+       <item row="2" column="0">
+        <widget class="QLabel" name="manual_lane_text_label">
+         <property name="text">
+          <string>Manual lane</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QSpinBox" name="manual_lane_input">
+         <property name="minimum"><number>0</number></property>
+         <property name="maximum"><number>7</number></property>
+        </widget>
+       </item>
+       <item row="2" column="2">
+        <widget class="QLabel" name="manual_position_text_label">
+         <property name="text">
+          <string>Manual position (mm)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="3">
+        <widget class="QDoubleSpinBox" name="manual_position_input">
+         <property name="minimum"><double>0.000000000000000</double></property>
+         <property name="maximum"><double>1000.000000000000000</double></property>
+         <property name="singleStep"><double>10.000000000000000</double></property>
+         <property name="value"><double>100.000000000000000</double></property>
+         <property name="decimals"><number>1</number></property>
+        </widget>
+       </item>
+       <item row="3" column="0">
         <widget class="QLabel" name="trigger_threshold_text_label">
          <property name="text">
           <string>Trigger threshold</string>
          </property>
         </widget>
        </item>
-       <item row="1" column="1">
+       <item row="3" column="1">
         <widget class="QDoubleSpinBox" name="trigger_threshold_input">
          <property name="minimum">
           <double>0.000000000000000</double>
@@ -190,14 +249,14 @@
          </property>
         </widget>
        </item>
-       <item row="1" column="2">
+       <item row="3" column="2">
         <widget class="QLabel" name="belt_speed_text_label">
          <property name="text">
           <string>belt_speed_mm_s</string>
          </property>
         </widget>
        </item>
-       <item row="1" column="3">
+       <item row="3" column="3">
         <widget class="QDoubleSpinBox" name="belt_speed_input">
          <property name="minimum">
           <double>1.000000000000000</double>
@@ -216,13 +275,39 @@
          </property>
         </widget>
        </item>
-       <item row="2" column="0" colspan="4">
+       <item row="4" column="0">
+        <widget class="QLabel" name="log_level_text_label">
+         <property name="text">
+          <string>Log level</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QComboBox" name="log_level_selector"/>
+       </item>
+       <item row="4" column="2">
+        <widget class="QPushButton" name="clear_log_button">
+         <property name="text">
+          <string>Clear Log</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="3">
+        <widget class="QCheckBox" name="log_autoscroll_checkbox">
+         <property name="checked"><bool>true</bool></property>
+         <property name="text">
+          <string>Auto-scroll logs</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0" colspan="6">
         <widget class="QLabel" name="last_command_label">
          <property name="text">
           <string>Last command: -</string>
          </property>
         </widget>
        </item>
+
       </layout>
      </widget>
     </item>

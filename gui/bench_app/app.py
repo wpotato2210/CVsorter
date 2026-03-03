@@ -64,6 +64,8 @@ class BenchMainWindow(QMainWindow):
         ]
         for index, text in enumerate(cells):
             self.log_table.setItem(row, index, QTableWidgetItem(text))
+        if hasattr(self, "log_autoscroll_checkbox") and self.log_autoscroll_checkbox.isChecked():
+            self.log_table.scrollToBottom()
 
     def set_last_command_status(self, message: str) -> None:
         self.last_command_label.setText(f"Last command: {message}")

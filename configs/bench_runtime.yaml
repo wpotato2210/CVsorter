@@ -49,3 +49,19 @@ detection:
 baseline_run:
   detector_threshold: 0.5
   calibration_mode: fixed
+
+bench_gui:
+  serial_options:
+    mcu_options: [mock, serial, esp32]
+    com_port_options: [/dev/ttyACM0, /dev/ttyUSB0, COM3]
+    baud_options: [9600, 57600, 115200, 230400]
+  logging:
+    levels: [DEBUG, INFO, WARN, ERROR]
+    default_level: INFO
+  manual_servo:
+    min_lane: 0
+    max_lane: 7
+    default_lane: 0
+    min_position_mm: 0.0
+    max_position_mm: 1000.0
+    default_position_mm: 100.0
