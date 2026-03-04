@@ -111,3 +111,7 @@ class BenchLogEntry:
     preprocess_wb_gain_g: float = 1.0
     preprocess_wb_gain_r: float = 1.0
     preprocess_clipped_ratio: float = 0.0
+    protocol_frame: str = ""
+    transport_sent: bool = False
+    transport_acknowledged: bool = False
+    scheduler_window_missed: bool = False

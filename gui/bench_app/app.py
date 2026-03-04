@@ -23,6 +23,10 @@ class QueueState:
     scheduler_state: str
     mode: str
     degraded_mode: bool = False
+    run_state: str = "idle"
+    reject_count: int = 0
+    ack_fault_count: int = 0
+    nack_fault_count: int = 0
 
 
 class BenchMainWindow(QMainWindow):
@@ -44,6 +48,9 @@ class BenchMainWindow(QMainWindow):
         self.queue_state_label.setText(f"State: {queue_state.controller_state}")
         self.scheduler_state_label.setText(f"Scheduler: {queue_state.scheduler_state}")
         self.mode_label.setText(f"Mode: {queue_state.mode}")
+        self.status_label.setText(
+            f"Run={queue_state.run_state} | rejects={queue_state.reject_count} | ACK faults={queue_state.ack_fault_count} | NACK faults={queue_state.nack_fault_count}"
+        )
         degraded_prefix = "DEGRADED | " if queue_state.degraded_mode else ""
         self.statusBar().showMessage(
             f"{degraded_prefix}{queue_state.controller_state} | mode={queue_state.mode} | sched={queue_state.scheduler_state} | queue={queue_state.depth}/{queue_state.capacity}"

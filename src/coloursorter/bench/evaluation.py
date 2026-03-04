@@ -41,6 +41,13 @@ def evaluate_logs(logs: tuple[BenchLogEntry, ...], scenarios: tuple[BenchScenari
         "safe_transitions": bench_summary.safe_transitions,
         "watchdog_transitions": bench_summary.watchdog_transitions,
         "recovered_from_safe": bench_summary.recovered_from_safe,
+        "reject_reliability": bench_summary.reject_reliability,
+        "missed_window_count": bench_summary.missed_window_count,
+        "hard_gate_pass": (
+            bench_summary.reject_reliability >= 0.99
+            and bench_summary.max_jitter_ms <= 10.0
+            and bench_summary.missed_window_count == 0
+        ),
     }
     return BenchEvaluation(scenarios=results, summary=summary)
 
@@ -63,6 +70,7 @@ def write_artifacts(
     output_root: str | Path,
     include_text_report: bool,
     config_snapshot: dict[str, object] | None = None,
+    audit_trail: tuple[dict[str, object], ...] = (),
 ) -> Path:
     artifact_dir = Path(output_root) / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     artifact_dir.mkdir(parents=True, exist_ok=False)
@@ -70,6 +78,7 @@ def write_artifacts(
     summary_path = artifact_dir / "summary.json"
     telemetry_path = artifact_dir / "telemetry.csv"
     events_path = artifact_dir / "events.jsonl"
+    audit_path = artifact_dir / "audit_trail.jsonl"
 
     summary_payload = {
         "passed": evaluation.passed,
@@ -106,6 +115,10 @@ def write_artifacts(
                 "command_source": entry.command_source,
                 "transport_ack_code": ack_code,
                 "transport_nack_code": "" if entry.nack_code is None else entry.nack_code,
+                "protocol_frame": entry.protocol_frame,
+                "transport_sent": entry.transport_sent,
+                "transport_acknowledged": entry.transport_acknowledged,
+                "scheduler_window_missed": entry.scheduler_window_missed,
                 "transport_nack_detail": entry.nack_detail or "",
                 "queue_depth": entry.queue_depth,
                 "ingest_latency_ms": entry.ingest_latency_ms,
@@ -150,6 +163,10 @@ def write_artifacts(
                 "actuator_command_issued",
                 "actuator_command_payload",
                 "command_source",
+                "protocol_frame",
+                "transport_sent",
+                "transport_acknowledged",
+                "scheduler_window_missed",
                 "frame_snapshot_path",
                 "ground_truth_label",
                 "belt_speed_mm_s",
@@ -201,6 +218,10 @@ def write_artifacts(
                     str(entry.actuator_command_issued).lower(),
                     entry.actuator_command_payload,
                     entry.command_source,
+                    entry.protocol_frame,
+                    str(entry.transport_sent).lower(),
+                    str(entry.transport_acknowledged).lower(),
+                    str(entry.scheduler_window_missed).lower(),
                     entry.frame_snapshot_path,
                     entry.ground_truth_label,
                     f"{entry.belt_speed_mm_s:.6f}",
@@ -234,6 +255,10 @@ def write_artifacts(
 
     if config_snapshot is not None:
         (artifact_dir / "config_snapshot.json").write_text(json.dumps(config_snapshot, indent=2), encoding="utf-8")
+
+    with audit_path.open("w", encoding="utf-8") as handle:
+        for event in audit_trail:
+            handle.write(json.dumps(event) + "\n")
 
     if include_text_report:
         report_lines = [
