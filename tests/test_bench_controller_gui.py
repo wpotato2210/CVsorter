@@ -310,3 +310,28 @@ def test_transport_reconfiguration_is_blocked_while_auto_cycle_active(
 
     assert controller._selected_transport_kind == original_kind
     assert "blocked: AUTO cycle active" in controller.window.serial_status_label.text()
+
+
+def test_gui_health_summary_shows_run_state_and_fault_counters(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.1,
+            trigger_generation_s=0.1,
+            lane=1,
+            decision="reject",
+            rejection_reason="classified_reject",
+            protocol_round_trip_ms=4.0,
+            ack_code=AckCode.NACK_SAFE,
+            queue_depth=1,
+            scheduler_state="SAFE",
+            mode="SAFE",
+            fault_event="SEND_BUDGET_EXCEEDED",
+        )
+    )
+
+    status = controller.window.status_label.text()
+    assert "Run=" in status
+    assert "rejects=1" in status
+    assert "NACK faults=1" in status

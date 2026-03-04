@@ -199,10 +199,16 @@ class BenchRunner:
                 else:
                     command = None
 
+            protocol_frame = ""
+            transport_sent = False
+            transport_acknowledged = False
+            scheduler_window_missed = bool(fault_event in {"QUEUE_AGE_EXCEEDED", "FRAME_STALENESS_EXCEEDED"})
             if command is not None:
+                protocol_frame = f"SCHED|{command.lane}|{command.position_mm:.3f}"
                 transport_started = time.perf_counter()
                 response = self._transport.send(command)
                 transport_latency_ms = (time.perf_counter() - transport_started) * 1000.0
+                transport_sent = True
                 if transport_latency_ms > self._safety.send_budget_ms:
                     fault_event = "SEND_BUDGET_EXCEEDED"
                     response = type("_Resp", (), {
@@ -220,6 +226,7 @@ class BenchRunner:
                 else:
                     actuator_issued = True
                     command_source = "auto_pipeline"
+                    transport_acknowledged = response.ack_code == AckCode.ACK
             else:
                 transport_latency_ms = 0.0
                 actuator_issued = False
@@ -308,6 +315,10 @@ class BenchRunner:
                     preprocess_wb_gain_g=float((preprocess_metrics or {}).get("wb_gain_g", 1.0)),
                     preprocess_wb_gain_r=float((preprocess_metrics or {}).get("wb_gain_r", 1.0)),
                     preprocess_clipped_ratio=float((preprocess_metrics or {}).get("clipped_ratio", 0.0)),
+                    protocol_frame=protocol_frame,
+                    transport_sent=transport_sent,
+                    transport_acknowledged=transport_acknowledged,
+                    scheduler_window_missed=scheduler_window_missed,
                 )
             )
         return tuple(logs)
@@ -321,16 +332,35 @@ class BenchRunner:
                 safe_transitions=0,
                 watchdog_transitions=0,
                 recovered_from_safe=False,
+                reject_reliability=1.0,
+                max_jitter_ms=0.0,
+                missed_window_count=0,
             )
 
         round_trips = [log.protocol_round_trip_ms for log in logs]
         ack_codes = [log.ack_code for log in logs]
         safe_indices = [i for i, code in enumerate(ack_codes) if code == AckCode.NACK_SAFE]
         recovered = bool(safe_indices and ack_codes[-1] == AckCode.ACK and max(safe_indices) < len(ack_codes) - 1)
+        expected_rejects = [
+            log for log in logs
+            if log.decision == "reject" and not log.scheduler_window_missed
+        ]
+        successful_rejects = [
+            log for log in expected_rejects
+            if log.transport_sent and log.transport_acknowledged and log.actuator_command_issued
+        ]
+        reject_reliability = (
+            len(successful_rejects) / len(expected_rejects)
+            if expected_rejects
+            else 1.0
+        )
         return BenchSummary(
             avg_round_trip_ms=sum(round_trips) / len(round_trips),
             max_round_trip_ms=max(round_trips),
             safe_transitions=len(safe_indices),
             watchdog_transitions=sum(1 for code in ack_codes if code == AckCode.NACK_WATCHDOG),
             recovered_from_safe=recovered,
+            reject_reliability=reject_reliability,
+            max_jitter_ms=max((log.rtt_jitter_ms for log in logs), default=0.0),
+            missed_window_count=sum(1 for log in logs if log.scheduler_window_missed),
         )

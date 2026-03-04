@@ -368,12 +368,16 @@ class BenchAppController(QObject):
             s for s in scenarios_from_thresholds(runtime_config.scenario_thresholds) if s.name == "nominal"
         )
         self._session_logs: list[BenchLogEntry] = []
+        self._audit_trail: list[dict[str, object]] = []
         self._frame_source: BenchFrameSource | None = None
         self._use_simulated_live_feed = False
         self._degraded_mode_active = False
         self._simulated_frame_id = 0
         self._latest_transport_queue_depth = 0
         self._latest_transport_queue_cleared = False
+        self._reject_count = 0
+        self._ack_fault_count = 0
+        self._nack_fault_count = 0
         self._frame_transport_queue = BoundedDropQueue(maxlen=2, drop_oldest=True)
         self._ui_event_queue = BoundedDropQueue(maxlen=64, drop_oldest=True)
         self._ui_action_queue = BoundedDropQueue(maxlen=128, drop_oldest=False)
@@ -527,6 +531,10 @@ class BenchAppController(QObject):
                 scheduler_state=self.runtime_state.scheduler_state,
                 mode=GUI_TO_HOST_MODE[self.runtime_state.operator_mode],
                 degraded_mode=self._degraded_mode_active,
+                run_state=self.runtime_state.controller_state.value,
+                reject_count=self._reject_count,
+                ack_fault_count=self._ack_fault_count,
+                nack_fault_count=self._nack_fault_count,
             )
         )
         self.fault_state_requested.emit(self.runtime_state.fault_state)
@@ -551,6 +559,12 @@ class BenchAppController(QObject):
     @Slot(object)
     def _on_transport_response_received(self, log_entry: BenchLogEntry) -> None:
         self._update_transport_queue_observation(log_entry.queue_depth, log_entry.queue_cleared)
+        if log_entry.decision == "reject":
+            self._reject_count += 1
+        if log_entry.ack_code == AckCode.ACK and log_entry.fault_event:
+            self._ack_fault_count += 1
+        if log_entry.ack_code != AckCode.ACK:
+            self._nack_fault_count += 1
         self.runtime_state.scheduler_state = log_entry.scheduler_state
         self._set_operator_mode(OperatorMode(log_entry.mode))
         self._apply_protocol_queue_side_effects(log_entry.queue_cleared)
@@ -594,6 +608,17 @@ class BenchAppController(QObject):
         before_mode: OperatorMode,
         queue_before: dict[str, object],
     ) -> None:
+        queue_after = self._capture_queue_state()
+        audit_event = {
+            "event": "operator_action",
+            "command": command,
+            "outcome": outcome,
+            "before_mode": before_mode.value,
+            "after_mode": self.runtime_state.operator_mode.value,
+            "queue_before": queue_before,
+            "queue_after": queue_after,
+        }
+        self._audit_trail.append(audit_event)
         LOGGER.info(
             "operator_command=%s outcome=%s before_mode=%s after_mode=%s queue_before=%s queue_after=%s",
             command,
@@ -601,7 +626,7 @@ class BenchAppController(QObject):
             before_mode.value,
             self.runtime_state.operator_mode.value,
             queue_before,
-            self._capture_queue_state(),
+            queue_after,
         )
 
     def _set_degraded_mode(self, active: bool, reason: str = "") -> None:

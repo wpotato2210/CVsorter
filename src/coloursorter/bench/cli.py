@@ -192,6 +192,15 @@ def _snapshot_frame(frame_bgr: object, output_root: Path, frame_id: int, enabled
     return str(path)
 
 
+def _build_audit_trail(args: argparse.Namespace) -> tuple[dict[str, object], ...]:
+    return (
+        {"event": "operator_action", "action": "run_started", "run_id": args.run_id, "test_batch_id": args.test_batch_id},
+        {"event": "recipe_selection", "camera_recipe": args.camera_recipe, "lighting_recipe": args.lighting_recipe},
+        {"event": "threshold_binding", "detector_provider": args.detector_provider, "detector_threshold": args.detector_threshold},
+        {"event": "calibration_binding", "calibration_path": args.calibration, "lane_config_path": args.lane_config},
+    )
+
+
 def _run_cycles(
     args: argparse.Namespace,
     runner: BenchRunner,
@@ -286,6 +295,7 @@ def main() -> int:
         output_root=args.artifact_root,
         include_text_report=args.text_report,
         config_snapshot=config_snapshot,
+        audit_trail=_build_audit_trail(args),
     )
     print(f"artifact_dir={artifact_dir}")
     print(f"overall={'PASS' if evaluation.passed else 'FAIL'}")

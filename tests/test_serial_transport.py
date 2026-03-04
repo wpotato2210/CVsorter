@@ -213,3 +213,32 @@ def test_esp32_adapter_matches_serial_sched_path(transport_cls: type[SerialMcuTr
 
     assert parse_frame(fake.written[-1].decode().strip()).command == "SCHED"
     assert response.ack_code == AckCode.ACK
+
+
+def test_mock_and_serial_esp32_parity_for_identical_sched_input() -> None:
+    from coloursorter.bench.mock_transport import MockMcuTransport, MockTransportConfig
+
+    host_a = OpenSpecV3Host(max_queue_depth=4)
+    host_b = OpenSpecV3Host(max_queue_depth=4)
+    serial_transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05, heartbeat_interval_s=0.0),
+        serial_factory=lambda **_: _HostBackedSerial(host_a),
+    )
+    esp32_transport = Esp32McuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05, heartbeat_interval_s=0.0),
+        serial_factory=lambda **_: _HostBackedSerial(host_b),
+    )
+    mock_transport = MockMcuTransport(MockTransportConfig(max_queue_depth=4, base_round_trip_ms=2.0, per_item_penalty_ms=0.0))
+
+    command = ScheduledCommand(lane=1, position_mm=200.0)
+    serial_response = serial_transport.send(command)
+    esp32_response = esp32_transport.send(command)
+    mock_response = mock_transport.send(command)
+
+    assert serial_response.ack_code == AckCode.ACK
+    assert esp32_response.ack_code == serial_response.ack_code
+    assert mock_response.ack_code == serial_response.ack_code
+    assert esp32_response.queue_depth == serial_response.queue_depth
+    assert mock_response.queue_depth == serial_response.queue_depth
+    assert esp32_response.scheduler_state == serial_response.scheduler_state
+    assert mock_response.scheduler_state == serial_response.scheduler_state
