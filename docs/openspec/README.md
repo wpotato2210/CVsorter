@@ -47,3 +47,5 @@ Source commit for all files imported in this pass: `01cf4bd17fb56664efe11f0ca67d
 - Interface Control Document: `docs/openspec/icd.md`.
 - Protocol matrix: `docs/openspec/v3/protocol_compliance_matrix.md`.
 - System matrix (state/timing/telemetry): `docs/openspec/v3/system_compliance_matrix.md`.
+- Validation plan and CI quality gates: `docs/openspec/v3/validation_plan.md`.
+- Governance policy (license, contributions, release/support): `docs/openspec/v3/governance.md`.
