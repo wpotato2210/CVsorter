@@ -1,6 +1,6 @@
 # ColourSorter
 
-[![CI](https://img.shields.io/badge/ci-placeholder-lightgrey)](#) [![PyPI](https://img.shields.io/badge/pypi-placeholder-lightgrey)](#) [![License](https://img.shields.io/badge/license-placeholder-lightgrey)](#)
+[![CI](https://github.com/ColourSorter/ColourSorter/actions/workflows/ci.yml/badge.svg)](https://github.com/ColourSorter/ColourSorter/actions/workflows/ci.yml) [![Package](https://img.shields.io/pypi/v/coloursorter?label=package)](https://pypi.org/project/coloursorter/) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Deterministic computer-vision bench tooling for lane-based sort decisioning, scheduling, and transport validation.
 
@@ -156,4 +156,4 @@ Use installed entry points (`coloursorter-bench-gui`, `coloursorter-bench-cli`) 
 
 ## License
 
-License placeholder.
+This project is licensed under the [MIT License](LICENSE).
