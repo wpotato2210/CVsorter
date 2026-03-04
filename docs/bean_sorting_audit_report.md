@@ -7,7 +7,7 @@
 - The goal is to confirm software readiness for vision-driven quality classification workflows in a bench-first environment.
 
 ### Scope
-- In-scope capabilities:
+- In-scope capability domains (and only these domains):
   - optical sensing pipeline behavior,
   - calibration data and mapping integrity,
   - classification logic and threshold governance,
@@ -18,13 +18,13 @@
 
 ### Out of Scope
 - Excluded topics:
-  - physical rejection and actuator behavior,
-  - trigger/schedule timing for mechanical channels,
-  - channel tests tied to reject hardware,
-  - reject mode logic and command transport for actuation.
+  - all physical rejection/actuation behavior,
+  - reject timing topics (trigger/schedule/mechanical-window timing),
+  - reject-channel testing topics,
+  - reject mode logic and actuation command transport topics.
 - Rationale:
   - the target machine architecture for this review differs from the actuation architecture represented elsewhere in the repository,
-  - therefore this artifact intentionally evaluates only optical/decision-layer requirements that remain architecture-compatible.
+  - therefore this artifact intentionally excludes rejection/actuation requirements and evaluates only architecture-compatible optical/decision-layer requirements.
 
 ---
 
@@ -98,4 +98,4 @@ This review is considered satisfied when all tracked requirements remain limited
 - alarms,
 - logs.
 
-Any requirement involving physical rejection/actuation, channel timing tests, or reject mode logic is explicitly excluded from this artifact.
+Any requirement involving physical rejection/actuation (including timing, channel tests, or reject mode logic) is explicitly out of scope for this artifact.
