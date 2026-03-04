@@ -34,6 +34,7 @@ class _HostBackedSerial:
 
 def test_serial_transport_encodes_sched_and_parses_ack() -> None:
     host = OpenSpecV3Host(max_queue_depth=4)
+    host.queue.append((2, 33.0))
     fake = _HostBackedSerial(host)
     transport = SerialMcuTransport(SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05), serial_factory=lambda **_: fake)
 
@@ -80,6 +81,49 @@ def test_serial_transport_maps_canonical_busy_pair_to_busy_state() -> None:
     assert fault_state == FaultState.NORMAL
 
 
+
+
+@pytest.mark.parametrize("detail", ["BUSY", " busy ", "BuSy"])
+def test_serial_transport_maps_nack_busy_with_detail_canonicalization(detail: str) -> None:
+    ack_code, fault_state = _map_ack_to_bench_state("NACK", NACK_BUSY, detail)
+
+    assert ack_code == AckCode.NACK_BUSY
+    assert fault_state == FaultState.NORMAL
+
+
+def test_serial_transport_treats_noncanonical_nack_code_7_detail_as_safe() -> None:
+    ack_code, fault_state = _map_ack_to_bench_state("NACK", NACK_BUSY, "WATCHDOG")
+
+    assert ack_code == AckCode.NACK_SAFE
+    assert fault_state == FaultState.SAFE
+
+
+def test_serial_transport_keeps_cached_queue_depth_when_nack_has_no_queue_depth_metadata() -> None:
+    host = OpenSpecV3Host(max_queue_depth=4)
+    host.queue.append((2, 33.0))
+
+    class _QueueAuthoritySerial(_HostBackedSerial):
+        def readline(self) -> bytes:
+            request = self.written[-1].decode().strip()
+            command = parse_frame(request).command
+            if command == "SCHED":
+                return self._host.handle_frame(serialize_packet("SCHED", (99, "1.000"), msg_id="999")).encode() + b"\n"
+            return self._host.handle_frame(request).encode() + b"\n"
+
+    fake = _QueueAuthoritySerial(host)
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05, heartbeat_interval_s=0.0),
+        serial_factory=lambda **_: fake,
+    )
+    transport._last_queue_depth = 3
+
+    response = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
+
+    assert response.ack_code == AckCode.NACK_SAFE
+    assert response.queue_depth == 1
+    assert transport.current_queue_depth() == 1
+
+
 def test_serial_transport_maps_canonical_watchdog_without_nack_code() -> None:
     ack_code, fault_state = _map_ack_to_bench_state("NACK", None, DETAIL_WATCHDOG)
     assert ack_code == AckCode.NACK_WATCHDOG
@@ -108,7 +152,6 @@ def test_serial_transport_raises_structured_timeout_error() -> None:
 def test_serial_transport_requires_get_state_sync_and_recovers_with_reset_and_mode_set() -> None:
     host = OpenSpecV3Host(max_queue_depth=4, mode="MANUAL")
     host.queue.append((1, 123.0))
-    host.scheduler_state = "ACTIVE"
     fake = _HostBackedSerial(host)
     transport = SerialMcuTransport(
         config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05, heartbeat_interval_s=0.0),

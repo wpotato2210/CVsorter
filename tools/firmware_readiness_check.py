@@ -33,9 +33,23 @@ def _load_protocol_constants_module():
     return module
 
 
+
+
+def _load_protocol_authority_module():
+    authority_path = Path("src/coloursorter/protocol/authority.py")
+    spec = importlib.util.spec_from_file_location("coloursorter_protocol_authority", authority_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("unable to load protocol authority module")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 def check_protocol_constants() -> CheckResult:
     constants = _load_protocol_constants_module()
-    commands_json = _load_json(Path("docs/openspec/v3/protocol/commands.json"))
+    authority = _load_protocol_authority_module()
+    commands_path = Path(authority.AUTHORITATIVE_PROTOCOL_JSON)
+    commands_json = _load_json(commands_path)
+
     command_names = {entry["name"] for entry in commands_json["commands"]}
     runtime_names = set(constants.SUPPORTED_COMMANDS)
     if command_names != runtime_names:
@@ -44,7 +58,24 @@ def check_protocol_constants() -> CheckResult:
             passed=False,
             detail=f"command mismatch: json={sorted(command_names)} runtime={sorted(runtime_names)}",
         )
-    return CheckResult(name="protocol_constants", passed=True, detail="constants match docs/openspec/v3/protocol/commands.json")
+
+    if commands_json["startup"]["protocol_version"] != constants.SUPPORTED_PROTOCOL_VERSION:
+        return CheckResult(name="protocol_constants", passed=False, detail="startup.protocol_version mismatch")
+
+    if set(commands_json["startup"]["capabilities"]) != set(constants.SUPPORTED_CAPABILITIES):
+        return CheckResult(name="protocol_constants", passed=False, detail="startup.capabilities mismatch")
+
+    if commands_json["ack_nack"]["ack_token"] != constants.ACK_TOKEN:
+        return CheckResult(name="protocol_constants", passed=False, detail="ack token mismatch")
+
+    if commands_json["ack_nack"]["nack_token"] != constants.NACK_TOKEN:
+        return CheckResult(name="protocol_constants", passed=False, detail="nack token mismatch")
+
+    nack_codes = commands_json["ack_nack"]["nack_codes"]
+    if {int(code) for code in nack_codes} != set(range(constants.NACK_CODE_MIN, constants.NACK_CODE_MAX + 1)):
+        return CheckResult(name="protocol_constants", passed=False, detail="nack code range mismatch")
+
+    return CheckResult(name="protocol_constants", passed=True, detail=f"constants match {commands_path}")
 
 
 def check_schema_hardening() -> CheckResult:

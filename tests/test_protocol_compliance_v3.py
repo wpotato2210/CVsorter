@@ -72,6 +72,32 @@ def test_ack_metadata_parsing_mode_queue_scheduler_and_queue_cleared() -> None:
     assert ack.link_state in {"READY", "DEGRADED", "SYNCING", "DISCONNECTED"}
 
 
+
+
+def test_set_mode_rejects_safe_to_auto_with_canonical_nack_5_detail() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2, mode="SAFE")
+    host.handle_frame(serialize_packet("HELLO", ("3.1", "CRC32;SCHED;HEARTBEAT;DEDUPE"), msg_id="1"))
+    host.handle_frame(serialize_packet("HEARTBEAT", (), msg_id="2"))
+
+    ack = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("SET_MODE", ("AUTO",), msg_id="3"))))
+
+    assert ack.status == "NACK"
+    assert ack.nack_code == 5
+    assert ack.detail == "INVALID_MODE_TRANSITION"
+
+
+def test_set_mode_allows_safe_to_manual_then_manual_to_auto_recovery() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2, mode="SAFE")
+    host.handle_frame(serialize_packet("HELLO", ("3.1", "CRC32;SCHED;HEARTBEAT;DEDUPE"), msg_id="1"))
+    host.handle_frame(serialize_packet("HEARTBEAT", (), msg_id="2"))
+
+    safe_to_manual = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("SET_MODE", ("MANUAL",), msg_id="3"))))
+    manual_to_auto = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("SET_MODE", ("AUTO",), msg_id="4"))))
+
+    assert safe_to_manual.status == "ACK"
+    assert manual_to_auto.status == "ACK"
+    assert host.mode == "AUTO"
+
 def test_mode_transition_policy_matrix_is_canonical_for_gui_and_host() -> None:
     assert MODE_TRANSITIONS["SAFE"] == frozenset({"SAFE", "MANUAL"})
     assert is_mode_transition_allowed("SAFE", "MANUAL") is True
