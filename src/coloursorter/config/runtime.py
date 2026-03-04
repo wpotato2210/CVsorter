@@ -37,6 +37,11 @@ class RuntimeConfig:
         return cls.from_text(raw_text)
 
     def apply_live_update(self, updates: dict[str, str]) -> "RuntimeConfig":
+        unknown_keys = sorted(set(updates) - {MOTION_MODE, HOMING_MODE})
+        if unknown_keys:
+            names = ", ".join(unknown_keys)
+            raise ConfigValidationError(f"Unknown live update field(s): {names}")
+
         motion_mode = updates.get(MOTION_MODE, self.motion_mode)
         homing_mode = updates.get(HOMING_MODE, self.homing_mode)
         _validate_enum(MOTION_MODE, motion_mode, MOTION_MODE_VALUES)

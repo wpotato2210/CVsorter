@@ -63,3 +63,25 @@ def test_load_lane_geometry_rejects_non_positive_lane_count(tmp_path: Path) -> N
 
     with pytest.raises(LaneGeometryError):
         load_lane_geometry(config_path)
+
+
+def test_load_lane_geometry_rejects_invalid_axis(tmp_path: Path) -> None:
+    config_path = tmp_path / "lane_geometry.yaml"
+    boundaries = [i * 10 for i in range(23)]
+    config_path.write_text(
+        _lane_config_text(boundaries).replace("belt_direction_axis: vertical", "belt_direction_axis: diagonal"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(LaneGeometryError):
+        load_lane_geometry(config_path)
+
+
+def test_lane_for_x_px_rejects_non_finite_coordinate(tmp_path: Path) -> None:
+    config_path = tmp_path / "lane_geometry.yaml"
+    boundaries = [i * 10 for i in range(23)]
+    config_path.write_text(_lane_config_text(boundaries), encoding="utf-8")
+    geometry = load_lane_geometry(config_path)
+
+    with pytest.raises(LaneGeometryError):
+        lane_for_x_px(float("nan"), geometry)
