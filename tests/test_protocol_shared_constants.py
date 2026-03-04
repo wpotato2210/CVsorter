@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from coloursorter.protocol.authority import AUTHORITATIVE_PROTOCOL_JSON
 from coloursorter.protocol.constants import (
     ACK_TOKEN,
     ALLOWED_LINK_STATES,
@@ -36,8 +37,12 @@ from coloursorter.protocol.constants import (
 from coloursorter.protocol.nack_codes import CANONICAL_NACK_7, canonical_detail_for_code
 
 
-COMMANDS_PATH = Path("docs/openspec/v3/protocol/commands.json")
+COMMANDS_PATH = Path(AUTHORITATIVE_PROTOCOL_JSON)
 MCU_RESPONSE_SCHEMA_PATH = Path("docs/openspec/v3/contracts/mcu_response_schema.json")
+
+
+def test_protocol_authority_constant_matches_expected_artifact() -> None:
+    assert AUTHORITATIVE_PROTOCOL_JSON == "docs/openspec/v3/protocol/commands.json"
 
 
 def test_protocol_constants_match_commands_json_contract() -> None:
@@ -68,6 +73,9 @@ def test_protocol_constants_match_commands_json_contract() -> None:
     assert commands_spec["ack_nack"]["ack_token"] == ACK_TOKEN
     assert commands_spec["ack_nack"]["nack_token"] == NACK_TOKEN
     assert set(commands_spec["link_state_fsm"]) == ALLOWED_LINK_STATES
+
+    assert commands_spec["startup"]["required_handshake"] == [CMD_HELLO, CMD_HEARTBEAT]
+    assert sorted(commands_spec["startup"]["capabilities"]) == sorted(SUPPORTED_CAPABILITIES)
 
     expected_nack_codes = {
         str(NACK_UNKNOWN_COMMAND): "UNKNOWN_COMMAND",
