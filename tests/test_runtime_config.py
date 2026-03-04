@@ -22,3 +22,9 @@ def test_live_update_rejects_unknown_homing_mode() -> None:
     config = RuntimeConfig.from_text("motion_mode: MANUAL\nhoming_mode: SKIP_HOME\n")
     with pytest.raises(ConfigValidationError):
         config.apply_live_update({"homing_mode": "DISABLED"})
+
+
+def test_live_update_rejects_unknown_field_name() -> None:
+    config = RuntimeConfig.from_text("motion_mode: MANUAL\nhoming_mode: SKIP_HOME\n")
+    with pytest.raises(ConfigValidationError):
+        config.apply_live_update({"unexpected": "value"})
