@@ -170,6 +170,12 @@ def test_detection_fails_fast_for_invalid_frame_shape() -> None:
         provider.detect(np.zeros((64, 64), dtype=np.uint8))
 
 
+def test_detection_fails_fast_for_invalid_frame_dtype() -> None:
+    provider = OpenCvDetectionProvider()
+    with pytest.raises(DetectionError, match="dtype uint8"):
+        provider.detect(np.zeros((64, 64, 3), dtype=np.float32))
+
+
 def test_model_stub_detection_provider_maps_reject_threshold() -> None:
     provider = build_detection_provider("model_stub")
     detections = provider.detect(_sample_frame())
