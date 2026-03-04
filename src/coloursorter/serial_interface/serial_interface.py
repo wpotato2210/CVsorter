@@ -18,6 +18,9 @@ FRAME_START = "<"
 FRAME_END = ">"
 FRAME_DELIMITER = "|"
 PAYLOAD_DELIMITER = ","
+MAX_FRAME_LENGTH = 256
+MAX_TOKEN_LENGTH = 64
+MAX_DETAIL_LENGTH = 128
 
 
 class SerialInterfaceError(ValueError):
@@ -56,6 +59,8 @@ class AckResponse:
 def _validate_token(token: str, field_name: str) -> None:
     if not token:
         raise PacketValidationError(f"{field_name} cannot be empty")
+    if len(token) > MAX_TOKEN_LENGTH:
+        raise PacketValidationError(f"{field_name} exceeds max length {MAX_TOKEN_LENGTH}")
     if any(ch in token for ch in (FRAME_DELIMITER, FRAME_START, FRAME_END)):
         raise PacketValidationError(f"{field_name} contains reserved framing characters")
 
@@ -88,6 +93,8 @@ def parse_frame(frame: str) -> FramedPacket:
     """Parse <MSG_ID|CMD|payload|CRC> frame into command and positional args."""
     if len(frame) < 3:
         raise FrameFormatError("frame is too short")
+    if len(frame) > MAX_FRAME_LENGTH:
+        raise FrameFormatError(f"frame exceeds max length {MAX_FRAME_LENGTH}")
     if not frame.startswith(FRAME_START) or not frame.endswith(FRAME_END):
         raise FrameFormatError("frame must start with '<' and end with '>'")
 
@@ -102,6 +109,8 @@ def parse_frame(frame: str) -> FramedPacket:
     command = tokens[1].strip().upper()
     payload = tokens[2].strip()
     crc = tokens[3].strip().upper()
+    if len(crc) != 8 or any(ch not in "0123456789ABCDEF" for ch in crc):
+        raise FrameFormatError("frame crc must be 8 uppercase hex characters")
 
     _validate_token(msg_id, "msg_id")
     _validate_token(command, "command")
@@ -155,6 +164,11 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
         if raw_queue_cleared not in {"true", "false"}:
             raise PacketValidationError("ACK queue_cleared must be true or false")
         link_state = token_list[5].strip().upper() if len(token_list) == 6 else None
+        if link_state is not None:
+            if len(link_state) > MAX_TOKEN_LENGTH:
+                raise PacketValidationError(f"ACK link_state exceeds max length {MAX_TOKEN_LENGTH}")
+            if not link_state.replace("_", "").isalnum():
+                raise PacketValidationError("ACK link_state must be alphanumeric/underscore")
         return AckResponse(
             status=ACK_TOKEN,
             mode=mode,
@@ -176,4 +190,6 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
         raise PacketValidationError(f"nack_code must be in the OpenSpec range {NACK_CODE_MIN}..{NACK_CODE_MAX}")
 
     detail = token_list[2] if len(token_list) > 2 else None
+    if detail is not None and len(detail) > MAX_DETAIL_LENGTH:
+        raise PacketValidationError(f"NACK detail exceeds max length {MAX_DETAIL_LENGTH}")
     return AckResponse(status=NACK_TOKEN, nack_code=nack_code, detail=detail)

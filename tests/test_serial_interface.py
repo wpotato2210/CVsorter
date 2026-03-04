@@ -61,6 +61,16 @@ def test_crc_validation_rejects_tampered_frame() -> None:
         parse_frame("<1|SCHED|1,200.000|DEADBEEF>")
 
 
+def test_protocol_framing_rejects_oversized_frame() -> None:
+    with pytest.raises(FrameFormatError, match="exceeds max length"):
+        parse_frame("<" + ("A" * 300) + ">")
+
+
+def test_protocol_framing_rejects_non_hex_crc() -> None:
+    with pytest.raises(FrameFormatError, match="crc must be 8 uppercase hex"):
+        parse_frame("<1|SCHED|1,200.000|ZZZZZZZZ>")
+
+
 def test_nack_requires_numeric_code() -> None:
     with pytest.raises(PacketValidationError, match="nack_code must be an integer"):
         parse_ack_tokens(["NACK", "NOT_A_NUMBER"])
@@ -89,6 +99,16 @@ def test_ack_metadata_rejects_negative_queue_depth() -> None:
 def test_ack_metadata_rejects_unknown_scheduler_state() -> None:
     with pytest.raises(PacketValidationError, match="scheduler_state must be IDLE or ACTIVE"):
         parse_ack_tokens(["ACK", "AUTO", "1", "PAUSED", "false"])
+
+
+def test_ack_metadata_rejects_non_alnum_link_state() -> None:
+    with pytest.raises(PacketValidationError, match="alphanumeric/underscore"):
+        parse_ack_tokens(["ACK", "AUTO", "1", "ACTIVE", "false", "READY-"])
+
+
+def test_nack_detail_rejects_oversized_payload() -> None:
+    with pytest.raises(PacketValidationError, match="detail exceeds max length"):
+        parse_ack_tokens(["NACK", "2", "X" * 129])
 
 
 def test_wire_actuator_adapter_encodes_sched_request() -> None:
