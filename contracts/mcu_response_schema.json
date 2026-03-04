@@ -23,7 +23,15 @@
       "if": { "properties": { "status": { "const": "NACK" } }, "required": ["status"] },
       "then": {
         "required": ["nack_code"],
-        "not": { "required": ["queue_depth", "queue_cleared", "mode", "scheduler_state", "link_state"] }
+        "not": {
+          "anyOf": [
+            { "required": ["queue_depth"] },
+            { "required": ["queue_cleared"] },
+            { "required": ["mode"] },
+            { "required": ["scheduler_state"] },
+            { "required": ["link_state"] }
+          ]
+        }
       },
       "else": {
         "not": { "required": ["nack_code"] },
