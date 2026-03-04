@@ -131,6 +131,8 @@ def _validate_frame(frame_bgr: object) -> np.ndarray:
         raise DetectionError("frame_bgr must be a numpy.ndarray")
     if frame_bgr.ndim != 3 or frame_bgr.shape[2] != 3:
         raise DetectionError("frame_bgr must have shape (height, width, 3)")
+    if frame_bgr.dtype != np.uint8:
+        raise DetectionError("frame_bgr must have dtype uint8")
     return frame_bgr
 
 
