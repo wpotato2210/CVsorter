@@ -4,8 +4,8 @@
 This ICD defines host-to-MCU wire interfaces and runtime telemetry interfaces used by ColourSorter OpenSpec v3 bench and serial transport paths.
 
 ## Host ↔ MCU wire interface
-- Framing: `<CMD|arg1|arg2>` ASCII packets.
-- Commands: `SET_MODE`, `SCHED`, `GET_STATE`, `RESET_QUEUE`.
+- Framing: canonical OpenSpec v3 wire frame is `<msg_id|CMD|payload|CRC32>` (ASCII); token format is not legacy and not optional.
+- Commands: `HELLO`, `HEARTBEAT`, `SET_MODE`, `SCHED`, `GET_STATE`, `RESET_QUEUE`.
 - ACK payload: `ACK|mode|queue_depth|scheduler_state|queue_cleared`.
 - NACK payload: `NACK|nack_code|detail`.
 - Canonical NACK code `7` means `BUSY` only (`NACK|7|BUSY`).
@@ -13,7 +13,8 @@ This ICD defines host-to-MCU wire interfaces and runtime telemetry interfaces us
 - WATCHDOG is represented as a transport timeout fault state, not as a NACK code alias.
 
 ### Source of truth
-- Protocol artifact: `docs/openspec/v3/protocol/commands.json`.
+- Authoritative protocol artifact: `docs/openspec/v3/protocol/commands.json`.
+- Generated mirror artifact (non-authoritative): `protocol/commands.json`.
 - Runtime host model: `src/coloursorter/protocol/host.py`.
 - Runtime parser/serializer: `src/coloursorter/serial_interface/serial_interface.py`.
 - Runtime schedule encoder: `src/coloursorter/serial_interface/wire.py`.

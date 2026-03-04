@@ -103,3 +103,13 @@ def test_esp32_adapter_preserves_protocol_ack_parsing_invariants() -> None:
     assert response.ack_code == AckCode.ACK
     assert response.fault_state == FaultState.NORMAL
     assert response.queue_depth == 1
+
+
+def test_sched_before_link_ready_uses_canonical_busy_pair() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2)
+    host.handle_frame(serialize_packet("HELLO", ("3.1", "CRC32;SCHED;HEARTBEAT;DEDUPE"), msg_id="1"))
+
+    ack = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("SCHED", (0, "10.0"), msg_id="2"))))
+
+    assert ack.status == "NACK"
+    assert (ack.nack_code, ack.detail) == CANONICAL_NACK_7

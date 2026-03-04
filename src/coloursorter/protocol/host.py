@@ -165,7 +165,7 @@ class OpenSpecV3Host:
         if not self.protocol_synced:
             return self._nack(NACK_INVALID_MODE_TRANSITION, DETAIL_INVALID_MODE_TRANSITION, msg_id=msg_id)
         if self.link_state in {LINK_DISCONNECTED, LINK_SYNCING}:
-            return self._nack(NACK_BUSY, "LINK_NOT_READY", msg_id=msg_id)
+            return self._nack(*CANONICAL_NACK_7, msg_id=msg_id)
         if len(args) != 2:
             return self._nack(NACK_ARG_COUNT_MISMATCH, DETAIL_ARG_COUNT_MISMATCH, msg_id=msg_id)
         try:

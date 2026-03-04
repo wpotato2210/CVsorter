@@ -16,6 +16,14 @@ def test_required_openspec_v3_artifacts_are_present() -> None:
     for rel in REQUIRED_ARTIFACTS:
         assert Path(rel).exists(), rel
 
+
+
+def test_protocol_commands_mirror_matches_authoritative_openspec_artifact() -> None:
+    authoritative = Path("docs/openspec/v3/protocol/commands.json").read_text(encoding="utf-8")
+    mirror = Path("protocol/commands.json").read_text(encoding="utf-8")
+
+    assert mirror == authoritative
+
 def test_mcu_response_schema_matches_runtime_scheduler_states() -> None:
     runtime = json.loads(Path("contracts/mcu_response_schema.json").read_text(encoding="utf-8"))
     spec = json.loads(Path("docs/openspec/v3/contracts/mcu_response_schema.json").read_text(encoding="utf-8"))

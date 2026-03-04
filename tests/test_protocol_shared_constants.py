@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 
 from coloursorter.protocol.constants import (
+    ACK_TOKEN,
+    ALLOWED_LINK_STATES,
     ALLOWED_MODES,
     ALLOWED_SCHEDULER_STATES,
     CMD_GET_STATE,
@@ -14,6 +16,7 @@ from coloursorter.protocol.constants import (
     CMD_HELLO,
     LANE_MAX,
     LANE_MIN,
+    NACK_TOKEN,
     NACK_ARG_COUNT_MISMATCH,
     NACK_ARG_RANGE_ERROR,
     NACK_ARG_TYPE_ERROR,
@@ -25,6 +28,8 @@ from coloursorter.protocol.constants import (
     NACK_QUEUE_FULL,
     NACK_UNKNOWN_COMMAND,
     QUEUE_DEPTH_MIN,
+    SUPPORTED_CAPABILITIES,
+    SUPPORTED_PROTOCOL_VERSION,
     TRIGGER_MM_MAX,
     TRIGGER_MM_MIN,
 )
@@ -57,6 +62,12 @@ def test_protocol_constants_match_commands_json_contract() -> None:
     assert lane_arg["max"] == LANE_MAX
     assert trigger_arg["min"] == TRIGGER_MM_MIN
     assert trigger_arg["max"] == TRIGGER_MM_MAX
+
+    assert commands_spec["startup"]["protocol_version"] == SUPPORTED_PROTOCOL_VERSION
+    assert set(commands_spec["startup"]["capabilities"]) == SUPPORTED_CAPABILITIES
+    assert commands_spec["ack_nack"]["ack_token"] == ACK_TOKEN
+    assert commands_spec["ack_nack"]["nack_token"] == NACK_TOKEN
+    assert set(commands_spec["link_state_fsm"]) == ALLOWED_LINK_STATES
 
     expected_nack_codes = {
         str(NACK_UNKNOWN_COMMAND): "UNKNOWN_COMMAND",
