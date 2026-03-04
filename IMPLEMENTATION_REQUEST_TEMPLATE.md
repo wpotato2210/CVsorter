@@ -43,6 +43,16 @@ Describe concrete behavior with examples.
 4. Cross-check correctness, performance, and safety.
 5. Brief design rationale + risk/mitigation summary.
 
+
+## Preflight Validation
+Before sending a request, validate that placeholders are fully replaced:
+
+```bash
+python tools/validate_implementation_request.py <request_file.md>
+```
+
+Validation fails if bracket/angle-bracket placeholders remain, or if the `REQUIREMENTS BEGIN/END` block is empty.
+
 ## Example Prompt Block
 ```text
 TASK
