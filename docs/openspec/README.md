@@ -42,6 +42,7 @@ Source commit for all files imported in this pass: `01cf4bd17fb56664efe11f0ca67d
 
 ## Governance artifacts
 
+- System architecture and operating modes: `docs/openspec/v3/system_architecture.md`.
 - Interface Control Document: `docs/openspec/icd.md`.
 - Protocol matrix: `docs/openspec/v3/protocol_compliance_matrix.md`.
 - System matrix (state/timing/telemetry): `docs/openspec/v3/system_compliance_matrix.md`.
