@@ -25,22 +25,12 @@
 | 6 | Detection provider selection/override (`opencv_basic`, `opencv_calibrated`, `model_stub`) | Provider override reliability is **100%**: selected provider matches runtime output metadata for all acceptance executions. |
 | 7 | Mock transport and serial transport paths | Transport-path parity verified with **no protocol-shape mismatches** between mock and serial outputs for the same replay input set. |
 
-## Phase 2 — Usability Upgrades
-
-| Item | Scope (usability upgrade) | Acceptance criteria |
-|---|---|---|
-| 1 | Guided setup wizard | First-time operator setup completion from launch to ready-to-run is **≤ 5 minutes** using the in-app guided flow with no manual config-file edits. |
-| 2 | Live classification preview overlays | Live preview overlays show lane, class, and reject/accept state with **≥ 99% frame-to-frame metadata alignment** in validation sessions. |
-| 3 | Structured report export | End-of-run exports include summary, event timeline, and telemetry in a structured format with **100% schema-valid output** across acceptance runs. |
-
-## Phase 3 — Usability Upgrades
-
-| Item | Scope (usability upgrade) | Acceptance criteria |
-|---|---|---|
-| 1 | Run-start preflight checklist panel (config, source, transport, profile) | Preflight blocks run start on missing/invalid prerequisites with **100% deterministic checklist output** for equivalent inputs. |
-| 2 | Operator quick-actions for common recovery paths (pause/resume, safe-mode, reconnect) | Recovery action latency from click to state update is **≤ 1 second** for all quick actions in bench validation sessions. |
-| 3 | Inline artifact navigator (last run summary/events/telemetry access) | Operators can open the latest generated artifacts in **≤ 2 clicks** with successful path resolution in all acceptance scenarios. |
-
 ## Deferred Enhancements (Non-Confirmed Ideas)
 
-- Any idea not listed in the manual-confirmed baseline table or the approved Phase 2 or Phase 3 usability-upgrade tables is classified as a **deferred enhancement**.
+- Guided setup wizard.
+- Live classification preview overlays.
+- Structured report export.
+- Run-start preflight checklist panel (config, source, transport, profile).
+- Operator quick-actions for common recovery paths (pause/resume, safe-mode, reconnect).
+- Inline artifact navigator (last run summary/events/telemetry access).
+- Any idea not listed in the manual-confirmed baseline table is classified as a **deferred enhancement**.
