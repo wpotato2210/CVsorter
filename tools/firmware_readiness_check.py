@@ -35,7 +35,7 @@ def _load_protocol_constants_module():
 
 def check_protocol_constants() -> CheckResult:
     constants = _load_protocol_constants_module()
-    commands_json = _load_json(Path("protocol/commands.json"))
+    commands_json = _load_json(Path("docs/openspec/v3/protocol/commands.json"))
     command_names = {entry["name"] for entry in commands_json["commands"]}
     runtime_names = set(constants.SUPPORTED_COMMANDS)
     if command_names != runtime_names:
@@ -44,7 +44,7 @@ def check_protocol_constants() -> CheckResult:
             passed=False,
             detail=f"command mismatch: json={sorted(command_names)} runtime={sorted(runtime_names)}",
         )
-    return CheckResult(name="protocol_constants", passed=True, detail="constants match protocol/commands.json")
+    return CheckResult(name="protocol_constants", passed=True, detail="constants match docs/openspec/v3/protocol/commands.json")
 
 
 def check_schema_hardening() -> CheckResult:

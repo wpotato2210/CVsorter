@@ -31,3 +31,8 @@
 - `RESET_QUEUE()`
 
 ACK includes: `mode, queue_depth, scheduler_state, queue_cleared, link_state`.
+
+## Artifact authority
+- Authoritative protocol contract: `docs/openspec/v3/protocol/commands.json`.
+- `protocol/commands.json` is a generated mirror for compatibility tooling and must stay byte-identical to the authoritative artifact.
+- Implementations must use canonical tokens (`<msg_id|CMD|payload|CRC32>`, `ACK`, `NACK`) exactly as defined by the authoritative artifact.
