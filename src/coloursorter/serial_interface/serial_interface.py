@@ -6,6 +6,7 @@ from typing import Iterable, Sequence
 FRAME_START = "<"
 FRAME_END = ">"
 FRAME_DELIMITER = "|"
+MAX_FRAME_BYTES = 256
 
 
 class SerialInterfaceError(ValueError):
@@ -78,10 +79,15 @@ def parse_frame(frame: str) -> FramedPacket:
 
 
 def encode_packet_bytes(command: str, args: Sequence[object] = ()) -> bytes:
-    return (serialize_packet(command, args) + "\n").encode("ascii")
+    payload = (serialize_packet(command, args) + "\n").encode("ascii")
+    if len(payload) > MAX_FRAME_BYTES:
+        raise PacketValidationError(f"encoded frame exceeds {MAX_FRAME_BYTES} bytes")
+    return payload
 
 
 def decode_packet_bytes(payload: bytes) -> FramedPacket:
+    if len(payload) > MAX_FRAME_BYTES:
+        raise FrameFormatError(f"payload exceeds {MAX_FRAME_BYTES} bytes")
     try:
         text = payload.decode("ascii").strip()
     except UnicodeDecodeError as exc:
@@ -96,6 +102,8 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
 
     status = token_list[0].upper()
     if status == "ACK":
+        if len(token_list) != 1:
+            raise PacketValidationError("ACK must not include extra tokens")
         return AckResponse(status="ACK")
     if status != "NACK":
         raise PacketValidationError("response must start with ACK or NACK")
@@ -106,6 +114,10 @@ def parse_ack_tokens(tokens: Iterable[str]) -> AckResponse:
         nack_code = int(token_list[1])
     except ValueError as exc:
         raise PacketValidationError("nack_code must be an integer") from exc
+    if nack_code < 0:
+        raise PacketValidationError("nack_code must be >= 0")
 
     detail = token_list[2] if len(token_list) > 2 else None
+    if detail == "":
+        raise PacketValidationError("detail must be non-empty when provided")
     return AckResponse(status="NACK", nack_code=nack_code, detail=detail)
