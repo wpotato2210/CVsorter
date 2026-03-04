@@ -270,6 +270,7 @@ class BenchRunner:
                     lane=decision.lane,
                     lane_index=decision.lane,
                     decision=decision.classification,
+                    record_type="actuation_cycle",
                     prediction_label=detection.classification,
                     confidence=detection.infection_score,
                     rejection_reason=decision.rejection_reason,

@@ -769,6 +769,7 @@ class BenchAppController(QObject):
                         trigger_generation_s=batch.frame.timestamp_s,
                         lane=-1,
                         decision="autonomy_inhibited_degraded_camera",
+                        record_type="operator_event",
                         rejection_reason="synthetic_or_unverified_camera",
                         protocol_round_trip_ms=0.0,
                         ack_code="-",
@@ -952,6 +953,7 @@ class BenchAppController(QObject):
                 trigger_generation_s=self.runtime_state.previous_timestamp_s,
                 lane=lane,
                 decision="manual_fire_test",
+                record_type="operator_event",
                 rejection_reason=None,
                 protocol_round_trip_ms=response.round_trip_ms,
                 ack_code=ack.status,
@@ -984,6 +986,7 @@ class BenchAppController(QObject):
                 trigger_generation_s=self.runtime_state.previous_timestamp_s,
                 lane=-1,
                 decision=f"scenario_eval overall={'PASS' if evaluation.passed else 'FAIL'}",
+                record_type="operator_event",
                 rejection_reason=result_line,
                 protocol_round_trip_ms=float(evaluation.summary["avg_round_trip_ms"]),
                 ack_code="-",
@@ -1035,6 +1038,7 @@ class BenchAppController(QObject):
                 trigger_generation_s=self.runtime_state.previous_timestamp_s,
                 lane=-1,
                 decision="safe_recovery_manual",
+                record_type="operator_event",
                 rejection_reason=None,
                 protocol_round_trip_ms=0.0,
                 ack_code="-",
@@ -1064,6 +1068,7 @@ class BenchAppController(QObject):
                 trigger_generation_s=self.runtime_state.previous_timestamp_s,
                 lane=-1,
                 decision="mode_auto",
+                record_type="operator_event",
                 rejection_reason=None,
                 protocol_round_trip_ms=0.0,
                 ack_code="-",
@@ -1073,14 +1078,6 @@ class BenchAppController(QObject):
         return True
 
     def _transport_queue_depth(self) -> int:
-        for accessor_name in ("transport_queue_depth", "current_queue_depth"):
-            if hasattr(self.transport, accessor_name):
-                accessor = getattr(self.transport, accessor_name)
-                if callable(accessor):
-                    depth = accessor()
-                    if isinstance(depth, int) and depth >= 0:
-                        self._latest_transport_queue_depth = depth
-                        return depth
         return self._latest_transport_queue_depth
 
     def _transport_clear_queue(self) -> None:
@@ -1158,6 +1155,7 @@ class BenchAppController(QObject):
                 trigger_generation_s=0.0,
                 lane=-1,
                 decision="home",
+                record_type="operator_event",
                 rejection_reason=None,
                 protocol_round_trip_ms=0.0,
                 ack_code="-",

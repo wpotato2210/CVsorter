@@ -24,6 +24,12 @@
 6. Canonical SAFE recovery path is `SAFE -> MANUAL -> AUTO`.
 7. `RESET_QUEUE` is allowed in any mode and only affects queue/scheduler state (`IDLE` when empty).
 
+
+## Queue-depth authority
+- Normative owner: MCU/host ACK metadata (`ACK|...|queue_depth=<n>|...`) and `GET_STATE` snapshots are the only authoritative queue-depth truth.
+- Bench/runtime caches (for example transport/UI mirrors) are derived-only and may lag, but MUST NOT override newer ACK/`GET_STATE` values or trigger corrective resets by themselves.
+- Queue reset decisions are driven by mode/scheduler mismatches and explicit reset commands, not cache drift.
+
 ## Scheduler states
 - `IDLE`: queue is empty.
 - `ACTIVE`: queue has one or more pending entries.

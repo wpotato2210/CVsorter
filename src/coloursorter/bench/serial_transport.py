@@ -106,6 +106,11 @@ class SerialMcuTransport:
         self._expected_scheduler_state = "IDLE"
         self._last_in_flight: InFlightCommandMetadata | None = None
 
+    def _update_cached_transport_state(self, ack: AckResponse) -> None:
+        if isinstance(ack.queue_depth, int) and ack.queue_depth >= 0:
+            self._last_queue_depth = ack.queue_depth
+        self._last_queue_cleared = ack.queue_cleared
+
     def close(self) -> None:
         if hasattr(self._serial, "close"):
             self._serial.close()
@@ -134,8 +139,7 @@ class SerialMcuTransport:
 
         ack_code, fault_state = _map_ack_to_bench_state(ack.status, ack.nack_code, ack.detail)
         self._last_fault_state = fault_state
-        self._last_queue_depth = ack.queue_depth or 0
-        self._last_queue_cleared = ack.queue_cleared
+        self._update_cached_transport_state(ack)
         return TransportResponse(
             ack_code=ack_code,
             queue_depth=self._last_queue_depth,
@@ -210,8 +214,7 @@ class SerialMcuTransport:
                     fault_state=FaultState.SAFE,
                 ) from exc
 
-            self._last_queue_depth = ack.queue_depth or 0
-            self._last_queue_cleared = ack.queue_cleared
+            self._update_cached_transport_state(ack)
             if command in {CMD_SET_MODE, CMD_SCHED}:
                 self._expected_mode = ack.mode or self._expected_mode
                 self._expected_scheduler_state = ack.scheduler_state or self._expected_scheduler_state
@@ -272,11 +275,10 @@ class SerialMcuTransport:
                 raise SerialTransportError.create("sync_failed", "GET_STATE failed", FaultState.SAFE)
 
         mode = ack.mode or "UNKNOWN"
-        queue_depth = ack.queue_depth or 0
+        queue_depth = ack.queue_depth if isinstance(ack.queue_depth, int) and ack.queue_depth >= 0 else self._last_queue_depth
         scheduler_state = ack.scheduler_state or "UNKNOWN"
         if (
             mode != self._expected_mode
-            or queue_depth != self._last_queue_depth
             or scheduler_state != self._expected_scheduler_state
         ):
             reset_ack, _ = self._send_frame(CMD_RESET_QUEUE)

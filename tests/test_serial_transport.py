@@ -242,3 +242,19 @@ def test_mock_and_serial_esp32_parity_for_identical_sched_input() -> None:
     assert mock_response.queue_depth == serial_response.queue_depth
     assert esp32_response.scheduler_state == serial_response.scheduler_state
     assert mock_response.scheduler_state == serial_response.scheduler_state
+
+
+def test_serial_transport_get_state_queue_depth_drift_does_not_force_reset() -> None:
+    host = OpenSpecV3Host(max_queue_depth=4)
+    fake = _HostBackedSerial(host)
+    transport = SerialMcuTransport(
+        config=SerialTransportConfig(port="/dev/null", baud=115200, timeout_s=0.05, heartbeat_interval_s=0.0),
+        serial_factory=lambda **_: fake,
+    )
+    transport._last_queue_depth = 3  # stale derived cache should not trigger RESET_QUEUE by itself
+
+    transport.send(ScheduledCommand(lane=1, position_mm=200.0))
+
+    commands = [parse_frame(raw.decode().strip()).command for raw in fake.written]
+    assert "RESET_QUEUE" not in commands
+

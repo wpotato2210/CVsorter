@@ -19,11 +19,12 @@ Define authoritative runtime states and transitions for mode control, scheduler 
 ## States
 - `mode`: `AUTO | MANUAL | SAFE`.
 - `scheduler_state`: `IDLE | ACTIVE`.
-- `queue_depth`: integer in `0..8` (pending authoritative source decision).
+- `queue_depth`: integer in `0..8` (authoritative source: ACK/GET_STATE from host/MCU per `docs/openspec/v3/state_machine.md`).
 - `host_state`: `READY | BUSY`.
 - `trigger_state` (conceptual): `queued | sent | acked | failed`.
 
 ## Dependencies
+- Queue-depth authority is defined in `docs/openspec/v3/state_machine.md` (Queue-depth authority section).
 - `protocol.md` transition policy and ACK/NACK contract.
 - `threading_model.md` atomic transition and snapshot consistency rules.
 - Scheduler queue implementation.

@@ -342,8 +342,21 @@ def test_serial_transport_queue_depth_is_reflected_in_runtime_telemetry(
     controller = BenchAppController(qapp, serial_runtime)
     controller.bench_runner = _RecordingRunner(())
 
-    command = ScheduledCommand(lane=1, position_mm=200.0)
-    controller.transport.send(command)
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.1,
+            trigger_generation_s=0.1,
+            lane=1,
+            decision="accept",
+            rejection_reason=None,
+            protocol_round_trip_ms=4.2,
+            ack_code=AckCode.ACK,
+            queue_depth=2,
+            scheduler_state="ACTIVE",
+            mode="AUTO",
+            queue_cleared=False,
+        )
+    )
 
     queue_states: list[QueueState] = []
     controller.queue_state_requested.connect(lambda state: queue_states.append(state))

@@ -11,6 +11,12 @@ Bench log records MUST include:
 - `queue_depth`
 - `scheduler_state`
 - `mode`
+- `record_type` (`actuation_cycle` for cycle telemetry; explicit non-cycle tags such as `operator_event` for operator/runtime records)
+
+
+Timing invariants scope:
+- Trigger/timing invariants in this document apply only to records tagged `record_type=actuation_cycle`.
+- Non-cycle/operator records MUST set a non-cycle `record_type` and are excluded from cycle timing SLA/jitter checks.
 
 Trigger timing model expectations:
 - `trigger_generation_timestamp` is anchored to the latest observed encoder pulse timestamp (or the previous frame timestamp if no pulse has been observed yet).
