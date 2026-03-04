@@ -67,10 +67,19 @@ def test_mcu_response_schema_enforces_conditional_ack_nack_requirements() -> Non
     assert spec["allOf"] == runtime["allOf"]
 
     ack_then = runtime["allOf"][0]["then"]["required"]
-    nack_then = runtime["allOf"][1]["then"]["required"]
+    nack_then = runtime["allOf"][1]["then"]
 
     assert ack_then == ["mode", "queue_depth", "scheduler_state", "queue_cleared"]
-    assert nack_then == ["nack_code"]
+    assert nack_then["required"] == ["nack_code"]
+    assert nack_then["not"] == {
+        "anyOf": [
+            {"required": ["queue_depth"]},
+            {"required": ["queue_cleared"]},
+            {"required": ["mode"]},
+            {"required": ["scheduler_state"]},
+            {"required": ["link_state"]},
+        ]
+    }
 
 
 def test_icd_cross_references_runtime_and_protocol() -> None:

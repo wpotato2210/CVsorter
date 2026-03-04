@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
+import types
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -67,23 +69,42 @@ def check_runtime_config() -> CheckResult:
     if not config_path.exists():
         return CheckResult(name="runtime_config", passed=False, detail="configs/bench_runtime.yaml missing")
 
-    raw = config_path.read_text(encoding="utf-8")
-    required_sections = (
-        "frame_source:",
-        "camera:",
-        "transport:",
-        "cycle_timing:",
-        "cycle_latency_budget:",
-        "scheduling_guard:",
-        "scenario_thresholds:",
-        "detection:",
-        "baseline_run:",
-        "bench_gui:",
-    )
-    missing = [section for section in required_sections if section not in raw]
-    if missing:
-        return CheckResult(name="runtime_config", passed=False, detail=f"missing sections: {', '.join(missing)}")
-    return CheckResult(name="runtime_config", passed=True, detail="required runtime sections present")
+    src_path = Path("src").resolve()
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
+
+    runtime_module_path = Path("src/coloursorter/config/runtime.py")
+    deploy_module_name = "coloursorter.deploy"
+    had_deploy_module = deploy_module_name in sys.modules
+    original_deploy_module = sys.modules.get(deploy_module_name)
+
+    try:
+        sys.modules[deploy_module_name] = types.SimpleNamespace(
+            DETECTION_PROVIDER_VALUES=("opencv_basic", "opencv_calibrated", "model_stub")
+        )
+        runtime_spec = importlib.util.spec_from_file_location("firmware_readiness_runtime", runtime_module_path)
+        if runtime_spec is None or runtime_spec.loader is None:
+            return CheckResult(name="runtime_config", passed=False, detail="unable to load runtime validator module")
+        runtime_module = importlib.util.module_from_spec(runtime_spec)
+        sys.modules[runtime_spec.name] = runtime_module
+        runtime_spec.loader.exec_module(runtime_module)
+    except Exception as exc:  # pragma: no cover - import failure only
+        return CheckResult(name="runtime_config", passed=False, detail=f"unable to import runtime config validator: {exc}")
+    finally:
+        sys.modules.pop("firmware_readiness_runtime", None)
+        if had_deploy_module:
+            sys.modules[deploy_module_name] = original_deploy_module
+        else:
+            sys.modules.pop(deploy_module_name, None)
+
+    try:
+        runtime_module.RuntimeConfig.load_startup(config_path)
+    except runtime_module.ConfigValidationError as exc:
+        return CheckResult(name="runtime_config", passed=False, detail=f"invalid runtime config: {exc}")
+    except Exception as exc:  # pragma: no cover - unexpected parser/runtime failure
+        return CheckResult(name="runtime_config", passed=False, detail=f"runtime config load failure: {exc}")
+
+    return CheckResult(name="runtime_config", passed=True, detail="RuntimeConfig.load_startup validation passed")
 
 
 def main() -> int:
