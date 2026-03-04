@@ -19,10 +19,12 @@ from coloursorter.bench import (
 from coloursorter.config import RuntimeConfig
 from coloursorter.deploy import (
     CalibratedOpenCvDetectionConfig,
+    CaptureBaselineConfig,
     ModelStubDetectionConfig,
     OpenCvDetectionConfig,
     PipelineRunner,
     PreprocessConfig,
+    capture_fault_reason,
     build_detection_provider,
 )
 from coloursorter.eval.reject_profiles import (
@@ -148,6 +150,7 @@ class LiveRuntimeRunner:
             )
         )
         self._detector = build_live_detection_provider(self._runtime_config)
+        self._capture_baseline = CaptureBaselineConfig()
         setattr(self._detector, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
         self._transport = build_live_transport(self._runtime_config)
         self._sleep = sleep_fn or time.sleep
@@ -177,6 +180,7 @@ class LiveRuntimeRunner:
                 detect_latency_ms = (self._now() - detect_start) * 1000.0
 
                 pipeline_start = self._now()
+                preprocess_metrics = getattr(self._detector, "last_validation_metrics", {})
                 result = self._pipeline.run(
                     frame=FrameMetadata(
                         frame_id=frame.frame_id,
@@ -186,6 +190,10 @@ class LiveRuntimeRunner:
                     ),
                     detections=detections,
                     thresholds=self.runtime_reject_thresholds,
+                    capture_fault_reason=capture_fault_reason(
+                        preprocess_metrics,
+                        self._capture_baseline,
+                    ),
                 )
                 pipeline_latency_ms = (self._now() - pipeline_start) * 1000.0
 

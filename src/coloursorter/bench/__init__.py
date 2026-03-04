@@ -1,4 +1,11 @@
 from .evaluation import BenchEvaluation, evaluate_logs, write_artifacts
+from .acceptance_pack import (
+    AcceptanceExample,
+    AcceptanceMetrics,
+    AcceptanceThresholds,
+    acceptance_gate_passed,
+    evaluate_acceptance_pack,
+)
 from .frame_source import BenchFrameSource, FrameSourceError
 from .live_source import LiveConfig, LiveFrameSource
 from .esp32_transport import Esp32McuTransport
@@ -58,6 +65,11 @@ __all__ = [
     "VirtualEncoder",
     "default_scenarios",
     "scenarios_from_thresholds",
+    "AcceptanceExample",
+    "AcceptanceMetrics",
+    "AcceptanceThresholds",
+    "evaluate_acceptance_pack",
+    "acceptance_gate_passed",
     "evaluate_logs",
     "write_artifacts",
 ]

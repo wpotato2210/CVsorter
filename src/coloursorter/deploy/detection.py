@@ -62,6 +62,37 @@ class PreprocessConfig:
     gray_world_strength: float = 0.6
 
 
+@dataclass(frozen=True)
+class CaptureBaselineConfig:
+    min_luma: float = 80.0
+    max_luma: float = 180.0
+    max_exposure_gain: float = 2.5
+    max_clipped_ratio: float = 0.1
+
+
+def capture_fault_reason(
+    preprocess_metrics: dict[str, float | bool],
+    config: CaptureBaselineConfig | None = None,
+) -> str | None:
+    if not preprocess_metrics:
+        return None
+    baseline = config or CaptureBaselineConfig()
+    if not bool(preprocess_metrics.get("preprocess_valid", True)):
+        return "capture_preprocess_invalid"
+    luma_after = float(preprocess_metrics.get("luma_after", 0.0))
+    if luma_after < baseline.min_luma:
+        return "capture_luma_low"
+    if luma_after > baseline.max_luma:
+        return "capture_luma_high"
+    exposure_gain = float(preprocess_metrics.get("exposure_gain", 1.0))
+    if exposure_gain > baseline.max_exposure_gain:
+        return "capture_exposure_gain_high"
+    clipped_ratio = float(preprocess_metrics.get("clipped_ratio", 0.0))
+    if clipped_ratio > baseline.max_clipped_ratio:
+        return "capture_clipping_high"
+    return None
+
+
 def _stable_config_hash(payload: dict[str, object]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
