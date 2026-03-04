@@ -51,3 +51,15 @@ def test_lane_for_x_px_uses_left_closed_right_open_bins(tmp_path: Path) -> None:
     assert lane_for_x_px(10.0, geometry) == 1
     assert lane_for_x_px(219.999, geometry) == 21
     assert lane_for_x_px(220.0, geometry) is None
+
+
+def test_load_lane_geometry_rejects_non_positive_lane_count(tmp_path: Path) -> None:
+    config_path = tmp_path / "lane_geometry.yaml"
+    boundaries = [i * 10 for i in range(23)]
+    config_path.write_text(
+        _lane_config_text(boundaries).replace("lane_count: 22", "lane_count: 0"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(LaneGeometryError):
+        load_lane_geometry(config_path)

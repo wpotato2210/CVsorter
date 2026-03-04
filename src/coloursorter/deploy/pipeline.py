@@ -7,7 +7,7 @@ from coloursorter.calibration import CalibrationError, load_calibration
 from coloursorter.eval import rejection_reason_for_object
 from coloursorter.model import CentroidMM, DecisionPayload, FrameMetadata, ObjectDetection
 from coloursorter.preprocess import lane_for_x_px, load_lane_geometry
-from coloursorter.scheduler import ScheduledCommand, build_scheduled_command
+from coloursorter.scheduler import ScheduledCommand, build_scheduled_command, map_segmentation_lane_to_protocol_lane
 
 
 @dataclass(frozen=True)
@@ -67,6 +67,10 @@ class PipelineRunner:
             decisions.append(decision)
 
             if lane is not None and reason is not None and reason != calibration_error:
-                commands.append(build_scheduled_command(lane, trigger_mm))
+                try:
+                    protocol_lane = map_segmentation_lane_to_protocol_lane(lane, self._geometry.lane_count)
+                except ValueError:
+                    continue
+                commands.append(build_scheduled_command(protocol_lane, trigger_mm))
 
         return PipelineResult(decisions=tuple(decisions), schedule_commands=tuple(commands))

@@ -54,7 +54,7 @@ def test_pipeline_assigns_reasons_and_schedules_rejects_only(tmp_path: Path) -> 
 
     assert len(result.schedule_commands) == 1
     command = result.schedule_commands[0]
-    assert command.lane == 1
+    assert command.lane == 0
     assert command.position_mm == 110.0
 
 
