@@ -33,6 +33,14 @@
 | 2 | Live classification preview overlays | Live preview overlays show lane, class, and reject/accept state with **≥ 99% frame-to-frame metadata alignment** in validation sessions. |
 | 3 | Structured report export | End-of-run exports include summary, event timeline, and telemetry in a structured format with **100% schema-valid output** across acceptance runs. |
 
+## Phase 3 — Usability Upgrades
+
+| Item | Scope (usability upgrade) | Acceptance criteria |
+|---|---|---|
+| 1 | Run-start preflight checklist panel (config, source, transport, profile) | Preflight blocks run start on missing/invalid prerequisites with **100% deterministic checklist output** for equivalent inputs. |
+| 2 | Operator quick-actions for common recovery paths (pause/resume, safe-mode, reconnect) | Recovery action latency from click to state update is **≤ 1 second** for all quick actions in bench validation sessions. |
+| 3 | Inline artifact navigator (last run summary/events/telemetry access) | Operators can open the latest generated artifacts in **≤ 2 clicks** with successful path resolution in all acceptance scenarios. |
+
 ## Deferred Enhancements (Non-Confirmed Ideas)
 
-- Any idea not listed in the manual-confirmed baseline table or the approved Phase 2 usability-upgrade table is classified as a **deferred enhancement**.
+- Any idea not listed in the manual-confirmed baseline table or the approved Phase 2 or Phase 3 usability-upgrade tables is classified as a **deferred enhancement**.
