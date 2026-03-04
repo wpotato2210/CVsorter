@@ -37,8 +37,8 @@ def load_lane_geometry(config_path: str | Path) -> LaneGeometry:
     lane_count = int(_extract_scalar(raw_text, "lane_count"))
     lane_boundaries = _extract_boundaries(raw_text)
 
-    if lane_count != 22:
-        raise LaneGeometryError("Expected fixed lane_count=22")
+    if lane_count <= 0:
+        raise LaneGeometryError("lane_count must be > 0")
     if len(lane_boundaries) != lane_count + 1:
         raise LaneGeometryError("lane_boundaries_px size must be lane_count + 1")
     if any(b >= lane_boundaries[i + 1] for i, b in enumerate(lane_boundaries[:-1])):
