@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from coloursorter.calibration import CalibrationError, load_calibration
-from coloursorter.eval import rejection_reason_for_object
+from coloursorter.eval import decision_outcome_for_object
 from coloursorter.model import CentroidMM, DecisionPayload, FrameMetadata, ObjectDetection
 from coloursorter.preprocess import lane_for_x_px, lane_geometry_for_frame, load_lane_geometry
 from coloursorter.scheduler import ScheduledCommand, build_scheduled_command
@@ -60,6 +60,7 @@ class PipelineRunner:
         frame: FrameMetadata,
         detections: list[ObjectDetection],
         thresholds: Mapping[str, float] | None = None,
+        capture_fault_reason: str | None = None,
     ) -> PipelineResult:
         decisions: list[DecisionPayload] = []
         commands: list[ScheduledCommand] = []
@@ -76,22 +77,36 @@ class PipelineRunner:
 
         for detection in detections:
             lane = lane_for_x_px(detection.centroid_x_px, lane_geometry)
-            reason = calibration_error or alignment_fault
+            reason = calibration_error or alignment_fault or capture_fault_reason
 
             if lane is None:
                 reason = reason or "out_of_lane_bounds"
                 centroid_mm = CentroidMM(x_mm=0.0, y_mm=0.0)
                 trigger_mm = 0.0
+                outcome = decision_outcome_for_object(
+                    detection,
+                    thresholds=thresholds,
+                    context_fault_reason=reason,
+                )
             elif calibration is None:
                 centroid_mm = CentroidMM(x_mm=0.0, y_mm=0.0)
                 trigger_mm = 0.0
+                outcome = decision_outcome_for_object(
+                    detection,
+                    thresholds=thresholds,
+                    context_fault_reason=reason,
+                )
             else:
                 centroid_mm = CentroidMM(
                     x_mm=calibration.px_to_mm(detection.centroid_x_px),
                     y_mm=calibration.px_to_mm(detection.centroid_y_px),
                 )
                 trigger_mm = self._geometry.camera_to_reject_mm + centroid_mm.y_mm
-                reason = reason or rejection_reason_for_object(detection, thresholds=thresholds)
+                outcome = decision_outcome_for_object(
+                    detection,
+                    thresholds=thresholds,
+                    context_fault_reason=reason,
+                )
 
             decision = DecisionPayload(
                 frame_id=frame.frame_id,
@@ -99,12 +114,12 @@ class PipelineRunner:
                 lane=-1 if lane is None else lane,
                 centroid_mm=centroid_mm,
                 trigger_mm=trigger_mm,
-                classification=detection.classification,
-                rejection_reason=reason,
+                classification=outcome.decision,
+                rejection_reason=None if outcome.reason_code == "accepted" else outcome.reason_code,
             )
             decisions.append(decision)
 
-            if lane is not None and reason is not None and calibration_error is None and alignment_fault is None:
+            if lane is not None and outcome.decision == "reject" and calibration_error is None and alignment_fault is None:
                 command = build_scheduled_command(lane, trigger_mm)
                 commands.append(command)
                 scheduled_events.append(ScheduledDecision(object_id=detection.object_id, decision=decision, command=command))

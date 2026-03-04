@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from coloursorter.eval.reject_profiles import REJECTION_KEYS, default_profile
 from coloursorter.model import ObjectDetection
@@ -11,6 +12,17 @@ SIZE_MM_PROFILE_KEY = REJECTION_KEYS[5]
 
 DEFAULT_REJECTION_THRESHOLDS = default_profile().thresholds
 _PROFILE_TO_RULE_VALUE_SCALE = 0.01
+
+DECISION_ACCEPT = "accept"
+DECISION_REJECT = "reject"
+DECISION_UNKNOWN = "unknown"
+DECISION_REASON_ACCEPTED = "accepted"
+
+
+@dataclass(frozen=True)
+class DecisionOutcome:
+    decision: str
+    reason_code: str
 
 
 def rejection_reason_for_object(
@@ -26,6 +38,19 @@ def rejection_reason_for_object(
     if detection.classification.lower() == "reject":
         return "classified_reject"
     return None
+
+
+def decision_outcome_for_object(
+    detection: ObjectDetection,
+    thresholds: Mapping[str, float] | None = None,
+    context_fault_reason: str | None = None,
+) -> DecisionOutcome:
+    if context_fault_reason is not None:
+        return DecisionOutcome(decision=DECISION_UNKNOWN, reason_code=context_fault_reason)
+    reason = rejection_reason_for_object(detection, thresholds=thresholds)
+    if reason is not None:
+        return DecisionOutcome(decision=DECISION_REJECT, reason_code=reason)
+    return DecisionOutcome(decision=DECISION_ACCEPT, reason_code=DECISION_REASON_ACCEPTED)
 
 
 def _score_threshold_for_key(key: str, thresholds: Mapping[str, float] | None) -> float:
