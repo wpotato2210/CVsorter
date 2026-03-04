@@ -21,10 +21,11 @@ Define authoritative correctness constraints for the ColourSorter CV pipeline, s
 ## States
 - Mode state: `AUTO | MANUAL | SAFE`.
 - Scheduler state: `IDLE | ACTIVE`.
-- Queue state: `0..8` entries (default protocol value; authoritative owner unresolved).
+- Queue state: `0..8` entries (default protocol value; authoritative depth owner is host/MCU ACK/GET_STATE).
 - Frame validation state: `valid | rejected` with deterministic reason.
 
 ## Dependencies
+- Queue-depth authority is defined in `docs/openspec/v3/state_machine.md` (Queue-depth authority section).
 - `protocol.md` for command validation ranges and transition policy.
 - `architecture.md` for CV pipeline ordering and scheduler handoff.
 - `threading_model.md` for synchronization assumptions around queue/state mutation.

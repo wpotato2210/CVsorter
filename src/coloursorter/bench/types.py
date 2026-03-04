@@ -61,6 +61,7 @@ class BenchLogEntry:
     rejection_reason: str | None
     protocol_round_trip_ms: float
     ack_code: AckCode | str
+    record_type: str = "actuation_cycle"
     trigger_timestamp_s: float = 0.0
     trigger_mm: float = 0.0
     lane_index: int = -1

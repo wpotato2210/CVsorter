@@ -122,8 +122,21 @@ def test_serial_queue_depth_is_exposed_in_gui_state(
     monkeypatch.setattr("gui.bench_app.controller.SerialMcuTransport", _StubSerialTransport)
     controller = BenchAppController(qapp, serial_runtime)
 
-    controller.transport.send(ScheduledCommand(lane=1, position_mm=100.0))
-    controller._emit_runtime_state()
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.1,
+            trigger_generation_s=0.1,
+            lane=1,
+            decision="accept",
+            rejection_reason=None,
+            protocol_round_trip_ms=4.0,
+            ack_code=AckCode.ACK,
+            queue_depth=2,
+            scheduler_state="ACTIVE",
+            mode="AUTO",
+            queue_cleared=False,
+        )
+    )
 
     assert controller.window.queue_depth_label.text() == "Depth: 2/8"
 

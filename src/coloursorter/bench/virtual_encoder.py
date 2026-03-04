@@ -18,6 +18,11 @@ class EncoderFaultConfig:
 
 
 class VirtualEncoder:
+    """Virtual encoder timing model.
+
+    Timing outputs from this model are normative for `record_type=actuation_cycle` telemetry only.
+    Non-cycle/operator records are explicitly out of scope for cycle timing invariants.
+    """
     def __init__(self, config: EncoderConfig, fault_config: EncoderFaultConfig | None = None) -> None:
         self._config = config
         self._fault_config = fault_config or EncoderFaultConfig()
