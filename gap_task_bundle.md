@@ -1,53 +1,62 @@
-# Gap Analysis Task Bundles (Condensed)
+# Gap Analysis Task Bundles
 
-This plan safely consolidates remediation into **2 execution tasks** while preserving timing, safety, and contract intent.
+This document consolidates the previously enumerated remediation actions into a smaller set of safe execution tracks while preserving timing, safety, and contract intent.
 
-## Task 1 — Contract & Safety Baseline
-**Goal:** lock hard requirements and control-plane safety before implementation changes.
+## Bundle 1 — Normative Safety + Realtime Contracts
+**Goal:** establish one source of truth for hard requirements.
 
-**Scope**
-- Promote `openspec.md` to normative source of truth.
-- Align `constraints.md`, `architecture.md`, `state_model.md`, `protocol.md`, and `security_model.md`.
-- Define authenticated command requirements and heartbeat/watchdog escalation semantics.
-- Standardize units and physical parameters from config-owned definitions.
+**Includes:**
+- Promote `openspec.md` to normative contract.
+- Align `constraints.md`, `state_model.md`, `architecture.md` to same numeric limits and state names.
+- Add explicit units and acceptance thresholds (`ms`, `us`, `mm`, `kPa`).
 
-**Mandatory constants/fields**
-- `fps_target=100`
-- `max_latency_ms<=15`
-- `max_actuator_pulse_ms<=1`
-- `queue_depth=8`
-- `heartbeat_period_ms<=50`
-- `heartbeat_timeout_ms<=150`
-- states include `ESTOP_ACTIVE`, `SAFE_LATCH`
-- timing variables: `frame_timestamp_ms`, `pipeline_latency_ms`, `trigger_offset_ms`, `actuation_delay_ms`
+**Exit criteria:**
+- Required constants explicitly documented: `fps_target=100`, `max_latency_ms<=15`, `max_actuator_pulse_ms<=1`, `queue_depth=8`.
+- State model includes `ESTOP_ACTIVE` and `SAFE_LATCH` transitions.
 
-**Exit criteria**
-- All listed docs use the same numeric bounds and state names.
-- Motion-capable commands require auth + anti-replay fields.
-- E-STOP and latch transitions are explicit and unambiguous.
+## Bundle 2 — Secure Control Plane + Deterministic Runtime
+**Goal:** prevent unsafe motion commands and timing drift in execution.
 
-## Task 2 — Deterministic Pipeline Delivery + Evidence
-**Goal:** ship deterministic runtime behavior with verifiable contracts and operator readiness.
+**Includes:**
+- Upgrade protocol framing with anti-replay authentication semantics.
+- Define heartbeat period/timeout and escalation to `DEGRADED`/`SAFE_LATCH`.
+- Specify deterministic worker architecture (Capture/Decision/Actuation) with bounded handoff policies and watchdog behavior.
 
-**Scope**
-- Implement/align requested runtime modules only:
-  - `preprocess | dataset | model | train | eval | infer | scheduler | actuator_iface | config`
-- Enforce runtime assertions:
-  - image shape `(H,W,3)`
-  - tensor shape `(B,C,H,W)`
-  - device match
-  - dataset nonempty
-- Ensure all physical constants are loaded from `src/coloursorter/config/*` (no inline physical constants).
-- Publish canonical telemetry/config schemas and acceptance tests.
-- Update operator/deployment SOPs and close missing artifact traceability.
+**Exit criteria:**
+- Motion-capable commands require authentication.
+- Heartbeat and watchdog thresholds are numerically specified and shared across protocol/threading docs.
+- Queue handoff and backpressure behavior are deterministic and documented.
 
-**Exit criteria**
-- Deterministic I/O contracts are documented for each requested module.
-- Acceptance evidence includes latency, throughput, and E-STOP response thresholds.
-- Operator go/no-go and reset authority workflow are documented.
+## Bundle 3 — Schemas, Validation, and Acceptance Evidence
+**Goal:** make contracts testable and auditable.
 
-## Dependency order
-1. Task 1 (contracts and safety semantics)
-2. Task 2 (implementation and validation)
+**Includes:**
+- Publish canonical telemetry and runtime config schemas.
+- Add/restore validator and latency/calibration tooling references.
+- Extend test strategy with hard pass/fail thresholds for latency, throughput, and safety response.
 
-This order minimizes rework and prevents implementation drift against unresolved safety/realtime requirements.
+**Exit criteria:**
+- Versioned schema files exist and are referenced by docs.
+- Acceptance tests include p99 latency and E-STOP response criteria.
+- Validation workflow maps each test to a requirement ID.
+
+## Bundle 4 — Operations Readiness + Traceability Closure
+**Goal:** ensure safe field operation and complete artifact traceability.
+
+**Includes:**
+- Update operator SOP (`USER_MANUAL.md`, `QUICK_START.md`) with preflight, calibration tolerances, E-STOP drills, and reset authority.
+- Harden deployment controls (authenticated command channel, auditability, telemetry retention/SLOs).
+- Resolve missing MCU/HMI/tooling artifacts or document authoritative replacements.
+
+**Exit criteria:**
+- Go/no-go checklist required before `RUNNING` mode.
+- Safety drill and reset workflow are explicit and role-gated.
+- Filetree/docs identify safety/realtime critical artifacts and ownership.
+
+## Safe sequencing
+1. Bundle 1
+2. Bundle 2
+3. Bundle 3
+4. Bundle 4
+
+This order minimizes rework by setting requirements first, then implementation semantics, then evidence, then operationalization.
