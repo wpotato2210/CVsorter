@@ -16,7 +16,12 @@ from .detection import (
 )
 from .pipeline import PipelineResult, PipelineRunner, ScheduledDecision
 from .actuator_timing import ActuatorCalibration, ActuatorTimingCalibrator
-from .logging import BaselineEvent, BaselineEventLogger
+from .logging import (
+    BaselineEvent,
+    BaselineEventLogger,
+    CanonicalTimingDiagnostics,
+    to_canonical_timing_diagnostics,
+)
 
 __all__ = [
     "DETECTION_LABEL_VALUES",
@@ -36,6 +41,8 @@ __all__ = [
     "ActuatorTimingCalibrator",
     "BaselineEvent",
     "BaselineEventLogger",
+    "CanonicalTimingDiagnostics",
+    "to_canonical_timing_diagnostics",
     "ScheduledDecision",
     "ModelStubDetectionConfig",
     "ModelStubDetectionProvider",

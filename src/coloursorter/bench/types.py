@@ -75,6 +75,10 @@ class BenchLogEntry:
     schedule_latency_ms: float = 0.0
     transport_latency_ms: float = 0.0
     cycle_latency_ms: float = 0.0
+    frame_timestamp_ms: float = 0.0
+    pipeline_latency_ms: float = 0.0
+    trigger_offset_ms: float = 0.0
+    actuation_delay_ms: float = 0.0
     detect_latency_ms: float = 0.0
     queue_age_ms: float = 0.0
     frame_staleness_ms: float = 0.0
