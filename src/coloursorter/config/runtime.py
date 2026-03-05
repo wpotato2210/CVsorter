@@ -30,6 +30,10 @@ DEFAULT_SERIAL_TIMEOUT_S = 0.100
 DEFAULT_MCU_OPTIONS = ("mock", "serial", "esp32")
 DEFAULT_BAUD_OPTIONS = (9600, 57600, 115200, 230400)
 DEFAULT_LOG_LEVEL_OPTIONS = ("DEBUG", "INFO", "WARN", "ERROR")
+MAX_STARTUP_CONFIG_BYTES = 1_000_000
+MAX_STARTUP_CONFIG_LINES = 10_000
+MAX_YAML_NESTING_DEPTH = 32
+MAX_YAML_LINE_LENGTH = 4_096
 
 
 @dataclass(frozen=True)
@@ -488,7 +492,13 @@ class RuntimeConfig:
 
     @classmethod
     def load_startup(cls, config_path: str | Path) -> "RuntimeConfig":
-        raw_text = Path(config_path).read_text(encoding="utf-8")
+        path = Path(config_path)
+        stat_result = path.stat()
+        if stat_result.st_size > MAX_STARTUP_CONFIG_BYTES:
+            raise ConfigValidationError(
+                f"Startup config exceeds size limit ({MAX_STARTUP_CONFIG_BYTES} bytes)"
+            )
+        raw_text = path.read_text(encoding="utf-8")
         return cls.from_text(raw_text)
 
     def apply_live_update(self, updates: dict[str, str]) -> "RuntimeConfig":
@@ -522,7 +532,15 @@ def _parse_simple_yaml(raw_text: str) -> dict[str, Any]:
     root: dict[str, Any] = {}
     stack: list[tuple[int, Any]] = [(-1, root)]
 
-    for line_no, raw_line in enumerate(raw_text.splitlines(), start=1):
+    lines = raw_text.splitlines()
+    if len(lines) > MAX_STARTUP_CONFIG_LINES:
+        raise ConfigValidationError(f"Startup config exceeds line limit ({MAX_STARTUP_CONFIG_LINES})")
+
+    for line_no, raw_line in enumerate(lines, start=1):
+        if len(raw_line) > MAX_YAML_LINE_LENGTH:
+            raise ConfigValidationError(
+                f"Startup config line {line_no} exceeds {MAX_YAML_LINE_LENGTH} characters"
+            )
         stripped = raw_line.strip()
         if not stripped or stripped.startswith("#"):
             continue
@@ -533,6 +551,11 @@ def _parse_simple_yaml(raw_text: str) -> dict[str, Any]:
 
         while len(stack) > 1 and indent <= stack[-1][0]:
             stack.pop()
+
+        if len(stack) > MAX_YAML_NESTING_DEPTH:
+            raise ConfigValidationError(
+                f"Startup config nesting exceeds depth limit ({MAX_YAML_NESTING_DEPTH})"
+            )
 
         parent = stack[-1][1]
 
@@ -605,7 +628,9 @@ def _required_str(payload: dict[str, Any], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
         raise ConfigValidationError(f"{key} is required and must be a non-empty string")
-    return value.strip()
+    out = value.strip()
+    _validate_text_field(key, out)
+    return out
 
 
 def _optional_bool(payload: dict[str, Any], key: str, fallback: bool) -> bool:
@@ -623,7 +648,9 @@ def _optional_str(payload: dict[str, Any], key: str, fallback: str) -> str:
     value = payload[key]
     if not isinstance(value, str):
         raise ConfigValidationError(f"{key} must be a string")
-    return value.strip()
+    out = value.strip()
+    _validate_text_field(key, out)
+    return out
 
 
 def _required_int(payload: dict[str, Any], key: str) -> int:
@@ -707,6 +734,11 @@ def _validate_enum(field_name: str, value: str, allowed_values: tuple[str, ...])
 def _validate_finite_number(field_name: str, value: float) -> None:
     if not math.isfinite(value):
         raise ConfigValidationError(f"{field_name} must be finite")
+
+
+def _validate_text_field(field_name: str, value: str) -> None:
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise ConfigValidationError(f"{field_name} must not contain control characters")
 
 
 def _validate_serial_dependency(transport_kind: str) -> None:

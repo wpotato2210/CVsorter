@@ -207,3 +207,15 @@ def test_runtime_config_rejects_tab_indentation() -> None:
     raw_text = _canonical_text().replace("  mode: replay", "\tmode: replay", 1)
     with pytest.raises(ConfigValidationError, match="must use spaces for indentation"):
         RuntimeConfig.from_text(raw_text)
+
+
+def test_runtime_config_rejects_control_characters_in_strings() -> None:
+    raw_text = _canonical_text().replace("replay_path: data", "replay_path: data\x01")
+    with pytest.raises(ConfigValidationError, match="must not contain control characters"):
+        RuntimeConfig.from_text(raw_text)
+
+
+def test_runtime_config_rejects_excessive_line_count() -> None:
+    raw_text = _canonical_text() + ("# filler\n" * 10_001)
+    with pytest.raises(ConfigValidationError, match="exceeds line limit"):
+        RuntimeConfig.from_text(raw_text)
