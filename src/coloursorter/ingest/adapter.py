@@ -119,3 +119,60 @@ class IngestPayloadAdapter:
             raise IngestValidationError("previous_timestamp_s must be >= 0")
         if float(previous_timestamp_s) > float(timestamp):
             raise IngestValidationError("previous_timestamp_s must be <= timestamp")
+
+        self._validate_optional_number(payload, "captured_monotonic_s", minimum=0.0)
+        self._validate_optional_number(payload, "detect_latency_ms", minimum=0.0)
+
+        self._validate_optional_string(payload, "run_id", max_length=128)
+        self._validate_optional_string(payload, "test_batch_id", max_length=128)
+        self._validate_optional_string(payload, "detection_provider_version", max_length=64)
+        self._validate_optional_string(payload, "detection_model_version", max_length=64)
+        self._validate_optional_string(payload, "active_config_hash", max_length=128)
+        self._validate_optional_string(payload, "frame_snapshot_path", max_length=1024)
+
+        ground_truth_by_object_id = payload.get("ground_truth_by_object_id")
+        if ground_truth_by_object_id is not None:
+            if not isinstance(ground_truth_by_object_id, dict):
+                raise IngestValidationError("ground_truth_by_object_id must be mapping when provided")
+            for object_id, label in ground_truth_by_object_id.items():
+                if not isinstance(object_id, str) or not object_id:
+                    raise IngestValidationError("ground_truth_by_object_id keys must be non-empty strings")
+                if not isinstance(label, str) or not label:
+                    raise IngestValidationError("ground_truth_by_object_id values must be non-empty strings")
+
+        preprocess_metrics = payload.get("preprocess_metrics")
+        if preprocess_metrics is not None:
+            if not isinstance(preprocess_metrics, dict):
+                raise IngestValidationError("preprocess_metrics must be mapping when provided")
+            for metric_name, metric_value in preprocess_metrics.items():
+                if not isinstance(metric_name, str) or not metric_name:
+                    raise IngestValidationError("preprocess_metrics keys must be non-empty strings")
+                if isinstance(metric_value, bool):
+                    continue
+                if not isinstance(metric_value, (int, float)):
+                    raise IngestValidationError("preprocess_metrics values must be numeric or boolean")
+                if not math.isfinite(float(metric_value)):
+                    raise IngestValidationError("preprocess_metrics numeric values must be finite")
+
+    def _validate_optional_number(self, payload: dict[str, Any], key: str, *, minimum: float) -> None:
+        value = payload.get(key)
+        if value is None:
+            return
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise IngestValidationError(f"{key} must be number")
+        numeric = float(value)
+        if not math.isfinite(numeric):
+            raise IngestValidationError(f"{key} must be finite")
+        if numeric < minimum:
+            raise IngestValidationError(f"{key} must be >= {minimum}")
+
+    def _validate_optional_string(self, payload: dict[str, Any], key: str, *, max_length: int) -> None:
+        value = payload.get(key)
+        if value is None:
+            return
+        if not isinstance(value, str):
+            raise IngestValidationError(f"{key} must be string")
+        if not value.strip():
+            raise IngestValidationError(f"{key} must be non-empty when provided")
+        if len(value) > max_length:
+            raise IngestValidationError(f"{key} length must be <= {max_length}")
