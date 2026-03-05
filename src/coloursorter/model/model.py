@@ -21,5 +21,4 @@ class DeterministicConvNet(nn.Module):
     def forward(self, tensor_bchw: torch.Tensor) -> torch.Tensor:
         assert tensor_bchw.ndim == 4 and tensor_bchw.shape[1] == 3, "tensor shape must be (B,C,H,W)"
         features = self.backbone(tensor_bchw)
-        logits = self.head(features.flatten(start_dim=1))
-        return logits
+        return self.head(features.flatten(start_dim=1))

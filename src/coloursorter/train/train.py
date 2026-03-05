@@ -13,7 +13,7 @@ def train_one_epoch(
     dataset: DeterministicFrameDataset,
     config: PipelineConfig,
 ) -> float:
-    """Contract: consumes RGB images, trains on config.device, returns average CE loss."""
+    """Contract: RGB (H,W,3) -> preprocess -> model tensor (B,C,H,W) on config.device; returns mean CE loss."""
     ensure_dataset_nonempty(dataset)
     model = model.to(config.device)
     model.train()
@@ -23,6 +23,7 @@ def train_one_epoch(
     total_loss = 0.0
     for image_hwc, label in zip(dataset.images_hwc, dataset.labels):
         tensor_bchw = preprocess_rgb_frame(image_hwc, config)
+        assert tensor_bchw.ndim == 4 and tensor_bchw.shape[1] == 3, "tensor shape must be (B,C,H,W)"
         logits = model(tensor_bchw)
         target = torch.tensor([label], dtype=torch.long, device=config.device)
         assert logits.device.type == target.device.type, "device match assertion failed"
