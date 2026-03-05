@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import math
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -66,6 +67,14 @@ class OpenSpecV3Host:
     _recent_results: dict[str, str] = field(default_factory=dict)
     _recent_msg_ids: list[str] = field(default_factory=list)
     _last_heartbeat_at: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.max_queue_depth < 1:
+            raise ValueError("max_queue_depth must be >= 1")
+        if self.dedupe_cache_size < 1:
+            raise ValueError("dedupe_cache_size must be >= 1")
+        if self.heartbeat_timeout_s <= 0.0 or not math.isfinite(self.heartbeat_timeout_s):
+            raise ValueError("heartbeat_timeout_s must be a finite value > 0")
 
     def _scheduler_snapshot(self) -> tuple[int, str]:
         queue_depth = len(self.queue)
@@ -183,6 +192,8 @@ class OpenSpecV3Host:
         try:
             trigger_mm = float(args[1])
         except ValueError:
+            return self._nack(NACK_ARG_TYPE_ERROR, DETAIL_ARG_TYPE_ERROR, msg_id=msg_id)
+        if not math.isfinite(trigger_mm):
             return self._nack(NACK_ARG_TYPE_ERROR, DETAIL_ARG_TYPE_ERROR, msg_id=msg_id)
 
         if lane < LANE_MIN or lane > LANE_MAX:
