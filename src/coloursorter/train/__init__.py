@@ -12,6 +12,7 @@ from .augmentation import (
     augment_dataset,
 )
 from .baseline import BaselineTrainingResult, run_baseline_training
+from .train import train_one_epoch
 
 __all__ = [
     "TrainArtifactError",
@@ -25,4 +26,5 @@ __all__ = [
     "augment_dataset",
     "BaselineTrainingResult",
     "run_baseline_training",
+    "train_one_epoch",
 ]

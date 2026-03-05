@@ -7,6 +7,7 @@ from coloursorter.config.enums import (
     MOTION_MODE,
     MOTION_MODE_VALUES,
 )
+from coloursorter.config.pipeline_config import DEFAULT_PIPELINE_CONFIG, PipelineConfig
 from coloursorter.config.runtime import (
     BenchGuiConfig,
     CameraConfig,
@@ -29,6 +30,7 @@ __all__ = [
     "CycleTimingConfig",
     "DEFAULT_HOMING_MODE",
     "DEFAULT_MOTION_MODE",
+    "DEFAULT_PIPELINE_CONFIG",
     "DetectionConfig",
     "FrameSourceConfig",
     "HOMING_MODE",
@@ -39,6 +41,7 @@ __all__ = [
     "ManualServoConfig",
     "OpenCvBasicDetectionConfig",
     "OpenCvCalibratedDetectionConfig",
+    "PipelineConfig",
     "RuntimeConfig",
     "ScenarioThresholdsConfig",
     "TransportConfig",

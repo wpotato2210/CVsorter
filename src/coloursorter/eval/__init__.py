@@ -1,3 +1,4 @@
+from .eval import evaluate_accuracy
 from .reject_profiles import (
     REJECTION_KEYS,
     RejectProfile,
@@ -20,4 +21,5 @@ __all__ = [
     "DecisionOutcome",
     "decision_outcome_for_object",
     "rejection_reason_for_object",
+    "evaluate_accuracy",
 ]
