@@ -83,6 +83,8 @@ If this runs and prints a scenario summary, installation is working.
 
 ## Quick start
 
+Run these commands from the repository root (`/path/to/ColourSorter`) with your virtual environment activated.
+
 GUI:
 
 ```bash
@@ -103,6 +105,8 @@ PYTHONPATH=src python -m coloursorter.bench.cli --mode replay --source data --ar
 
 ## CLI usage example
 
+Run this command from the repository root (`/path/to/ColourSorter`) with your virtual environment activated.
+
 ```bash
 coloursorter-bench-cli --scenario nominal --avg-rtt-ms 9 --peak-rtt-ms 15
 ```
@@ -114,6 +118,8 @@ coloursorter-bench-cli --scenario nominal --avg-rtt-ms 9 --peak-rtt-ms 15
 - [Developer Guide](DEVELOPER_GUIDE.md)
 
 ## Testing (beginner friendly)
+
+Run all testing commands below from the repository root (`/path/to/ColourSorter`) with your virtual environment activated.
 
 ### What testing means here
 

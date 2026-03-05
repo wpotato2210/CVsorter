@@ -14,6 +14,8 @@ ColourSorter is organized as a deterministic CV bench stack:
 
 The top-level package exposes pipeline primitives and separate bench/GUI entry points.
 
+All shell commands in this guide are run from the project root (`/path/to/ColourSorter`) unless stated otherwise.
+
 ## 2. Package Structure Breakdown
 
 - `src/coloursorter/preprocess`: lane geometry parsing and lane lookup.
@@ -106,6 +108,8 @@ Optional:
 
 ## 10. Packaging & Editable Install Notes
 
+Run commands in this section from the repository root (`/path/to/ColourSorter`).
+
 Build system uses setuptools/wheel with `setuptools.build_meta`.
 
 Editable install:
@@ -119,6 +123,8 @@ Packages are discovered from `src` and repository root for both `coloursorter*` 
 Use entry points instead of direct module execution to keep import behavior aligned with installed package runtime.
 
 ## 11. CI / Testing
+
+Run commands in this section from the repository root (`/path/to/ColourSorter`).
 
 Pytest config:
 - `testpaths = ["tests"]`

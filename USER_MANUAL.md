@@ -26,6 +26,18 @@ ColourSorter provides a deterministic bench pipeline for object detection decisi
 
 ## 4. Installation
 
+Before running commands below, open a terminal and go to the project root:
+
+```bash
+cd /path/to/ColourSorter
+```
+
+Verify your location:
+- macOS/Linux: `pwd`
+- Windows PowerShell: `Get-Location`
+
+Expected result: the path ends with `ColourSorter`.
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
@@ -41,6 +53,8 @@ python -m pip install -e .[dev]
 ```
 
 ## 5. Getting Started
+
+Run the following commands from the repository root (`/path/to/ColourSorter`).
 
 ### Run quick scenario checks
 
@@ -96,6 +110,8 @@ Provider can come from runtime config and be overridden at CLI runtime.
 - Optional frame snapshots when enabled.
 
 ## 7. CLI Reference
+
+All command examples in this section assume your current directory is the repository root (`/path/to/ColourSorter`).
 
 ### `coloursorter-bench-cli`
 
@@ -160,6 +176,8 @@ Primary startup config:
 
 ## 9. GUI Usage Guide
 
+Run these commands from the repository root (`/path/to/ColourSorter`).
+
 Start:
 
 ```bash
@@ -174,6 +192,8 @@ The GUI displays:
 - Log table entries with timestamp, lane decision, rejection reason, RTT, and ACK code.
 
 ## 10. Step-by-Step Examples
+
+These examples assume your current directory is the repository root (`/path/to/ColourSorter`).
 
 ### Example A: basic scenario threshold check
 
