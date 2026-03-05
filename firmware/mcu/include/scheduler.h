@@ -13,5 +13,6 @@ void scheduler_init(void);
 bool scheduler_enqueue(scheduler_slot_t slot);
 bool scheduler_dequeue(scheduler_slot_t *slot_out);
 uint8_t scheduler_depth(void);
+void scheduler_reset(void);
 
 #endif
