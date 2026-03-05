@@ -1,57 +1,30 @@
 # openspec.md
 
-## OpenSpec status snapshot
-OpenSpec artifacts are versioned under `docs/openspec/v3/` and mirror implementation-facing files in:
-- `contracts/`
-- `protocol/`
-- `data/`
-- `configs/`
-- `gui/`
+## Normative authority
+`openspec.md` is the normative source of truth for runtime safety, timing, and protocol contracts. All secondary design docs (`constraints.md`, `architecture.md`, `state_model.md`, `protocol.md`, `security_model.md`) must mirror these values exactly.
 
-Source index: `docs/openspec/README.md`.
+## Required constants
+- `fps_target=100`
+- `max_latency_ms<=15`
+- `max_actuator_pulse_ms<=1`
+- `queue_depth=8`
+- `heartbeat_period_ms<=50`
+- `heartbeat_timeout_ms<=150`
 
-## Canonical artifacts
-| Domain | OpenSpec path | Runtime counterpart |
-|---|---|---|
-| Protocol commands | `docs/openspec/v3/protocol/commands.json` | `protocol/commands.json` |
-| Frame schema | `docs/openspec/v3/contracts/frame_schema.json` | `contracts/frame_schema.json` |
-| Scheduler schema | `docs/openspec/v3/contracts/sched_schema.json` | `contracts/sched_schema.json` |
-| MCU response schema | `docs/openspec/v3/contracts/mcu_response_schema.json` | `contracts/mcu_response_schema.json` |
-| Data manifest | `docs/openspec/v3/data/manifest.json` | `data/manifest.json` |
-| Runtime default config | `docs/openspec/v3/configs/default_config.yaml` | `configs/default_config.yaml` |
-| Calibration config | `docs/openspec/v3/configs/calibration.json` | `configs/calibration.json` |
-| Lane geometry config | `docs/openspec/v3/configs/lane_geometry.yaml` | `configs/lane_geometry.yaml` |
-| GUI layout | `docs/openspec/v3/gui/ui_main_layout.json` | `gui/ui_main_layout.json` |
-| GUI runtime module dependencies | `docs/openspec/v3/gui/pyside6_runtime_modules.yaml` | `gui/bench_app/*.py` |
+## Required states and timing variables
+- States: `AUTO`, `MANUAL`, `SAFE`, `ESTOP_ACTIVE`, `SAFE_LATCH`, `IDLE`, `ACTIVE`
+- Timing variables: `frame_timestamp_ms`, `pipeline_latency_ms`, `trigger_offset_ms`, `actuation_delay_ms`
 
-## Spec-to-module mapping
-| Spec concern | Primary modules |
-|---|---|
-| Frame ingest + lane geometry | `src/coloursorter/preprocess/lane_segmentation.py` |
-| Pixel-to-mm mapping | `src/coloursorter/calibration/mapping.py` |
-| Decision orchestration | `src/coloursorter/deploy/pipeline.py` |
-| Rule evaluation | `src/coloursorter/eval/rules.py` |
-| Schedule construction | `src/coloursorter/scheduler/output.py` |
-| Wire protocol serialization/parsing | `src/coloursorter/serial_interface/wire.py`, `src/coloursorter/serial_interface/serial_interface.py` |
-| Bench/runtime simulation | `src/coloursorter/bench/*`, `gui/bench_app/*` |
+## Safety semantics
+- Any E-STOP assertion transitions to `ESTOP_ACTIVE` and engages `SAFE_LATCH`.
+- Motion commands are blocked while `ESTOP_ACTIVE` or `SAFE_LATCH` is set.
+- Leaving `SAFE_LATCH` requires explicit reset authority and authenticated reset command.
 
-## I/O + dependencies diagram
-```mermaid
-flowchart TB
-    S[OpenSpec JSON/YAML artifacts] --> P[preprocess + calibration]
-    P --> D[deploy pipeline]
-    D --> R[eval rules]
-    R --> D
-    D --> Q[scheduler output]
-    Q --> W[serial wire]
-    D --> B[bench runner + GUI]
-```
+## Command authentication
+All motion-capable commands (`SCHED`, mode transitions that enable motion, queue-reset affecting motion resumption) must carry:
+- `auth_id`
+- `auth_ts_ms`
+- `auth_nonce`
+- `auth_tag`
 
-## Packaging rules
-
-```yaml
-packaging_rules:
-  require_relative_imports: true
-  forbid_implicit_top_level_packages:
-    - bench_app
-```
+Anti-replay validation is mandatory using `(auth_id, auth_nonce, auth_ts_ms)` uniqueness + timeout windows.

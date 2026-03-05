@@ -1,38 +1,30 @@
 # protocol.md
 
-## Frame format
-- Wire frame: `<msg_id|CMD|payload|CRC32>`.
-- `payload` is comma-separated positional arguments.
-- `CRC32` is computed over `msg_id|CMD|payload` (ASCII, uppercase hex).
+## Link timing and watchdog
+- `heartbeat_period_ms<=50`
+- `heartbeat_timeout_ms<=150`
+- Timeout escalation sets `ESTOP_ACTIVE` and `SAFE_LATCH`.
 
-## Startup handshake
-1. Host sends `HELLO(version, capabilities)`.
-2. MCU validates protocol version and capability overlap.
-3. Host sends periodic `HEARTBEAT`.
-4. `SCHED` is rejected until handshake succeeds.
+## Motion-capable command security
+Commands that can produce motion must include:
+- `auth_id`
+- `auth_ts_ms`
+- `auth_nonce`
+- `auth_tag`
 
-## Duplicate suppression
-- MCU caches recent responses by `msg_id`.
-- Replayed frame with same `msg_id` returns cached ACK/NACK and is **not re-executed**.
+Replay-protection is mandatory: reject duplicate or stale `(auth_id, auth_nonce, auth_ts_ms)` tuples.
 
-## Link-state FSM
-- States: `DISCONNECTED`, `SYNCING`, `READY`, `DEGRADED`.
-- `HELLO` transitions to `SYNCING`.
-- Timely `HEARTBEAT` transitions/maintains `READY`.
-- Heartbeat timeout transitions to `DEGRADED`.
-- No sync transitions to `DISCONNECTED`.
+## State-report contract
+`GET_STATE`/ACK payload exposes:
+- `mode`
+- `queue_depth` (`0..8`)
+- `scheduler_state`
+- `estop_state` (`ESTOP_ACTIVE` clear/set)
+- `safe_latch_state` (`SAFE_LATCH` clear/set)
 
-## Commands
-- `HELLO(version, capabilities)`
-- `HEARTBEAT()`
-- `SET_MODE(mode)`
-- `SCHED(lane, trigger_mm)`
-- `GET_STATE()`
-- `RESET_QUEUE()`
-
-ACK includes: `mode, queue_depth, scheduler_state, queue_cleared, link_state`.
-
-## Artifact authority
-- Authoritative protocol contract: `docs/openspec/v3/protocol/commands.json`.
-- `protocol/commands.json` is a generated mirror for compatibility tooling and must stay byte-identical to the authoritative artifact.
-- Implementations must use canonical tokens (`<msg_id|CMD|payload|CRC32>`, `ACK`, `NACK`) exactly as defined by the authoritative artifact.
+## Timing-report contract
+Motion path telemetry includes:
+- `frame_timestamp_ms`
+- `pipeline_latency_ms` (must satisfy `<=15`)
+- `trigger_offset_ms`
+- `actuation_delay_ms`
