@@ -68,6 +68,20 @@ coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
 
 You should see scenario output with pass/fail values.
 
+`coloursorter-bench-cli` note: nominal/stress scenarios can pass with latency-only inputs, but fault/recovery checks require explicit `--safe-transitions` and `--recovered-from-safe` values.
+
+Expected mixed output (latency-only inputs):
+
+```bash
+coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
+```
+
+Expected all-pass output (fault/recovery inputs provided with compliant RTT values):
+
+```bash
+coloursorter-bench-cli --avg-rtt-ms 9 --peak-rtt-ms 15 --safe-transitions 1 --recovered-from-safe
+```
+
 ## Run the app
 
 Run these commands from the repository root (`/path/to/ColourSorter`) with your virtual environment activated.

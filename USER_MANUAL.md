@@ -128,6 +128,20 @@ Common options:
 - `--watchdog-transitions` watchdog transition count.
 - `--recovered-from-safe` flag indicating recovery.
 
+Note: nominal/stress scenarios can pass with latency-only inputs. Fault/recovery scenarios require explicit `--safe-transitions` and `--recovered-from-safe`.
+
+Expected mixed output (latency-only inputs):
+
+```bash
+coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
+```
+
+Expected all-pass output (fault/recovery inputs provided with compliant RTT values):
+
+```bash
+coloursorter-bench-cli --avg-rtt-ms 9 --peak-rtt-ms 15 --safe-transitions 1 --recovered-from-safe
+```
+
 ### `python -m coloursorter.bench.cli`
 
 Main bench execution CLI.
