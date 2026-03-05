@@ -12,6 +12,14 @@ class TimingConfig:
     max_actuator_pulse_ms: int
     heartbeat_period_ms: int
     heartbeat_timeout_ms: int
+    estop_response_threshold_ms: int
+
+
+@dataclass(frozen=True)
+class ThroughputConfig:
+    """Deterministic throughput contract for acceptance checks."""
+
+    min_frames_per_second: float
 
 
 @dataclass(frozen=True)
@@ -33,6 +41,7 @@ class PhysicalConfig:
     """Physical and real-time parameters; runtime modules must only read from this object."""
 
     timing: TimingConfig
+    throughput: ThroughputConfig
     queue: QueueConfig
 
 
@@ -57,7 +66,9 @@ DEFAULT_PIPELINE_CONFIG = PipelineConfig(
             max_actuator_pulse_ms=1,
             heartbeat_period_ms=50,
             heartbeat_timeout_ms=150,
+            estop_response_threshold_ms=10,
         ),
+        throughput=ThroughputConfig(min_frames_per_second=100.0),
         queue=QueueConfig(queue_depth=8),
     ),
 )

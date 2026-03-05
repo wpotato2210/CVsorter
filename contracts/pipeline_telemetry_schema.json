@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://coloursorter/contracts/pipeline_telemetry_schema.json",
+  "title": "DeterministicPipelineTelemetry",
+  "type": "object",
+  "required": [
+    "frame_timestamp_ms",
+    "pipeline_latency_ms",
+    "trigger_offset_ms",
+    "actuation_delay_ms",
+    "throughput_fps",
+    "estop_response_ms"
+  ],
+  "properties": {
+    "frame_timestamp_ms": {"type": "integer", "minimum": 0},
+    "pipeline_latency_ms": {"type": "integer", "minimum": 0},
+    "trigger_offset_ms": {"type": "integer"},
+    "actuation_delay_ms": {"type": "integer", "minimum": 0},
+    "throughput_fps": {"type": "number", "exclusiveMinimum": 0},
+    "estop_response_ms": {"type": "integer", "minimum": 0}
+  },
+  "additionalProperties": false
+}

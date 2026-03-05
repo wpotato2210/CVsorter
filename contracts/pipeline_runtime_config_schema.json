@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://coloursorter/contracts/pipeline_runtime_config_schema.json",
+  "title": "PipelineRuntimeConfig",
+  "type": "object",
+  "required": ["device", "image", "physical"],
+  "properties": {
+    "device": {"type": "string"},
+    "image": {
+      "type": "object",
+      "required": ["colour_format", "normalization_range", "model_input_shape_hwc"],
+      "properties": {
+        "colour_format": {"const": "RGB"},
+        "normalization_range": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"type": "number"}
+        },
+        "model_input_shape_hwc": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            {"type": "integer", "minimum": 1},
+            {"type": "integer", "minimum": 1},
+            {"const": 3}
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "physical": {
+      "type": "object",
+      "required": ["timing", "throughput", "queue"],
+      "properties": {
+        "timing": {
+          "type": "object",
+          "required": [
+            "fps_target",
+            "max_latency_ms",
+            "max_actuator_pulse_ms",
+            "heartbeat_period_ms",
+            "heartbeat_timeout_ms",
+            "estop_response_threshold_ms"
+          ],
+          "properties": {
+            "fps_target": {"type": "integer", "minimum": 1},
+            "max_latency_ms": {"type": "integer", "minimum": 1},
+            "max_actuator_pulse_ms": {"type": "integer", "minimum": 1},
+            "heartbeat_period_ms": {"type": "integer", "minimum": 1},
+            "heartbeat_timeout_ms": {"type": "integer", "minimum": 1},
+            "estop_response_threshold_ms": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": false
+        },
+        "throughput": {
+          "type": "object",
+          "required": ["min_frames_per_second"],
+          "properties": {
+            "min_frames_per_second": {"type": "number", "exclusiveMinimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "queue": {
+          "type": "object",
+          "required": ["queue_depth"],
+          "properties": {
+            "queue_depth": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
