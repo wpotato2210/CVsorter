@@ -4,7 +4,6 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
-from coloursorter.scheduler import ScheduledCommand
 from coloursorter.protocol.constants import (
     CMD_GET_STATE,
     CMD_HEARTBEAT,
@@ -18,12 +17,11 @@ from coloursorter.protocol.constants import (
 from coloursorter.protocol.nack_codes import (
     CANONICAL_NACK_7,
     DETAIL_SAFE,
-    DETAIL_WATCHDOG,
     NACK_INVALID_MODE_TRANSITION,
     NACK_QUEUE_FULL,
     is_canonical_nack,
 )
-
+from coloursorter.scheduler import ScheduledCommand
 from coloursorter.serial_interface import (
     AckResponse,
     FrameFormatError,
@@ -277,10 +275,7 @@ class SerialMcuTransport:
         mode = ack.mode or "UNKNOWN"
         queue_depth = ack.queue_depth if isinstance(ack.queue_depth, int) and ack.queue_depth >= 0 else self._last_queue_depth
         scheduler_state = ack.scheduler_state or "UNKNOWN"
-        if (
-            mode != self._expected_mode
-            or scheduler_state != self._expected_scheduler_state
-        ):
+        if mode != self._expected_mode:
             reset_ack, _ = self._send_frame(CMD_RESET_QUEUE)
             if reset_ack.status != "ACK":
                 self._last_fault_state = FaultState.SAFE

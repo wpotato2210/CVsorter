@@ -11,7 +11,12 @@ from coloursorter.bench.serial_transport import (
 )
 from coloursorter.bench.types import AckCode, FaultState
 from coloursorter.protocol import OpenSpecV3Host
-from coloursorter.protocol.nack_codes import CANONICAL_NACK_7, DETAIL_BUSY, DETAIL_WATCHDOG, NACK_BUSY
+from coloursorter.protocol.nack_codes import (
+    CANONICAL_NACK_7,
+    DETAIL_BUSY,
+    DETAIL_WATCHDOG,
+    NACK_BUSY,
+)
 from coloursorter.scheduler import ScheduledCommand
 from coloursorter.serial_interface import parse_frame, serialize_packet
 
