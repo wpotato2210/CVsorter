@@ -85,6 +85,10 @@ class LiveRuntimeCycleReport:
     def actuation_delay_ms(self) -> float:
         return self.timing.actuation_delay_ms
 
+    @property
+    def canonical_timing(self) -> CanonicalTimingDiagnostics:
+        return self.timing
+
 
 @dataclass(frozen=True)
 class LiveRuntimeRunResult:
@@ -362,7 +366,7 @@ class LiveRuntimeRunner:
                         self._capture_baseline,
                     ),
                 )
-                pipeline_latency_ms = (self._now() - pipeline_start) * 1000.0
+                decision_latency_ms = (self._now() - pipeline_start) * 1000.0
 
                 send_start = self._now()
                 for scheduled in result.scheduled_events:
@@ -373,10 +377,10 @@ class LiveRuntimeRunner:
                 cycle_count += 1
                 cycle_latency_ms = (self._now() - cycle_start) * 1000.0
                 if enable_reporting:
-                    timing = to_canonical_timing_diagnostics(
+                    canonical_timing = to_canonical_timing_diagnostics(
                         frame_timestamp_ms=frame.timestamp_s * 1000.0,
                         ingest_latency_ms=0.0,
-                        decision_latency_ms=pipeline_latency_ms,
+                        decision_latency_ms=decision_latency_ms,
                         schedule_latency_ms=0.0,
                         transport_latency_ms=send_latency_ms,
                         cycle_latency_ms=cycle_latency_ms,
@@ -388,7 +392,7 @@ class LiveRuntimeRunner:
                         detect_latency_ms=detect_latency_ms,
                         send_latency_ms=send_latency_ms,
                         cycle_latency_ms=cycle_latency_ms,
-                        timing=timing,
+                        timing=canonical_timing,
                     )
                     reports.append(report)
                     if report_callback is not None:

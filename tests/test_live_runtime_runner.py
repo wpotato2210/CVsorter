@@ -186,6 +186,12 @@ def test_live_runner_reporting_is_optional(tmp_path: Path, monkeypatch: pytest.M
 
     assert len(result.reports) == 1
     assert emitted == [0]
+    report = result.reports[0]
+    assert report.canonical_timing == report.timing
+    assert report.frame_timestamp_ms == report.timing.frame_timestamp_ms
+    assert report.pipeline_latency_ms == report.timing.pipeline_latency_ms
+    assert report.trigger_offset_ms == report.timing.trigger_offset_ms
+    assert report.actuation_delay_ms == report.timing.actuation_delay_ms
 
 
 def test_live_runner_startup_diagnostics_report_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
