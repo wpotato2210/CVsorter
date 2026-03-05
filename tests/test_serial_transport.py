@@ -124,10 +124,10 @@ def test_serial_transport_keeps_cached_queue_depth_when_nack_has_no_queue_depth_
     assert transport.current_queue_depth() == 1
 
 
-def test_serial_transport_maps_canonical_watchdog_without_nack_code() -> None:
+def test_serial_transport_maps_watchdog_detail_without_nack_code_to_safe() -> None:
     ack_code, fault_state = _map_ack_to_bench_state("NACK", None, DETAIL_WATCHDOG)
-    assert ack_code == AckCode.NACK_WATCHDOG
-    assert fault_state == FaultState.WATCHDOG
+    assert ack_code == AckCode.NACK_SAFE
+    assert fault_state == FaultState.SAFE
 
 
 def test_serial_transport_raises_structured_timeout_error() -> None:

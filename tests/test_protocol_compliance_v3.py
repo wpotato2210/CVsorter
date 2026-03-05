@@ -39,7 +39,9 @@ def test_protocol_supports_all_v3_commands_with_handshake() -> None:
 def test_nack_semantics_align_to_spec_codes_1_to_8() -> None:
     host = OpenSpecV3Host(max_queue_depth=1)
     host.busy = True
-    assert _response_tokens(host.handle_frame(serialize_packet("GET_STATE", (), msg_id="1")))[:2] == ["NACK", str(NACK_BUSY)]
+    busy_ack = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("GET_STATE", (), msg_id="1"))))
+    assert busy_ack.status == "NACK"
+    assert (busy_ack.nack_code, busy_ack.detail) == CANONICAL_NACK_7
     host.busy = False
 
     assert _response_tokens(host.handle_frame(serialize_packet("UNKNOWN", (), msg_id="2")))[:2] == ["NACK", "1"]
