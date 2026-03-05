@@ -80,3 +80,66 @@ def test_scheduler_boundary_timing_semantics_preserved() -> None:
     assert cycle_input is not None
     assert cycle_input.frame.timestamp_s == pytest.approx(1.5)
     assert cycle_input.previous_timestamp_s == pytest.approx(1.4)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 3], "captured_monotonic_s": -0.1},
+        {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 3], "detect_latency_ms": -1},
+        {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 3], "run_id": "   "},
+        {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 3], "test_batch_id": ""},
+        {
+            "frame_id": 1,
+            "timestamp": 0.1,
+            "image_shape": [1, 2, 3],
+            "ground_truth_by_object_id": {"": "accept"},
+        },
+        {
+            "frame_id": 1,
+            "timestamp": 0.1,
+            "image_shape": [1, 2, 3],
+            "ground_truth_by_object_id": {"obj-1": ""},
+        },
+        {
+            "frame_id": 1,
+            "timestamp": 0.1,
+            "image_shape": [1, 2, 3],
+            "preprocess_metrics": {"lane_confidence": float("nan")},
+        },
+        {
+            "frame_id": 1,
+            "timestamp": 0.1,
+            "image_shape": [1, 2, 3],
+            "preprocess_metrics": {"lane_confidence": "high"},
+        },
+    ],
+)
+def test_schema_validation_rejects_invalid_optional_fields(payload: dict[str, object]) -> None:
+    adapter = IngestPayloadAdapter(CONTRACT)
+    with pytest.raises(IngestValidationError):
+        adapter.adapt(payload)
+
+
+def test_schema_validation_accepts_well_formed_optional_fields() -> None:
+    adapter = IngestPayloadAdapter(CONTRACT)
+    adapted = adapter.adapt(
+        {
+            "frame_id": 7,
+            "timestamp": 0.7,
+            "image_shape": [480, 640, 3],
+            "captured_monotonic_s": 10.5,
+            "detect_latency_ms": 3.2,
+            "run_id": "run-1",
+            "test_batch_id": "batch-a",
+            "detection_provider_version": "provider-v1",
+            "detection_model_version": "model-v2",
+            "active_config_hash": "abc123",
+            "frame_snapshot_path": "snapshots/frame-7.png",
+            "ground_truth_by_object_id": {"obj-1": "accept"},
+            "preprocess_metrics": {"lane_confidence": 0.98, "lane_found": True},
+        }
+    )
+    assert adapted.frame.frame_id == 7
+    assert adapted.detect_latency_ms == pytest.approx(3.2)
+    assert adapted.preprocess_metrics == {"lane_confidence": 0.98, "lane_found": True}
