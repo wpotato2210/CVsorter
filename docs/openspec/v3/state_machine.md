@@ -49,4 +49,5 @@
   - `MANUAL -> AUTO`: allowed through `SET_MODE|AUTO`.
 - `Home` in SAFE is constrained to `recover_safe_to_manual()` only; it does not attempt AUTO promotion.
 - AUTO recovery controls are exposed only for `IDLE` states so replay/live runs cannot bypass transition guards.
+- GUI degraded/fault handling should always issue `SET_MODE|SAFE` (even when already SAFE) so host-owned queue/scheduler reset semantics stay authoritative.
 - Validation references: `tests/test_bench_controller.py` and `tests/test_protocol_compliance_v3.py`.

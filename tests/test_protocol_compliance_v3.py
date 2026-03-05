@@ -100,6 +100,21 @@ def test_set_mode_allows_safe_to_manual_then_manual_to_auto_recovery() -> None:
     assert manual_to_auto.status == "ACK"
     assert host.mode == "AUTO"
 
+
+def test_set_mode_safe_to_safe_clears_queue_and_idles_scheduler() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2, mode="SAFE", scheduler_state="ACTIVE", queue=[(1, 55.0)])
+    host.handle_frame(serialize_packet("HELLO", ("3.1", "CRC32;SCHED;HEARTBEAT;DEDUPE"), msg_id="1"))
+    host.handle_frame(serialize_packet("HEARTBEAT", (), msg_id="2"))
+
+    ack = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("SET_MODE", ("SAFE",), msg_id="3"))))
+
+    assert ack.status == "ACK"
+    assert ack.queue_cleared is True
+    assert ack.scheduler_state == "IDLE"
+    assert host.queue == []
+    assert host.scheduler_state == "IDLE"
+
+
 def test_mode_transition_policy_matrix_is_canonical_for_gui_and_host() -> None:
     assert MODE_TRANSITIONS["SAFE"] == frozenset({"SAFE", "MANUAL"})
     assert is_mode_transition_allowed("SAFE", "MANUAL") is True
