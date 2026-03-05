@@ -70,6 +70,8 @@ You should see scenario output with pass/fail values.
 
 ## Run the app
 
+Run these commands from the repository root (`/path/to/ColourSorter`) with your virtual environment activated.
+
 GUI bench app:
 
 ```bash
@@ -82,7 +84,7 @@ Scenario CLI check:
 coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
-Baseline replay pipeline run:
+Baseline replay pipeline run (run from repository root `/path/to/ColourSorter`):
 
 ```bash
 PYTHONPATH=src python -m coloursorter.bench.cli \
@@ -123,6 +125,8 @@ transport:
   - `report.txt` (with `--text-report`)
 
 ## Basic testing workflow (for first-time testers)
+
+Run all testing commands from the repository root (`/path/to/ColourSorter`) with your virtual environment activated.
 
 1. Make sure `(.venv)` is visible in your prompt.
 2. Install test dependencies:
