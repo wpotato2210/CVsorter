@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from typing import Callable
 
 from coloursorter.serial_interface import FrameFormatError, parse_frame, serialize_packet
 
@@ -66,6 +67,25 @@ class OpenSpecV3Host:
     _recent_msg_ids: list[str] = field(default_factory=list)
     _last_heartbeat_at: float | None = None
 
+    def _scheduler_snapshot(self) -> tuple[int, str]:
+        queue_depth = len(self.queue)
+        scheduler_state = SCHEDULER_ACTIVE if queue_depth > 0 else SCHEDULER_IDLE
+        self.scheduler_state = scheduler_state
+        return queue_depth, scheduler_state
+
+    def _scheduler_enqueue(self, lane: int, trigger_mm: float) -> bool:
+        if len(self.queue) >= self.max_queue_depth:
+            return False
+        self.queue.append((lane, trigger_mm))
+        self._scheduler_snapshot()
+        return True
+
+    def _scheduler_reset(self) -> bool:
+        queue_cleared = bool(self.queue)
+        self.queue.clear()
+        self._scheduler_snapshot()
+        return queue_cleared
+
     def handle_frame(self, frame: str) -> str:
         self._refresh_link_state(time.monotonic())
         try:
@@ -82,44 +102,33 @@ class OpenSpecV3Host:
             response = self._nack(*CANONICAL_NACK_7, msg_id=packet.msg_id)
             self._remember(packet.msg_id, response)
             return response
-        if cmd == CMD_HELLO:
-            response = self._hello(args, packet.msg_id)
+        handlers: dict[str, Callable[[tuple[str, ...], str], str]] = {
+            CMD_HELLO: self._hello,
+            CMD_HEARTBEAT: self._heartbeat,
+            CMD_SET_MODE: self._set_mode,
+            CMD_SCHED: self._sched,
+            CMD_GET_STATE: self._get_state,
+            CMD_RESET_QUEUE: self._reset_queue,
+        }
+        handler = handlers.get(cmd)
+        if handler is None:
+            response = self._nack(NACK_UNKNOWN_COMMAND, DETAIL_UNKNOWN_COMMAND, msg_id=packet.msg_id)
             self._remember(packet.msg_id, response)
             return response
-        if cmd == CMD_HEARTBEAT:
-            response = self._heartbeat(args, packet.msg_id)
-            self._remember(packet.msg_id, response)
-            return response
-        if cmd == CMD_SET_MODE:
-            response = self._set_mode(args, packet.msg_id)
-            self._remember(packet.msg_id, response)
-            return response
-        if cmd == CMD_SCHED:
-            response = self._sched(args, packet.msg_id)
-            self._remember(packet.msg_id, response)
-            return response
-        if cmd == CMD_GET_STATE:
-            if args:
-                response = self._nack(NACK_ARG_COUNT_MISMATCH, DETAIL_ARG_COUNT_MISMATCH, msg_id=packet.msg_id)
-                self._remember(packet.msg_id, response)
-                return response
-            response = self._ack(False, packet.msg_id)
-            self._remember(packet.msg_id, response)
-            return response
-        if cmd == CMD_RESET_QUEUE:
-            if args:
-                response = self._nack(NACK_ARG_COUNT_MISMATCH, DETAIL_ARG_COUNT_MISMATCH, msg_id=packet.msg_id)
-                self._remember(packet.msg_id, response)
-                return response
-            queue_cleared = bool(self.queue)
-            self.queue.clear()
-            self.scheduler_state = SCHEDULER_IDLE
-            response = self._ack(queue_cleared, packet.msg_id)
-            self._remember(packet.msg_id, response)
-            return response
-        response = self._nack(NACK_UNKNOWN_COMMAND, DETAIL_UNKNOWN_COMMAND, msg_id=packet.msg_id)
+        response = handler(args, packet.msg_id)
         self._remember(packet.msg_id, response)
         return response
+
+    def _get_state(self, args: tuple[str, ...], msg_id: str) -> str:
+        if args:
+            return self._nack(NACK_ARG_COUNT_MISMATCH, DETAIL_ARG_COUNT_MISMATCH, msg_id=msg_id)
+        return self._ack(False, msg_id)
+
+    def _reset_queue(self, args: tuple[str, ...], msg_id: str) -> str:
+        if args:
+            return self._nack(NACK_ARG_COUNT_MISMATCH, DETAIL_ARG_COUNT_MISMATCH, msg_id=msg_id)
+        queue_cleared = self._scheduler_reset()
+        return self._ack(queue_cleared, msg_id)
 
     def _hello(self, args: tuple[str, ...], msg_id: str) -> str:
         if len(args) != 2:
@@ -155,9 +164,7 @@ class OpenSpecV3Host:
 
         queue_cleared = False
         if target_mode == "SAFE" or target_mode != self.mode:
-            queue_cleared = bool(self.queue)
-            self.queue.clear()
-            self.scheduler_state = SCHEDULER_IDLE
+            queue_cleared = self._scheduler_reset()
         if target_mode != self.mode:
             self.mode = target_mode
         return self._ack(queue_cleared, msg_id)
@@ -182,20 +189,18 @@ class OpenSpecV3Host:
             return self._nack(NACK_ARG_RANGE_ERROR, DETAIL_ARG_RANGE_ERROR, msg_id=msg_id)
         if trigger_mm < TRIGGER_MM_MIN or trigger_mm > TRIGGER_MM_MAX:
             return self._nack(NACK_ARG_RANGE_ERROR, DETAIL_ARG_RANGE_ERROR, msg_id=msg_id)
-        if len(self.queue) >= self.max_queue_depth:
+        if not self._scheduler_enqueue(lane, trigger_mm):
             return self._nack(NACK_QUEUE_FULL, DETAIL_QUEUE_FULL, msg_id=msg_id)
-
-        self.queue.append((lane, trigger_mm))
-        self.scheduler_state = SCHEDULER_ACTIVE
         return self._ack(False, msg_id)
 
     def _ack(self, queue_cleared: bool, msg_id: str) -> str:
+        queue_depth, scheduler_state = self._scheduler_snapshot()
         return serialize_packet(
             ACK_TOKEN,
             (
                 self.mode,
-                str(len(self.queue)),
-                self.scheduler_state,
+                str(queue_depth),
+                scheduler_state,
                 str(queue_cleared).lower(),
                 self.link_state,
             ),
