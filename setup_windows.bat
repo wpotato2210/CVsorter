@@ -33,6 +33,8 @@ if errorlevel 1 (
 
 echo.
 echo Setup complete.
-echo Activate with: %VENV_DIR%\Scripts\activate
+echo Opening an activated (.venv) command prompt...
+
+start "ColourSorter (.venv)" cmd /k ""%CD%\%VENV_DIR%\Scripts\activate.bat""
 
 endlocal
