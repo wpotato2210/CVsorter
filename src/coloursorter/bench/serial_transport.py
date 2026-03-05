@@ -321,8 +321,6 @@ def _map_ack_to_bench_state(status: str, nack_code: int | None, detail: str | No
         return AckCode.NACK_SAFE, FaultState.SAFE
     if is_canonical_nack(nack_code, normalized_detail) and (nack_code, normalized_detail) == CANONICAL_NACK_7:
         return AckCode.NACK_BUSY, FaultState.NORMAL
-    if nack_code is None and normalized_detail == DETAIL_WATCHDOG:
-        return AckCode.NACK_WATCHDOG, FaultState.WATCHDOG
     return AckCode.NACK_SAFE, FaultState.SAFE
 
 
