@@ -117,6 +117,10 @@ class _FakeFrameSource:
 
 
 class _FakeDetector:
+    provider_version = "provider-v1"
+    model_version = "model-v1"
+    active_config_hash = "cfg-hash-v1"
+
     def detect(self, _image_bgr: object) -> list[ObjectDetection]:
         return [
             ObjectDetection(
@@ -136,6 +140,9 @@ class _FakeTransport:
 
     def send(self, _command):
         self.sent += 1
+
+    def send_command(self, _command, _args=()):
+        return None
 
     def close(self):
         self.closed = True
@@ -179,6 +186,21 @@ def test_live_runner_reporting_is_optional(tmp_path: Path, monkeypatch: pytest.M
 
     assert len(result.reports) == 1
     assert emitted == [0]
+
+
+def test_live_runner_startup_diagnostics_report_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime_path = _write_runtime_config(tmp_path, mode="live")
+
+    monkeypatch.setattr("coloursorter.runtime.live_runner.LiveFrameSource", lambda _cfg: _FakeFrameSource())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_detection_provider", lambda _cfg: _FakeDetector())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_transport", lambda _cfg: _FakeTransport())
+
+    runner = LiveRuntimeRunner(runtime_config_path=runtime_path)
+
+    assert runner.startup_diagnostics.all_passed
+    assert runner.startup_diagnostics.frame_source_frame.passed
+    assert runner.startup_diagnostics.detector_metadata.passed
+    assert runner.startup_diagnostics.transport_ping.passed
 
 
 def test_live_runner_requires_live_mode(tmp_path: Path) -> None:
