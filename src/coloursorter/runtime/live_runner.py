@@ -125,6 +125,15 @@ def _resolve_detection_profile(runtime_config: RuntimeConfig):
     return runtime_config.detection.profiles[0]
 
 
+def _has_selected_detection_profile(runtime_config: RuntimeConfig) -> bool:
+    camera_recipe = runtime_config.detection.active_camera_recipe
+    lighting_recipe = runtime_config.detection.active_lighting_recipe
+    return any(
+        profile.camera_recipe == camera_recipe and profile.lighting_recipe == lighting_recipe
+        for profile in runtime_config.detection.profiles
+    )
+
+
 def build_live_detection_provider(runtime_config: RuntimeConfig):
     profile = _resolve_detection_profile(runtime_config)
     return build_detection_provider(
@@ -203,16 +212,17 @@ class LiveRuntimeRunner:
 
     def _run_startup_diagnostics(self) -> StartupDiagnosticsReport:
         selected_profile = _resolve_detection_profile(self._runtime_config)
-        profile_matches_active = (
-            selected_profile.camera_recipe == self._runtime_config.detection.active_camera_recipe
-            and selected_profile.lighting_recipe == self._runtime_config.detection.active_lighting_recipe
-        )
-        config_reason = (
-            "runtime_config_loaded profile_resolved"
-            if profile_matches_active
-            else "runtime_config_loaded profile_fallback_used"
-        )
-        config_check = StartupDiagnosticCheck(passed=True, reason=config_reason)
+        profile_matches_active = _has_selected_detection_profile(self._runtime_config)
+        if profile_matches_active:
+            config_check = StartupDiagnosticCheck(passed=True, reason="runtime_config_loaded profile_resolved")
+        else:
+            config_check = StartupDiagnosticCheck(
+                passed=False,
+                reason=(
+                    "active_detection_profile_missing "
+                    f"fallback={selected_profile.camera_recipe}/{selected_profile.lighting_recipe}"
+                ),
+            )
 
         frame_check = StartupDiagnosticCheck(passed=False, reason="frame_capture_not_attempted")
         try:
@@ -272,7 +282,13 @@ class LiveRuntimeRunner:
             except Exception as exc:  # pragma: no cover - exercised via integration errors
                 ping_check = StartupDiagnosticCheck(passed=False, reason=f"transport_ping_error={exc}")
         else:
-            ping_check = StartupDiagnosticCheck(passed=False, reason="transport_ping_unavailable_send_command_missing")
+            ping_check = StartupDiagnosticCheck(
+                passed=False,
+                reason=(
+                    "transport_ping_unavailable_send_command_missing "
+                    "mock_transport_requires_send_command_for_deterministic_noop"
+                ),
+            )
 
         report = StartupDiagnosticsReport(
             config_and_profile=config_check,
