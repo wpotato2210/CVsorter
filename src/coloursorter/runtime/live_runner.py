@@ -28,6 +28,8 @@ from coloursorter.deploy import (
     PreprocessConfig,
     capture_fault_reason,
     build_detection_provider,
+    to_canonical_timing_diagnostics,
+    CanonicalTimingDiagnostics,
 )
 from coloursorter.eval.reject_profiles import (
     RejectProfileValidationError,
@@ -63,9 +65,25 @@ class LiveRuntimeCycleReport:
     detection_count: int
     command_count: int
     detect_latency_ms: float
-    pipeline_latency_ms: float
     send_latency_ms: float
     cycle_latency_ms: float
+    timing: CanonicalTimingDiagnostics
+
+    @property
+    def pipeline_latency_ms(self) -> float:
+        return self.timing.pipeline_latency_ms
+
+    @property
+    def frame_timestamp_ms(self) -> float:
+        return self.timing.frame_timestamp_ms
+
+    @property
+    def trigger_offset_ms(self) -> float:
+        return self.timing.trigger_offset_ms
+
+    @property
+    def actuation_delay_ms(self) -> float:
+        return self.timing.actuation_delay_ms
 
 
 @dataclass(frozen=True)
@@ -339,14 +357,22 @@ class LiveRuntimeRunner:
                 cycle_count += 1
                 cycle_latency_ms = (self._now() - cycle_start) * 1000.0
                 if enable_reporting:
+                    timing = to_canonical_timing_diagnostics(
+                        frame_timestamp_ms=frame.timestamp_s * 1000.0,
+                        ingest_latency_ms=0.0,
+                        decision_latency_ms=pipeline_latency_ms,
+                        schedule_latency_ms=0.0,
+                        transport_latency_ms=send_latency_ms,
+                        cycle_latency_ms=cycle_latency_ms,
+                    )
                     report = LiveRuntimeCycleReport(
                         frame_id=frame.frame_id,
                         detection_count=len(detections),
                         command_count=len(result.scheduled_events),
                         detect_latency_ms=detect_latency_ms,
-                        pipeline_latency_ms=pipeline_latency_ms,
                         send_latency_ms=send_latency_ms,
                         cycle_latency_ms=cycle_latency_ms,
+                        timing=timing,
                     )
                     reports.append(report)
                     if report_callback is not None:

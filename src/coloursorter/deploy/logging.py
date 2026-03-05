@@ -8,6 +8,52 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class CanonicalTimingDiagnostics:
+    """Canonical deterministic runtime timing values in milliseconds.
+
+    Sampling point and formulas (all units are ms):
+    - frame_timestamp_ms: Capture timestamp of the input frame in host wall-clock epoch.
+      Formula: frame timestamp seconds * 1000 at ingest/reporting time.
+    - pipeline_latency_ms: End-to-end host processing time before transport.
+      Formula: ingest_latency_ms + decision_latency_ms + schedule_latency_ms.
+    - trigger_offset_ms: Time from frame timestamp to projected trigger point.
+      Formula: projected_trigger_timestamp_s*1000 - frame_timestamp_ms when available;
+      fallback: max(0, cycle_latency_ms - pipeline_latency_ms - transport_latency_ms).
+    - actuation_delay_ms: Delay between command emission and transport acknowledgement.
+      Formula: transport_latency_ms.
+    """
+
+    frame_timestamp_ms: float
+    pipeline_latency_ms: float
+    trigger_offset_ms: float
+    actuation_delay_ms: float
+
+
+def to_canonical_timing_diagnostics(
+    *,
+    frame_timestamp_ms: float,
+    ingest_latency_ms: float,
+    decision_latency_ms: float,
+    schedule_latency_ms: float,
+    transport_latency_ms: float,
+    cycle_latency_ms: float,
+    trigger_offset_ms: float | None = None,
+) -> CanonicalTimingDiagnostics:
+    pipeline_latency_ms = ingest_latency_ms + decision_latency_ms + schedule_latency_ms
+    resolved_trigger_offset_ms = (
+        trigger_offset_ms
+        if trigger_offset_ms is not None
+        else max(0.0, cycle_latency_ms - pipeline_latency_ms - transport_latency_ms)
+    )
+    return CanonicalTimingDiagnostics(
+        frame_timestamp_ms=frame_timestamp_ms,
+        pipeline_latency_ms=pipeline_latency_ms,
+        trigger_offset_ms=resolved_trigger_offset_ms,
+        actuation_delay_ms=transport_latency_ms,
+    )
+
+
+@dataclass(frozen=True)
 class BaselineEvent:
     run_id: str
     test_batch_id: str
@@ -32,6 +78,10 @@ class BaselineEvent:
     schedule_latency_ms: float
     transport_latency_ms: float
     cycle_latency_ms: float
+    frame_timestamp_ms: float
+    pipeline_latency_ms: float
+    trigger_offset_ms: float
+    actuation_delay_ms: float
     frame_snapshot_path: str
     ground_truth_label: str
 
@@ -63,6 +113,7 @@ class BaselineEventLogger:
                 decision_label="", decision_reason="", lane_index=-1, trigger_mm=0.0, trigger_timestamp_s=0.0, actuator_command_issued=False,
                 actuator_command_payload="", transport_ack_code="", transport_nack_code="", transport_nack_detail="", queue_depth=0,
                 ingest_latency_ms=0.0, decision_latency_ms=0.0, schedule_latency_ms=0.0, transport_latency_ms=0.0, cycle_latency_ms=0.0,
+                frame_timestamp_ms=0.0, pipeline_latency_ms=0.0, trigger_offset_ms=0.0, actuation_delay_ms=0.0,
                 frame_snapshot_path="", ground_truth_label=""
             )).keys()))
             writer.writeheader()
