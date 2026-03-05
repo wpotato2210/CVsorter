@@ -13,6 +13,7 @@ add_library(firmware_core STATIC
   src/brownout.c
   src/isr.c
   src/scheduler.c
+  src/command_dispatch.c
 )
 
 target_include_directories(firmware_core PUBLIC

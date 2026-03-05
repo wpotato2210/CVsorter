@@ -1,5 +1,7 @@
 #include "scheduler.h"
 
+#include <stddef.h>
+
 #include "firmware_config.h"
 
 static scheduler_slot_t s_queue[FW_QUEUE_DEPTH_MAX];
@@ -37,4 +39,10 @@ bool scheduler_dequeue(scheduler_slot_t *slot_out) {
 
 uint8_t scheduler_depth(void) {
   return s_depth;
+}
+
+void scheduler_reset(void) {
+  s_head = 0U;
+  s_tail = 0U;
+  s_depth = 0U;
 }
