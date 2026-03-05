@@ -9,7 +9,7 @@ from coloursorter.bench.esp32_transport import Esp32McuTransport
 from coloursorter.bench.serial_transport import SerialTransportConfig
 from coloursorter.bench.types import AckCode, FaultState
 from coloursorter.protocol import MODE_TRANSITIONS, OpenSpecV3Host, is_mode_transition_allowed
-from coloursorter.protocol.nack_codes import CANONICAL_NACK_7, DETAIL_BUSY, NACK_BUSY
+from coloursorter.protocol.nack_codes import CANONICAL_NACK_7, DETAIL_ARG_TYPE_ERROR, DETAIL_BUSY, NACK_ARG_TYPE_ERROR, NACK_BUSY
 from coloursorter.scheduler import ScheduledCommand
 from coloursorter.serial_interface import parse_ack_tokens, parse_frame, serialize_packet
 
@@ -156,3 +156,28 @@ def test_sched_before_link_ready_uses_canonical_busy_pair() -> None:
 
     assert ack.status == "NACK"
     assert (ack.nack_code, ack.detail) == CANONICAL_NACK_7
+
+
+def test_sched_rejects_non_finite_trigger_values() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2)
+    host.handle_frame(serialize_packet("HELLO", ("3.1", "CRC32;SCHED;HEARTBEAT;DEDUPE"), msg_id="1"))
+    host.handle_frame(serialize_packet("HEARTBEAT", (), msg_id="2"))
+
+    nan_ack = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("SCHED", (1, "nan"), msg_id="3"))))
+    inf_ack = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("SCHED", (1, "inf"), msg_id="4"))))
+
+    assert nan_ack.status == "NACK"
+    assert nan_ack.nack_code == NACK_ARG_TYPE_ERROR
+    assert nan_ack.detail == DETAIL_ARG_TYPE_ERROR
+    assert inf_ack.status == "NACK"
+    assert inf_ack.nack_code == NACK_ARG_TYPE_ERROR
+    assert inf_ack.detail == DETAIL_ARG_TYPE_ERROR
+
+
+def test_host_rejects_invalid_runtime_limits() -> None:
+    with pytest.raises(ValueError, match="max_queue_depth"):
+        OpenSpecV3Host(max_queue_depth=0)
+    with pytest.raises(ValueError, match="dedupe_cache_size"):
+        OpenSpecV3Host(dedupe_cache_size=0)
+    with pytest.raises(ValueError, match="heartbeat_timeout_s"):
+        OpenSpecV3Host(heartbeat_timeout_s=0.0)
