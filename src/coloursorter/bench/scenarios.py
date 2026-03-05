@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
 
-from coloursorter.config import ScenarioThresholdsConfig
+if TYPE_CHECKING:
+    from coloursorter.config.runtime import ScenarioThresholdsConfig
+else:
+    class ScenarioThresholdsConfig(Protocol):
+        nominal_max_avg_rtt_ms: float
+        nominal_max_peak_rtt_ms: float
+        stress_max_avg_rtt_ms: float
+        stress_max_peak_rtt_ms: float
+        fault_max_avg_rtt_ms: float
+        fault_max_peak_rtt_ms: float
 
 
 @dataclass(frozen=True)
