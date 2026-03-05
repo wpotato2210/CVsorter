@@ -13,6 +13,22 @@ Deterministic computer-vision bench tooling for lane-based sort decisioning, sch
 - Artifact generation (`summary.json`, `events.jsonl`, `telemetry.csv`, optional snapshots/report).
 - Optional PySide6 bench GUI.
 
+## Fast path (new developer)
+
+Run from repository root:
+
+```bash
+./setup.sh && ./run.sh
+```
+
+Container alternative:
+
+```bash
+docker build -t app . && docker run --rm app
+```
+
+Detailed steps: [INSTALL.md](INSTALL.md).
+
 ## Installation (beginner friendly)
 
 If you have never used terminal commands before, follow these steps exactly.
