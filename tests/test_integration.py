@@ -180,6 +180,49 @@ def test_scenario_runner_cli_reports_pass_output(capsys) -> None:
     assert "[PASS] nominal" in output
 
 
+
+def test_scenario_runner_cli_all_scenarios_prints_hint_for_default_safe_flags(capsys) -> None:
+    exit_code = run_scenario_cli(
+        [
+            "--avg-rtt-ms",
+            "8.0",
+            "--peak-rtt-ms",
+            "12.0",
+            "--safe-transitions",
+            "0",
+            "--watchdog-transitions",
+            "0",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Hint: in all-scenario mode" in captured.err
+    assert "fault_to_safe requires --safe-transitions > 0" in captured.err
+    assert "recovery_flow requires --safe-transitions > 0 and --recovered-from-safe" in captured.err
+
+
+def test_scenario_runner_cli_selected_scenario_does_not_print_all_mode_hint(capsys) -> None:
+    exit_code = run_scenario_cli(
+        [
+            "--scenario",
+            "fault_to_safe",
+            "--avg-rtt-ms",
+            "8.0",
+            "--peak-rtt-ms",
+            "12.0",
+            "--safe-transitions",
+            "0",
+            "--watchdog-transitions",
+            "0",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Hint: in all-scenario mode" not in captured.err
+
+
 def test_scenario_runner_cli_reports_fail_output(capsys) -> None:
     exit_code = run_scenario_cli(
         [

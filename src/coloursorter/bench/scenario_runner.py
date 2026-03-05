@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from .scenarios import BenchScenario, BenchSummary, default_scenarios
 
@@ -25,6 +26,13 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--watchdog-transitions", type=int, default=0)
     parser.add_argument("--recovered-from-safe", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.scenario is None and args.safe_transitions == 0 and not args.recovered_from_safe:
+        print(
+            "Hint: in all-scenario mode, fault_to_safe requires --safe-transitions > 0; "
+            "recovery_flow requires --safe-transitions > 0 and --recovered-from-safe.",
+            file=sys.stderr,
+        )
 
     summary = BenchSummary(
         avg_round_trip_ms=args.avg_rtt_ms,
