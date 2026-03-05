@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
+
 from coloursorter.bench import (
     Esp32McuTransport,
     LiveConfig,
@@ -34,6 +36,7 @@ from coloursorter.eval.reject_profiles import (
     selected_thresholds,
 )
 from coloursorter.model import FrameMetadata
+from coloursorter.protocol.constants import CMD_HEARTBEAT
 
 
 LOGGER = logging.getLogger(__name__)
@@ -70,6 +73,29 @@ class LiveRuntimeRunResult:
     cycle_count: int
     sent_command_count: int
     reports: tuple[LiveRuntimeCycleReport, ...] = ()
+
+
+@dataclass(frozen=True)
+class StartupDiagnosticCheck:
+    passed: bool
+    reason: str
+
+
+@dataclass(frozen=True)
+class StartupDiagnosticsReport:
+    config_and_profile: StartupDiagnosticCheck
+    frame_source_frame: StartupDiagnosticCheck
+    detector_metadata: StartupDiagnosticCheck
+    transport_ping: StartupDiagnosticCheck
+
+    @property
+    def all_passed(self) -> bool:
+        return (
+            self.config_and_profile.passed
+            and self.frame_source_frame.passed
+            and self.detector_metadata.passed
+            and self.transport_ping.passed
+        )
 
 
 def _resolve_detection_profile(runtime_config: RuntimeConfig):
@@ -153,8 +179,115 @@ class LiveRuntimeRunner:
         self._capture_baseline = CaptureBaselineConfig()
         setattr(self._detector, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
         self._transport = build_live_transport(self._runtime_config)
+        self.startup_diagnostics = self._run_startup_diagnostics()
         self._sleep = sleep_fn or time.sleep
         self._now = now_fn or time.perf_counter
+
+    def _run_startup_diagnostics(self) -> StartupDiagnosticsReport:
+        selected_profile = _resolve_detection_profile(self._runtime_config)
+        profile_matches_active = (
+            selected_profile.camera_recipe == self._runtime_config.detection.active_camera_recipe
+            and selected_profile.lighting_recipe == self._runtime_config.detection.active_lighting_recipe
+        )
+        config_reason = (
+            "runtime_config_loaded profile_resolved"
+            if profile_matches_active
+            else "runtime_config_loaded profile_fallback_used"
+        )
+        config_check = StartupDiagnosticCheck(passed=True, reason=config_reason)
+
+        frame_check = StartupDiagnosticCheck(passed=False, reason="frame_capture_not_attempted")
+        try:
+            self._frame_source.open()
+            frame = self._frame_source.next_frame()
+            if frame is None:
+                frame_check = StartupDiagnosticCheck(passed=False, reason="frame_source_returned_none")
+            elif not isinstance(frame.image_bgr, np.ndarray):
+                frame_check = StartupDiagnosticCheck(passed=False, reason="frame_not_ndarray_bgr")
+            elif frame.image_bgr.ndim != 3 or frame.image_bgr.shape[2] != 3:
+                frame_check = StartupDiagnosticCheck(
+                    passed=False,
+                    reason=f"invalid_frame_shape={tuple(frame.image_bgr.shape)} expected=(H,W,3)_bgr",
+                )
+            elif frame.image_bgr.dtype != np.uint8:
+                frame_check = StartupDiagnosticCheck(
+                    passed=False,
+                    reason=f"invalid_frame_dtype={frame.image_bgr.dtype} expected=uint8_bgr",
+                )
+            else:
+                frame_check = StartupDiagnosticCheck(
+                    passed=True,
+                    reason=f"frame_ok shape={tuple(frame.image_bgr.shape)} dtype=uint8_bgr",
+                )
+        except Exception as exc:  # pragma: no cover - exercised via integration errors
+            frame_check = StartupDiagnosticCheck(passed=False, reason=f"frame_source_error={exc}")
+        finally:
+            self._frame_source.release()
+
+        provider_version = str(getattr(self._detector, "provider_version", "")).strip()
+        model_version = str(getattr(self._detector, "model_version", "")).strip()
+        active_config_hash = str(getattr(self._detector, "active_config_hash", "")).strip()
+        missing_metadata_fields = [
+            field_name
+            for field_name, value in (
+                ("provider_version", provider_version),
+                ("model_version", model_version),
+                ("active_config_hash", active_config_hash),
+            )
+            if not value
+        ]
+        metadata_check = StartupDiagnosticCheck(
+            passed=not missing_metadata_fields,
+            reason=(
+                "detector_metadata_present"
+                if not missing_metadata_fields
+                else f"missing_detector_metadata={','.join(missing_metadata_fields)}"
+            ),
+        )
+
+        ping_check = StartupDiagnosticCheck(passed=False, reason="transport_ping_not_attempted")
+        send_command = getattr(self._transport, "send_command", None)
+        if callable(send_command):
+            try:
+                send_command(CMD_HEARTBEAT)
+                ping_check = StartupDiagnosticCheck(passed=True, reason=f"transport_ping_ok command={CMD_HEARTBEAT}")
+            except Exception as exc:  # pragma: no cover - exercised via integration errors
+                ping_check = StartupDiagnosticCheck(passed=False, reason=f"transport_ping_error={exc}")
+        else:
+            ping_check = StartupDiagnosticCheck(passed=False, reason="transport_ping_unavailable_send_command_missing")
+
+        report = StartupDiagnosticsReport(
+            config_and_profile=config_check,
+            frame_source_frame=frame_check,
+            detector_metadata=metadata_check,
+            transport_ping=ping_check,
+        )
+        LOGGER.info(
+            "startup_diagnostics all_passed=%s config=%s frame=%s metadata=%s transport=%s",
+            report.all_passed,
+            report.config_and_profile.passed,
+            report.frame_source_frame.passed,
+            report.detector_metadata.passed,
+            report.transport_ping.passed,
+            extra={
+                "startup_diagnostics": {
+                    "all_passed": report.all_passed,
+                    "config_and_profile": report.config_and_profile.reason,
+                    "frame_source_frame": report.frame_source_frame.reason,
+                    "detector_metadata": report.detector_metadata.reason,
+                    "transport_ping": report.transport_ping.reason,
+                }
+            },
+        )
+        for check_name, check in (
+            ("config_and_profile", report.config_and_profile),
+            ("frame_source_frame", report.frame_source_frame),
+            ("detector_metadata", report.detector_metadata),
+            ("transport_ping", report.transport_ping),
+        ):
+            if not check.passed:
+                LOGGER.error("startup_diagnostics_failure check=%s reason=%s", check_name, check.reason)
+        return report
 
     def run(
         self,
