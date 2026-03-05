@@ -634,9 +634,8 @@ class BenchAppController(QObject):
         if active:
             self.window.statusBar().showMessage(f"DEGRADED MODE: {reason}")
             self.lane_overlay_requested.emit(f"DEGRADED: {reason}")
-            if self.runtime_state.operator_mode == OperatorMode.AUTO:
-                self._set_protocol_mode(OperatorMode.SAFE)
-                self.runtime_state.scheduler_state = "IDLE"
+            self._set_protocol_mode(OperatorMode.SAFE)
+            self.runtime_state.scheduler_state = "IDLE"
         self._emit_runtime_state()
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:

@@ -501,3 +501,13 @@ def test_degraded_mode_forces_safe_and_updates_banner(qapp: QApplication, runtim
     assert controller._degraded_mode_active is True
     assert controller.runtime_state.operator_mode == OperatorMode.SAFE
     assert "DEGRADED" in controller.window.statusBar().currentMessage()
+
+
+def test_degraded_mode_forces_safe_from_manual_mode(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller.runtime_state.operator_mode = OperatorMode.MANUAL
+
+    controller._set_degraded_mode(True, "Transport jitter")
+
+    assert controller._degraded_mode_active is True
+    assert controller.runtime_state.operator_mode == OperatorMode.SAFE

@@ -154,10 +154,11 @@ class OpenSpecV3Host:
             return self._nack(NACK_INVALID_MODE_TRANSITION, DETAIL_INVALID_MODE_TRANSITION, msg_id=msg_id)
 
         queue_cleared = False
-        if target_mode != self.mode:
+        if target_mode == "SAFE" or target_mode != self.mode:
             queue_cleared = bool(self.queue)
             self.queue.clear()
             self.scheduler_state = SCHEDULER_IDLE
+        if target_mode != self.mode:
             self.mode = target_mode
         return self._ack(queue_cleared, msg_id)
 
