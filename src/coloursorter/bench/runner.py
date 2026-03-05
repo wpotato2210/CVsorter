@@ -252,7 +252,7 @@ class BenchRunner:
                     raise AssertionError("AUTO mode cannot emit manual_test commands")
 
             cycle_latency_ms = (time.perf_counter() - cycle_started) * 1000.0
-            timing = to_canonical_timing_diagnostics(
+            canonical_timing = to_canonical_timing_diagnostics(
                 frame_timestamp_ms=timestamp_s * 1000.0,
                 ingest_latency_ms=ingest_latency_ms,
                 decision_latency_ms=decision_latency_ms,
@@ -301,10 +301,10 @@ class BenchRunner:
                     schedule_latency_ms=schedule_latency_ms,
                     transport_latency_ms=transport_latency_ms,
                     cycle_latency_ms=cycle_latency_ms,
-                    frame_timestamp_ms=timing.frame_timestamp_ms,
-                    pipeline_latency_ms=timing.pipeline_latency_ms,
-                    trigger_offset_ms=timing.trigger_offset_ms,
-                    actuation_delay_ms=timing.actuation_delay_ms,
+                    frame_timestamp_ms=canonical_timing.frame_timestamp_ms,
+                    pipeline_latency_ms=canonical_timing.pipeline_latency_ms,
+                    trigger_offset_ms=canonical_timing.trigger_offset_ms,
+                    actuation_delay_ms=canonical_timing.actuation_delay_ms,
                     queue_age_ms=queue_age_ms,
                     frame_staleness_ms=frame_staleness_ms,
                     total_budget_ms=total_budget_ms,

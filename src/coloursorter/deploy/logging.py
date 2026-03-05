@@ -39,6 +39,20 @@ def to_canonical_timing_diagnostics(
     cycle_latency_ms: float,
     trigger_offset_ms: float | None = None,
 ) -> CanonicalTimingDiagnostics:
+    """Map measured runtime stage timings into canonical diagnostics timing fields.
+
+    Inputs and outputs use milliseconds (ms).
+
+    Sampling point assumptions and formulas:
+    - frame_timestamp_ms: sample at frame ingest boundary; host wall-clock epoch ms.
+    - pipeline_latency_ms: sample at end of decision+scheduling stage.
+      Formula: ingest_latency_ms + decision_latency_ms + schedule_latency_ms.
+    - trigger_offset_ms: sample when projected trigger time is known.
+      Formula (preferred): projected_trigger_timestamp_ms - frame_timestamp_ms.
+      Formula (fallback): max(0, cycle_latency_ms - pipeline_latency_ms - transport_latency_ms).
+    - actuation_delay_ms: sample at transport acknowledgement.
+      Formula: transport_latency_ms.
+    """
     pipeline_latency_ms = ingest_latency_ms + decision_latency_ms + schedule_latency_ms
     resolved_trigger_offset_ms = (
         trigger_offset_ms
