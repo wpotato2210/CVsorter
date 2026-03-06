@@ -543,6 +543,8 @@ class BenchAppController(QObject):
 
     def _on_controller_state_entered(self, state: ControllerState) -> None:
         self.runtime_state.controller_state = state
+        if state == ControllerState.SAFE and self.runtime_state.operator_mode != OperatorMode.SAFE:
+            self._set_protocol_mode(OperatorMode.SAFE)
         running = state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}
         if running and not self._cycle_timer.isActive():
             self._cycle_timer.start()
@@ -661,11 +663,18 @@ class BenchAppController(QObject):
             self._emit_runtime_state()
             return
 
+        entered_states: list[ControllerState] = []
+
+        def _record_entered(entered_state: ControllerState) -> None:
+            entered_states.append(entered_state)
+
+        self._state_machine.entered.connect(_record_entered)
         trigger.emit()
         self._app.processEvents()
+        self._state_machine.entered.disconnect(_record_entered)
 
         entered_state = self.runtime_state.controller_state
-        transition_completed = previous_state != entered_state and entered_state == state
+        transition_completed = bool(entered_states) and entered_states[-1] == state and previous_state != entered_state
         if not transition_completed:
             LOGGER.debug(
                 "ignoring non-transition request requested=%s previous=%s entered=%s",
