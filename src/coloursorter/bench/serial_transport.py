@@ -248,6 +248,8 @@ class SerialMcuTransport:
         self._state_sync_required = True
 
     def _poll_heartbeat_health(self, now: float) -> None:
+        if self._config.heartbeat_interval_s <= 0.0:
+            return
         if self._last_heartbeat_ok_at is None:
             return
         if now - self._last_heartbeat_ok_at < self._config.heartbeat_interval_s * 3:
