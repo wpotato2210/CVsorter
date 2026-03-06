@@ -85,6 +85,8 @@ coloursorter-bench-gui --config configs/bench_runtime.yaml
 
 ### Run replay pipeline and write artifacts
 
+Linux/macOS:
+
 ```bash
 PYTHONPATH=src python -m coloursorter.bench.cli \
   --mode replay \
@@ -94,6 +96,20 @@ PYTHONPATH=src python -m coloursorter.bench.cli \
   --runtime-config configs/bench_runtime.yaml \
   --lane-config configs/lane_geometry.yaml \
   --calibration configs/calibration.json \
+  --text-report
+```
+
+Windows Command Prompt:
+
+```bat
+set PYTHONPATH=src && python -m coloursorter.bench.cli ^
+  --mode replay ^
+  --source data ^
+  --max-cycles 100 ^
+  --artifact-root artifacts/bench ^
+  --runtime-config configs/bench_runtime.yaml ^
+  --lane-config configs/lane_geometry.yaml ^
+  --calibration configs/calibration.json ^
   --text-report
 ```
 
@@ -234,11 +250,23 @@ Expected: `[PASS] nominal: ...` and exit code `0`.
 
 ### Example B: replay run with report
 
+Linux/macOS:
+
 ```bash
 PYTHONPATH=src python -m coloursorter.bench.cli \
   --mode replay \
   --source data \
   --artifact-root artifacts/session_001 \
+  --text-report
+```
+
+Windows Command Prompt:
+
+```bat
+set PYTHONPATH=src && python -m coloursorter.bench.cli ^
+  --mode replay ^
+  --source data ^
+  --artifact-root artifacts/session_001 ^
   --text-report
 ```
 
