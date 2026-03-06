@@ -39,7 +39,7 @@ from coloursorter.bench import (
 from coloursorter.bench.serial_transport import SerialMcuTransport, SerialTransportConfig, SerialTransportError
 from coloursorter.config import RuntimeConfig
 from coloursorter.scheduler import ScheduledCommand
-from coloursorter.deploy import OpenCvDetectionProvider, PipelineRunner
+from coloursorter.deploy import DetectionError, OpenCvDetectionProvider, PipelineRunner
 from coloursorter.eval.reject_profiles import (
     RejectProfileValidationError,
     default_profile,
@@ -47,6 +47,7 @@ from coloursorter.eval.reject_profiles import (
     selected_thresholds,
 )
 from coloursorter.protocol import OpenSpecV3Host, is_mode_transition_allowed
+from coloursorter.protocol.constants import LANE_MAX, LANE_MIN, TRIGGER_MM_MAX, TRIGGER_MM_MIN
 from coloursorter.serial_interface import AckResponse, parse_ack_tokens, parse_frame, serialize_packet
 
 from .app import BenchMainWindow, QueueState
@@ -502,9 +503,9 @@ class BenchAppController(QObject):
         self._set_combo_value(self.window.log_level_selector, gui.default_log_level)
 
         manual = gui.manual_servo
-        self.window.manual_lane_input.setRange(manual.min_lane, manual.max_lane)
+        self.window.manual_lane_input.setRange(LANE_MIN, LANE_MAX)
         self.window.manual_lane_input.setValue(manual.default_lane)
-        self.window.manual_position_input.setRange(manual.min_position_mm, manual.max_position_mm)
+        self.window.manual_position_input.setRange(TRIGGER_MM_MIN, TRIGGER_MM_MAX)
         self.window.manual_position_input.setValue(manual.default_position_mm)
         self.window.log_autoscroll_checkbox.setChecked(True)
 
@@ -641,11 +642,9 @@ class BenchAppController(QObject):
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
         if self.runtime_state.controller_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
-                if overlay_text is not None:
-                    self.lane_overlay_requested.emit(overlay_text)
                 self._emit_runtime_state()
                 return
-        self.runtime_state.controller_state = state
+        previous_state = self.runtime_state.controller_state
         if state == ControllerState.REPLAY_RUNNING:
             self._state_machine.start_replay.emit()
         elif state == ControllerState.LIVE_RUNNING:
@@ -656,7 +655,9 @@ class BenchAppController(QObject):
             self._state_machine.set_faulted.emit()
         elif state == ControllerState.SAFE:
             self._state_machine.set_safe.emit()
-        if overlay_text is not None:
+        self._app.processEvents()
+        transition_applied = self.runtime_state.controller_state == state
+        if overlay_text is not None and (transition_applied or previous_state == state):
             self.lane_overlay_requested.emit(overlay_text)
         self._emit_runtime_state()
 
@@ -665,28 +666,34 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state != ControllerState.REPLAY_RUNNING:
             return
         self._acquire_requests.put({"requested_at": time.monotonic()})
-        self._drain_ui_worker_events()
-        for _ in range(3):
+        deadline_s = time.monotonic() + (self.watchdog_config.cycle_budget_ms / 1000.0) + 0.05
+        while time.monotonic() < deadline_s:
+            if self._drain_ui_worker_events():
+                return
             time.sleep(0.001)
-            self._drain_ui_worker_events()
+        self._drain_ui_worker_events()
 
-    def _drain_ui_worker_events(self) -> None:
+    def _drain_ui_worker_events(self) -> bool:
+        observed_cycle_terminal_event = False
         while True:
             event = self._ui_event_queue.get(timeout_s=0.0)
             if event is None:
-                return
+                return observed_cycle_terminal_event
             if not isinstance(event, _WorkerEvent):
                 continue
             if event.kind == "source_fault":
+                observed_cycle_terminal_event = True
                 self._handle_source_fault(str(event.payload))
                 continue
             if event.kind == "replay_complete":
+                observed_cycle_terminal_event = True
                 self._publish_session_evaluation()
                 self._release_frame_source()
                 self.runtime_state.scheduler_state = "IDLE"
                 self._transition_to(ControllerState.IDLE, overlay_text="Replay complete")
                 continue
             if event.kind == "faulted":
+                observed_cycle_terminal_event = True
                 fault_state, detail = event.payload
                 self.runtime_state.fault_state = fault_state
                 self.runtime_state.scheduler_state = "IDLE"
@@ -694,6 +701,7 @@ class BenchAppController(QObject):
                 continue
             if event.kind != "cycle_complete":
                 continue
+            observed_cycle_terminal_event = True
 
             frame, logs, stage_ms, queue_stats = event.payload
             self.frame_preview_requested.emit(frame.tobytes(), frame.shape[1], frame.shape[0])
@@ -737,6 +745,21 @@ class BenchAppController(QObject):
                 if frame is None:
                     self._ui_event_queue.put(_WorkerEvent(kind="replay_complete", payload=None))
                     continue
+                if not isinstance(frame.image_bgr, np.ndarray):
+                    self._ui_event_queue.put(
+                        _WorkerEvent(kind="faulted", payload=(FaultState.SAFE, "invalid frame type; expected numpy.ndarray"))
+                    )
+                    continue
+                if frame.image_bgr.ndim != 3 or frame.image_bgr.shape[2] != 3:
+                    self._ui_event_queue.put(
+                        _WorkerEvent(kind="faulted", payload=(FaultState.SAFE, "invalid frame shape; expected (H,W,3)"))
+                    )
+                    continue
+                if frame.image_bgr.dtype != np.uint8:
+                    self._ui_event_queue.put(
+                        _WorkerEvent(kind="faulted", payload=(FaultState.SAFE, "invalid frame dtype; expected uint8"))
+                    )
+                    continue
                 frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
                 detections = tuple(self._detector.detect(frame.image_bgr))
                 frame_stage_ms = (time.perf_counter() - started) * 1000.0
@@ -756,6 +779,8 @@ class BenchAppController(QObject):
                 )
             except FrameSourceError as error:
                 self._ui_event_queue.put(_WorkerEvent(kind="source_fault", payload=str(error)))
+            except (DetectionError, cv2.error, TypeError, ValueError) as error:
+                self._ui_event_queue.put(_WorkerEvent(kind="faulted", payload=(FaultState.SAFE, str(error))))
 
     def _transport_worker_loop(self) -> None:
         while not self._worker_stop.is_set():
@@ -928,11 +953,19 @@ class BenchAppController(QObject):
         lane = int(self.window.manual_lane_input.value())
         position_mm = float(self.window.manual_position_input.value())
         manual_cfg = self._runtime_config.bench_gui.manual_servo
+        raw_position_mm = position_mm
+        if hasattr(self.window.manual_position_input, "cleanText"):
+            raw_text = str(self.window.manual_position_input.cleanText()).strip()
+            if raw_text:
+                try:
+                    raw_position_mm = float(raw_text)
+                except ValueError:
+                    raw_position_mm = position_mm
         if lane not in range(manual_cfg.min_lane, manual_cfg.max_lane + 1):
             self._set_last_command_status(f"manual fire rejected: lane {lane} out of range")
             return None
-        if position_mm < manual_cfg.min_position_mm or position_mm > manual_cfg.max_position_mm:
-            self._set_last_command_status(f"manual fire rejected: position {position_mm:.1f} out of range")
+        if raw_position_mm < manual_cfg.min_position_mm or raw_position_mm > manual_cfg.max_position_mm:
+            self._set_last_command_status(f"manual fire rejected: position {raw_position_mm:.1f} out of range")
             return None
 
         response = self.transport.send(ScheduledCommand(lane=lane, position_mm=position_mm))
@@ -1094,8 +1127,11 @@ class BenchAppController(QObject):
                 if callable(accessor):
                     observed = accessor()
                     if isinstance(observed, bool):
-                        self._latest_transport_queue_cleared = observed
-                        return observed
+                        if observed:
+                            self._latest_transport_queue_cleared = True
+                            return True
+                        if not self._latest_transport_queue_cleared:
+                            return False
         return self._latest_transport_queue_cleared
 
     def _apply_protocol_queue_side_effects(self, queue_cleared: bool) -> None:
