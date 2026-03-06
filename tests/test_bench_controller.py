@@ -490,13 +490,36 @@ def test_manual_fire_uses_scheduler_transport_send_without_send_command_side_cha
 
 def test_manual_fire_rejects_out_of_range_servo_values(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
+
+    class _RecordingTransport:
+        def __init__(self) -> None:
+            self.send_calls = 0
+
+        def send(self, _command: ScheduledCommand) -> TransportResponse:
+            self.send_calls += 1
+            return TransportResponse(
+                ack_code=AckCode.ACK,
+                queue_depth=0,
+                round_trip_ms=1.0,
+                fault_state=FaultState.NORMAL,
+                scheduler_state="IDLE",
+                mode="MANUAL",
+                queue_cleared=False,
+            )
+
+    transport = _RecordingTransport()
+    controller.transport = transport
     controller.window.manual_lane_input.setValue(runtime_config.bench_gui.manual_servo.max_lane)
-    controller.window.manual_position_input.setValue(runtime_config.bench_gui.manual_servo.max_position_mm + 1.0)
+    max_position = runtime_config.bench_gui.manual_servo.max_position_mm
+    controller.window.manual_position_input.setValue(max_position)
+    controller.window.manual_position_input.lineEdit().setText(str(max_position + 1.0))
     controller._set_operator_mode(OperatorMode.MANUAL)
 
     ack = controller._send_poc_fire_command(reason="manual_fire_test")
 
     assert ack is None
+    assert transport.send_calls == 0
+    assert f"position {max_position + 1.0}" in controller.window.last_command_label.text()
     assert "out of range" in controller.window.last_command_label.text()
 
 
