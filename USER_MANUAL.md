@@ -59,7 +59,7 @@ Run the following commands from the repository root (`/path/to/ColourSorter`).
 ### Run quick scenario checks
 
 ```bash
-coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
+coloursorter-bench-cli --scenario nominal --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
 ### Run GUI bench app
