@@ -106,7 +106,7 @@ Scenario CLI check:
 coloursorter-bench-cli --scenario nominal --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
-Baseline replay pipeline run (run from repository root `/path/to/ColourSorter`):
+Baseline replay pipeline run (Linux/macOS, from repository root `/path/to/ColourSorter`):
 
 ```bash
 PYTHONPATH=src python -m coloursorter.bench.cli \
@@ -117,6 +117,20 @@ PYTHONPATH=src python -m coloursorter.bench.cli \
   --calibration configs/calibration.json \
   --max-cycles 50 \
   --artifact-root artifacts/bench \
+  --text-report
+```
+
+Windows Command Prompt:
+
+```bat
+set PYTHONPATH=src && python -m coloursorter.bench.cli ^
+  --mode replay ^
+  --source data ^
+  --runtime-config configs/bench_runtime.yaml ^
+  --lane-config configs/lane_geometry.yaml ^
+  --calibration configs/calibration.json ^
+  --max-cycles 50 ^
+  --artifact-root artifacts/bench ^
   --text-report
 ```
 

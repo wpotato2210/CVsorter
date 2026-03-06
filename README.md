@@ -121,10 +121,16 @@ Scenario evaluator:
 coloursorter-bench-cli --scenario nominal --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
-Replay bench run:
+Replay bench run (Linux/macOS):
 
 ```bash
 PYTHONPATH=src python -m coloursorter.bench.cli --mode replay --source data --artifact-root artifacts/bench --text-report
+```
+
+Replay bench run (Windows Command Prompt):
+
+```bat
+set PYTHONPATH=src && python -m coloursorter.bench.cli --mode replay --source data --artifact-root artifacts/bench --text-report
 ```
 
 ## CLI usage example
