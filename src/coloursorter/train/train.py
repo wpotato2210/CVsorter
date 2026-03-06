@@ -23,10 +23,12 @@ def train_one_epoch(
     total_loss = 0.0
     for image_hwc, label in zip(dataset.images_hwc, dataset.labels):
         tensor_bchw = preprocess_rgb_frame(image_hwc, config)
-        assert tensor_bchw.ndim == 4 and tensor_bchw.shape[1] == 3, "tensor shape must be (B,C,H,W)"
+        if tensor_bchw.ndim != 4 or tensor_bchw.shape[1] != 3:
+            raise ValueError("tensor shape must be (B,C,H,W)")
         logits = model(tensor_bchw)
         target = torch.tensor([label], dtype=torch.long, device=config.device)
-        assert logits.device.type == target.device.type, "device match assertion failed"
+        if logits.device != target.device:
+            raise RuntimeError("device match assertion failed")
         loss = criterion(logits, target)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
