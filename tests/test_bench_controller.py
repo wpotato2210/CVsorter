@@ -116,6 +116,7 @@ def test_controller_state_transitions_idle_replay_live_fault(qapp: QApplication,
     assert controller._cycle_timer.isActive()
     assert not controller.window.replay_button.isEnabled()
     assert not controller.window.live_button.isEnabled()
+    assert controller.window.lane_overlay_label.text() == "Replay mode active"
 
     # Illegal transition is ignored.
     controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
@@ -123,6 +124,7 @@ def test_controller_state_transitions_idle_replay_live_fault(qapp: QApplication,
     assert controller._cycle_timer.isActive()
     assert not controller.window.replay_button.isEnabled()
     assert not controller.window.live_button.isEnabled()
+    assert controller.window.lane_overlay_label.text() == "Replay mode active"
     assert overlays == ["Replay mode active"]
 
     controller._transition_to(ControllerState.FAULTED, overlay_text="Watchdog fault active")
