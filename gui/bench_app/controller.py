@@ -658,8 +658,10 @@ class BenchAppController(QObject):
             self._state_machine.set_safe.emit()
         self._app.processEvents()
         entered_state = self.runtime_state.controller_state
-        transition_applied = previous_state != entered_state and entered_state == state
-        if overlay_text is not None and transition_applied:
+        if previous_state == entered_state or entered_state != state:
+            self._emit_runtime_state()
+            return
+        if overlay_text is not None:
             self.lane_overlay_requested.emit(overlay_text)
         self._emit_runtime_state()
 
