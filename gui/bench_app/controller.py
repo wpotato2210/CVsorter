@@ -735,9 +735,17 @@ class BenchAppController(QObject):
         return self._request_transition(ControllerState.SAFE, overlay_text=overlay_text)
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
+        previous_state = self.runtime_state.controller_state
         # Runtime/UI state updates happen only from `_on_controller_state_entered`
         # after the Qt state machine confirms the transition by entering a state.
-        return self._request_transition(state, overlay_text=overlay_text)
+        transitioned = self._request_transition(state, overlay_text=overlay_text)
+        if not transitioned:
+            LOGGER.debug(
+                "state unchanged after rejected transition requested=%s current=%s",
+                state.value,
+                previous_state.value,
+            )
+        return transitioned
 
     @Slot()
     def _on_cycle_tick(self) -> None:
