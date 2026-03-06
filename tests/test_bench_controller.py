@@ -41,8 +41,9 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     observed_states: list[QueueState] = []
     controller.queue_state_requested.connect(lambda state: observed_states.append(state))
 
-    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    replay_transitioned = controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
 
+    assert replay_transitioned is True
     assert observed_states
     baseline_state = controller.runtime_state.controller_state
     baseline_timer_active = controller._cycle_timer.isActive()
@@ -57,8 +58,9 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     baseline_runtime_queue_state = observed_states[-1].controller_state
     baseline_runtime_run_state = observed_states[-1].run_state
 
-    controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+    live_transitioned = controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
 
+    assert live_transitioned is False
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
     assert controller.runtime_state.controller_state == baseline_state
     assert controller._cycle_timer.isActive()

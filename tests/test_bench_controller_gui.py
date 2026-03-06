@@ -76,7 +76,8 @@ def test_mode_mapping_matches_host_values() -> None:
 def test_state_machine_drives_running_and_idle_transitions(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
 
-    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    replay_transitioned = controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    assert replay_transitioned is True
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
     assert controller._cycle_timer.isActive()
 
@@ -94,8 +95,9 @@ def test_transition_overlay_emits_only_after_confirmed_enter_callback(
     controller._state_machine.entered.connect(lambda state: event_order.append(f"entered:{state.value}"))
     controller.lane_overlay_requested.connect(lambda text: event_order.append(f"overlay:{text}"))
 
-    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    replay_transitioned = controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
 
+    assert replay_transitioned is True
     assert event_order == ["entered:replay_running", "overlay:Replay mode active"]
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
 
@@ -112,7 +114,8 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     observed: list[QueueState] = []
     controller.queue_state_requested.connect(lambda state: observed.append(state))
 
-    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    replay_transitioned = controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    assert replay_transitioned is True
     baseline_state = controller.runtime_state.controller_state
     baseline_timer_active = controller._cycle_timer.isActive()
     baseline_replay_enabled = controller.window.replay_button.isEnabled()
