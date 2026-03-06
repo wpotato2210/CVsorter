@@ -275,18 +275,23 @@ class SerialMcuTransport:
         mode = ack.mode or "UNKNOWN"
         queue_depth = ack.queue_depth if isinstance(ack.queue_depth, int) and ack.queue_depth >= 0 else self._last_queue_depth
         scheduler_state = ack.scheduler_state or "UNKNOWN"
-        if mode != self._expected_mode:
+        queue_not_empty = queue_depth > 0
+        mode_mismatch = mode != self._expected_mode
+        if mode_mismatch and queue_not_empty:
             reset_ack, _ = self._send_frame(CMD_RESET_QUEUE)
             if reset_ack.status != "ACK":
                 self._last_fault_state = FaultState.SAFE
                 raise SerialTransportError.create("sync_failed", "RESET_QUEUE failed", FaultState.SAFE)
-            if mode != self._expected_mode:
-                mode_ack, _ = self._send_frame(CMD_SET_MODE, (self._expected_mode,))
-                if mode_ack.status != "ACK":
-                    self._last_fault_state = FaultState.SAFE
-                    raise SerialTransportError.create("sync_failed", "SET_MODE failed", FaultState.SAFE)
-            self._expected_scheduler_state = "IDLE"
             self._last_queue_depth = 0
+            self._expected_scheduler_state = "IDLE"
+
+        if mode_mismatch:
+            mode_ack, _ = self._send_frame(CMD_SET_MODE, (self._expected_mode,))
+            if mode_ack.status != "ACK":
+                self._last_fault_state = FaultState.SAFE
+                raise SerialTransportError.create("sync_failed", "SET_MODE failed", FaultState.SAFE)
+            self._expected_scheduler_state = mode_ack.scheduler_state or "IDLE"
+            self._last_queue_depth = mode_ack.queue_depth if isinstance(mode_ack.queue_depth, int) and mode_ack.queue_depth >= 0 else self._last_queue_depth
         else:
             self._last_queue_depth = queue_depth
             self._expected_scheduler_state = scheduler_state
