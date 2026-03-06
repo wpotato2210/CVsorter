@@ -51,6 +51,20 @@ class PipelineConfig:
     image: ImageConfig
     physical: PhysicalConfig
 
+    def validate(self) -> None:
+        """Runtime config guard for deterministic CV pipeline contracts."""
+        min_norm, max_norm = self.image.normalization_range
+        if self.image.colour_format not in {"RGB", "BGR"}:
+            raise ValueError("image.colour_format must be RGB or BGR")
+        if min_norm >= max_norm:
+            raise ValueError("image.normalization_range must be strictly increasing")
+        if self.image.model_input_shape_hwc[2] != 3:
+            raise ValueError("image.model_input_shape_hwc must declare 3 channels")
+        if self.physical.queue.queue_depth <= 0:
+            raise ValueError("physical.queue.queue_depth must be > 0")
+        if self.physical.timing.max_latency_ms <= 0:
+            raise ValueError("physical.timing.max_latency_ms must be > 0")
+
 
 DEFAULT_PIPELINE_CONFIG = PipelineConfig(
     device="cpu",
