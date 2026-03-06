@@ -44,9 +44,17 @@ python -m venv .venv
   .\.venv\Scripts\Activate.ps1
   ```
 
+- Windows Command Prompt (cmd.exe):
+
+  ```bat
+  .\.venv\Scripts\activate.bat
+  ```
+
 After activation, your terminal prompt should start with `(.venv)`.
 
 ### 4) Install ColourSorter
+
+Run install commands from the repository root (for example `C:\Users\<you>\Documents\CVsorter-main`), not from `.venv\Scripts`.
 
 ```bash
 python -m pip install --upgrade pip
