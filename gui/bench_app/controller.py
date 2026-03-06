@@ -657,7 +657,8 @@ class BenchAppController(QObject):
         elif state == ControllerState.SAFE:
             self._state_machine.set_safe.emit()
         self._app.processEvents()
-        transition_applied = self.runtime_state.controller_state == state and previous_state != state
+        entered_state = self.runtime_state.controller_state
+        transition_applied = previous_state != entered_state and entered_state == state
         if overlay_text is not None and transition_applied:
             self.lane_overlay_requested.emit(overlay_text)
         self._emit_runtime_state()
@@ -1068,7 +1069,6 @@ class BenchAppController(QObject):
             self._audit_operator_command("recover_safe_to_manual", outcome="nack", before_mode=before_mode, queue_before=queue_before)
             return False
         self.runtime_state.fault_state = FaultState.NORMAL
-        self.runtime_state.controller_state = ControllerState.IDLE
         self._transition_to(ControllerState.IDLE, overlay_text="SAFE cleared; MANUAL mode")
         self.log_entry_requested.emit(
             BenchLogEntry(
