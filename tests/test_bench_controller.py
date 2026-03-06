@@ -119,12 +119,17 @@ def test_controller_state_transitions_idle_replay_live_fault(qapp: QApplication,
     assert not controller.window.replay_button.isEnabled()
     assert not controller.window.live_button.isEnabled()
 
-    # Illegal replay->live transition is ignored and UI/timer state remain replay-running.
+    overlay_count_before = len(overlays)
+    emitted_count_before = len(emitted_states)
+
+    # Illegal replay->live transition is ignored and runtime/UI/timer state remain replay-running.
     controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
     assert controller._cycle_timer.isActive()
     assert not controller.window.replay_button.isEnabled()
     assert not controller.window.live_button.isEnabled()
+    assert len(overlays) == overlay_count_before
+    assert len(emitted_states) == emitted_count_before + 1
     assert emitted_states[-1].controller_state == ControllerState.REPLAY_RUNNING.value
     assert emitted_states[-1].run_state == ControllerState.REPLAY_RUNNING.value
     assert controller.window.lane_overlay_label.text() == "Replay mode active"

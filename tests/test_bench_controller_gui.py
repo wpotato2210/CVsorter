@@ -85,6 +85,30 @@ def test_state_machine_drives_running_and_idle_transitions(qapp: QApplication, r
     assert not controller._cycle_timer.isActive()
 
 
+def test_illegal_replay_to_live_transition_keeps_runtime_ui_and_overlay_consistent(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    overlays: list[str] = []
+    controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+
+    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+    assert controller._cycle_timer.isActive()
+    assert controller.window.lane_overlay_label.text() == "Replay mode active"
+
+    overlay_count_before = len(overlays)
+    controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+    assert controller._cycle_timer.isActive()
+    assert not controller.window.replay_button.isEnabled()
+    assert not controller.window.live_button.isEnabled()
+    assert len(overlays) == overlay_count_before
+    assert controller.window.lane_overlay_label.text() == "Replay mode active"
+
+
 def test_safe_recovery_guardrails_follow_protocol(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
 
