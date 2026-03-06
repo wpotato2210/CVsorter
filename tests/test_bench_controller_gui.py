@@ -326,7 +326,7 @@ def test_safe_entry_updates_overlay_fault_and_mode(qapp: QApplication, runtime_c
 def test_log_mode_updates_runtime_mode_from_transport_feedback(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
 
-    controller.runtime_state.controller_state = ControllerState.REPLAY_RUNNING
+    controller._on_controller_state_entered(ControllerState.REPLAY_RUNNING)
     controller.runtime_state.scheduler_state = "IDLE"
     controller.runtime_state.operator_mode = OperatorMode.AUTO
 
@@ -387,7 +387,7 @@ def test_gui_selectors_are_initialized_from_runtime_config(qapp: QApplication, r
 
 def test_manual_fire_is_blocked_while_auto_cycle_active(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
-    controller.runtime_state.controller_state = ControllerState.REPLAY_RUNNING
+    controller._on_controller_state_entered(ControllerState.REPLAY_RUNNING)
     controller.runtime_state.operator_mode = OperatorMode.AUTO
 
     controller.on_fire_test_clicked()
@@ -399,7 +399,7 @@ def test_transport_reconfiguration_is_blocked_while_auto_cycle_active(
     qapp: QApplication, runtime_config: RuntimeConfig
 ) -> None:
     controller = BenchAppController(qapp, runtime_config)
-    controller.runtime_state.controller_state = ControllerState.LIVE_RUNNING
+    controller._on_controller_state_entered(ControllerState.LIVE_RUNNING)
     controller.runtime_state.operator_mode = OperatorMode.AUTO
     original_kind = controller._selected_transport_kind
 

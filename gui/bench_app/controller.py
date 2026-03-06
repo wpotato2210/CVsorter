@@ -352,6 +352,7 @@ class BenchAppController(QObject):
             operator_mode=OperatorMode.AUTO,
         )
         self._pending_overlay: str | None = None
+        self._pending_overlay_state: ControllerState | None = None
         self.cycle_config = BenchCycleConfig(
             period_ms=runtime_config.cycle_timing.period_ms,
             queue_consumption_policy=QueueConsumptionPolicy(runtime_config.cycle_timing.queue_consumption_policy),
@@ -598,9 +599,10 @@ class BenchAppController(QObject):
 
         self._update_buttons_for_controller_state(state)
         self._update_buttons_for_mode(self.runtime_state.operator_mode)
-        if self._pending_overlay is not None:
+        if self._pending_overlay is not None and self._pending_overlay_state == state:
             self.lane_overlay_requested.emit(self._pending_overlay)
             self._pending_overlay = None
+            self._pending_overlay_state = None
         self._emit_runtime_state()
 
     def _on_state_entered(self, state: ControllerState) -> None:
@@ -637,9 +639,9 @@ class BenchAppController(QObject):
             self.window.live_button.setEnabled(True)
         elif state == ControllerState.REPLAY_RUNNING:
             self.window.replay_button.setEnabled(False)
-            self.window.live_button.setEnabled(True)
+            self.window.live_button.setEnabled(False)
         elif state == ControllerState.LIVE_RUNNING:
-            self.window.replay_button.setEnabled(True)
+            self.window.replay_button.setEnabled(False)
             self.window.live_button.setEnabled(False)
         elif state == ControllerState.SAFE:
             self.window.replay_button.setEnabled(False)
@@ -707,16 +709,20 @@ class BenchAppController(QObject):
         self._emit_runtime_state()
 
     def _request_transition(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
+        self._app.processEvents()
         previous_state = self.runtime_state.controller_state
         if previous_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
                 self._pending_overlay = None
+                self._pending_overlay_state = None
                 self._emit_runtime_state()
                 return False
         self._pending_overlay = overlay_text
+        self._pending_overlay_state = state if overlay_text is not None else None
         transition_requested = self._state_machine.request(state)
         if not transition_requested:
             self._pending_overlay = None
+            self._pending_overlay_state = None
             LOGGER.debug("ignoring rejected transition requested=%s previous=%s", state.value, previous_state.value)
             self._emit_runtime_state()
             return False
