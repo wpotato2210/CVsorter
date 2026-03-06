@@ -224,9 +224,10 @@ class SerialMcuTransport:
 
     def _ensure_link_ready(self) -> None:
         now = time.monotonic()
+        heartbeat_interval_s = self._config.heartbeat_interval_s
         if not self._handshake_complete:
             self._perform_handshake()
-        if now - self._last_heartbeat_sent_at >= self._config.heartbeat_interval_s:
+        if heartbeat_interval_s > 0.0 and now - self._last_heartbeat_sent_at >= heartbeat_interval_s:
             heartbeat_ack, _ = self._send_frame(CMD_HEARTBEAT)
             if heartbeat_ack.status != "ACK":
                 self._handshake_complete = False

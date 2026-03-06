@@ -166,7 +166,8 @@ def test_serial_transport_requires_get_state_sync_and_recovers_with_reset_and_mo
     response = transport.send(ScheduledCommand(lane=1, position_mm=200.0))
 
     commands = [parse_frame(raw.decode().strip()).command for raw in fake.written]
-    assert commands[:6] == ["HELLO", "HEARTBEAT", "GET_STATE", "RESET_QUEUE", "SET_MODE", "SCHED"]
+    assert commands[:5] == ["HELLO", "GET_STATE", "RESET_QUEUE", "SET_MODE", "SCHED"]
+    assert "HEARTBEAT" not in commands
     assert response.ack_code == AckCode.ACK
     assert response.mode == "AUTO"
     assert response.queue_depth == 1
