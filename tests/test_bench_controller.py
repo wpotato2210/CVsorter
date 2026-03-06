@@ -108,6 +108,8 @@ def test_controller_state_transitions_idle_replay_live_fault(qapp: QApplication,
 
     overlays: list[str] = []
     controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+    observed_states: list[str] = []
+    controller.queue_state_requested.connect(lambda state: observed_states.append(state.controller_state))
 
     assert controller.runtime_state.controller_state == ControllerState.IDLE
 
@@ -124,6 +126,7 @@ def test_controller_state_transitions_idle_replay_live_fault(qapp: QApplication,
     assert not controller.window.replay_button.isEnabled()
     assert not controller.window.live_button.isEnabled()
     assert overlays == ["Replay mode active"]
+    assert observed_states[-1] == ControllerState.REPLAY_RUNNING.value
 
     controller._transition_to(ControllerState.FAULTED, overlay_text="Watchdog fault active")
     assert controller.runtime_state.controller_state == ControllerState.FAULTED

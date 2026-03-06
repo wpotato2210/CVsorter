@@ -163,6 +163,7 @@ class BoundedDropQueue:
 
 @dataclass(frozen=True)
 class _DetectedFrameBatch:
+    request_id: int
     frame: BenchFrame
     frame_rgb: object
     detections: tuple[object, ...]
@@ -174,6 +175,7 @@ class _DetectedFrameBatch:
 class _WorkerEvent:
     kind: str
     payload: object
+    request_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -384,6 +386,7 @@ class BenchAppController(QObject):
         self._ui_event_queue = BoundedDropQueue(maxlen=64, drop_oldest=True)
         self._ui_action_queue = BoundedDropQueue(maxlen=128, drop_oldest=False)
         self._acquire_requests = BoundedDropQueue(maxlen=2, drop_oldest=False)
+        self._cycle_request_id = 0
         self._worker_stop = threading.Event()
         self._frame_worker_thread = threading.Thread(target=self._frame_worker_loop, name="bench-frame-worker", daemon=True)
         self._transport_worker_thread = threading.Thread(
@@ -666,43 +669,60 @@ class BenchAppController(QObject):
     def _on_cycle_tick(self) -> None:
         if self.runtime_state.controller_state != ControllerState.REPLAY_RUNNING:
             return
-        self._acquire_requests.put({"requested_at": time.monotonic()})
-        deadline_s = time.monotonic() + (self.watchdog_config.cycle_budget_ms / 1000.0) + 0.05
-        while time.monotonic() < deadline_s:
-            if self._drain_ui_worker_events():
-                return
-            time.sleep(0.001)
-        self._drain_ui_worker_events()
+        self._cycle_request_id += 1
+        cycle_request_id = self._cycle_request_id
+        self._acquire_requests.put({"requested_at": time.monotonic(), "request_id": cycle_request_id})
+        self._drain_ui_worker_events(
+            wait_timeout_s=(self.watchdog_config.cycle_budget_ms / 1000.0) + 0.05,
+            until_request_id=cycle_request_id,
+        )
 
-    def _drain_ui_worker_events(self) -> bool:
+    def _drain_ui_worker_events(self, *, wait_timeout_s: float = 0.0, until_request_id: int | None = None) -> bool:
         observed_cycle_terminal_event = False
+        target_request_completed = until_request_id is None
+        next_wait_timeout_s = wait_timeout_s
         while True:
-            event = self._ui_event_queue.get(timeout_s=0.0)
+            event = self._ui_event_queue.get(timeout_s=next_wait_timeout_s)
+            next_wait_timeout_s = 0.0
             if event is None:
-                return observed_cycle_terminal_event
+                return observed_cycle_terminal_event and target_request_completed
             if not isinstance(event, _WorkerEvent):
                 continue
             if event.kind == "source_fault":
                 observed_cycle_terminal_event = True
+                if until_request_id is not None and event.request_id == until_request_id:
+                    target_request_completed = True
                 self._handle_source_fault(str(event.payload))
+                if observed_cycle_terminal_event and target_request_completed:
+                    return True
                 continue
             if event.kind == "replay_complete":
                 observed_cycle_terminal_event = True
+                if until_request_id is not None and event.request_id == until_request_id:
+                    target_request_completed = True
                 self._publish_session_evaluation()
                 self._release_frame_source()
                 self.runtime_state.scheduler_state = "IDLE"
                 self._transition_to(ControllerState.IDLE, overlay_text="Replay complete")
+                if observed_cycle_terminal_event and target_request_completed:
+                    return True
                 continue
             if event.kind == "faulted":
                 observed_cycle_terminal_event = True
+                if until_request_id is not None and event.request_id == until_request_id:
+                    target_request_completed = True
                 fault_state, detail = event.payload
                 self.runtime_state.fault_state = fault_state
                 self.runtime_state.scheduler_state = "IDLE"
                 self._transition_to(ControllerState.FAULTED, overlay_text=detail)
+                if observed_cycle_terminal_event and target_request_completed:
+                    return True
                 continue
             if event.kind != "cycle_complete":
                 continue
             observed_cycle_terminal_event = True
+            if until_request_id is not None and event.request_id == until_request_id:
+                target_request_completed = True
 
             frame, logs, stage_ms, queue_stats = event.payload
             self.frame_preview_requested.emit(frame.tobytes(), frame.shape[1], frame.shape[0])
@@ -728,37 +748,52 @@ class BenchAppController(QObject):
             if self.runtime_state.fault_state == FaultState.SAFE:
                 self._set_protocol_mode(OperatorMode.SAFE)
                 self._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
-                return
+                return True
             if self.runtime_state.fault_state == FaultState.WATCHDOG:
                 self.runtime_state.scheduler_state = "IDLE"
                 self._transition_to(ControllerState.FAULTED, overlay_text="Watchdog fault active")
-                return
+                return True
             self._emit_runtime_state()
+            if observed_cycle_terminal_event and target_request_completed:
+                return True
 
     def _frame_worker_loop(self) -> None:
         while not self._worker_stop.is_set():
             request = self._acquire_requests.get(timeout_s=0.1)
             if request is None:
                 continue
+            request_id = request.get("request_id") if isinstance(request, dict) else None
             try:
                 started = time.perf_counter()
                 frame = self._next_frame()
                 if frame is None:
-                    self._ui_event_queue.put(_WorkerEvent(kind="replay_complete", payload=None))
+                    self._ui_event_queue.put(_WorkerEvent(kind="replay_complete", payload=None, request_id=request_id))
                     continue
                 if not isinstance(frame.image_bgr, np.ndarray):
                     self._ui_event_queue.put(
-                        _WorkerEvent(kind="faulted", payload=(FaultState.SAFE, "invalid frame type; expected numpy.ndarray"))
+                        _WorkerEvent(
+                            kind="faulted",
+                            payload=(FaultState.SAFE, "invalid frame type; expected numpy.ndarray"),
+                            request_id=request_id,
+                        )
                     )
                     continue
                 if frame.image_bgr.ndim != 3 or frame.image_bgr.shape[2] != 3:
                     self._ui_event_queue.put(
-                        _WorkerEvent(kind="faulted", payload=(FaultState.SAFE, "invalid frame shape; expected (H,W,3)"))
+                        _WorkerEvent(
+                            kind="faulted",
+                            payload=(FaultState.SAFE, "invalid frame shape; expected (H,W,3)"),
+                            request_id=request_id,
+                        )
                     )
                     continue
                 if frame.image_bgr.dtype != np.uint8:
                     self._ui_event_queue.put(
-                        _WorkerEvent(kind="faulted", payload=(FaultState.SAFE, "invalid frame dtype; expected uint8"))
+                        _WorkerEvent(
+                            kind="faulted",
+                            payload=(FaultState.SAFE, "invalid frame dtype; expected uint8"),
+                            request_id=request_id,
+                        )
                     )
                     continue
                 frame_rgb = cv2.cvtColor(frame.image_bgr, cv2.COLOR_BGR2RGB)
@@ -766,11 +801,16 @@ class BenchAppController(QObject):
                 frame_stage_ms = (time.perf_counter() - started) * 1000.0
                 if frame_stage_ms > self.watchdog_config.frame_acquire_detect_ms:
                     self._ui_event_queue.put(
-                        _WorkerEvent(kind="faulted", payload=(FaultState.WATCHDOG, "acquire/detect watchdog exceeded"))
+                        _WorkerEvent(
+                            kind="faulted",
+                            payload=(FaultState.WATCHDOG, "acquire/detect watchdog exceeded"),
+                            request_id=request_id,
+                        )
                     )
                     continue
                 self._frame_transport_queue.put(
                     _DetectedFrameBatch(
+                        request_id=request_id if isinstance(request_id, int) else -1,
                         frame=frame,
                         frame_rgb=frame_rgb,
                         detections=detections,
@@ -779,9 +819,11 @@ class BenchAppController(QObject):
                     )
                 )
             except FrameSourceError as error:
-                self._ui_event_queue.put(_WorkerEvent(kind="source_fault", payload=str(error)))
+                self._ui_event_queue.put(_WorkerEvent(kind="source_fault", payload=str(error), request_id=request_id))
             except (DetectionError, cv2.error, TypeError, ValueError) as error:
-                self._ui_event_queue.put(_WorkerEvent(kind="faulted", payload=(FaultState.SAFE, str(error))))
+                self._ui_event_queue.put(
+                    _WorkerEvent(kind="faulted", payload=(FaultState.SAFE, str(error)), request_id=request_id)
+                )
 
     def _transport_worker_loop(self) -> None:
         while not self._worker_stop.is_set():
@@ -819,7 +861,9 @@ class BenchAppController(QObject):
                         }
                     )
                 except SerialTransportError as error:
-                    self._ui_event_queue.put(_WorkerEvent(kind="faulted", payload=(error.fault_state, error.detail)))
+                    self._ui_event_queue.put(
+                        _WorkerEvent(kind="faulted", payload=(error.fault_state, error.detail), request_id=batch.request_id)
+                    )
                     continue
             self._step_transport_queue()
             decision_transport_ms = (time.perf_counter() - decision_started) * 1000.0
@@ -830,7 +874,11 @@ class BenchAppController(QObject):
             }
             if decision_transport_ms > self.watchdog_config.transport_ms or stage_ms["cycle"] > self.watchdog_config.cycle_budget_ms:
                 self._ui_event_queue.put(
-                    _WorkerEvent(kind="faulted", payload=(FaultState.WATCHDOG, "cycle budget exceeded before command emit"))
+                    _WorkerEvent(
+                        kind="faulted",
+                        payload=(FaultState.WATCHDOG, "cycle budget exceeded before command emit"),
+                        request_id=batch.request_id,
+                    )
                 )
                 continue
             queue_stats = {
@@ -838,7 +886,13 @@ class BenchAppController(QObject):
                 "work_q": self._frame_transport_queue.metrics,
                 "ui_q": self._ui_event_queue.metrics,
             }
-            self._ui_event_queue.put(_WorkerEvent(kind="cycle_complete", payload=(batch.frame_rgb, logs, stage_ms, queue_stats)))
+            self._ui_event_queue.put(
+                _WorkerEvent(
+                    kind="cycle_complete",
+                    payload=(batch.frame_rgb, logs, stage_ms, queue_stats),
+                    request_id=batch.request_id,
+                )
+            )
 
     def _clear_worker_backlog(self) -> None:
         while self._acquire_requests.get(timeout_s=0.0) is not None:
