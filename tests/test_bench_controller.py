@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ try:
 except ImportError:  # pragma: no cover
     pytest.skip("PySide6 is required for GUI tests", allow_module_level=True)
 
+from coloursorter.bench import BenchMode
 from coloursorter.config import RuntimeConfig
 from gui.bench_app.app import QueueState
 from gui.bench_app.controller import BenchAppController, ControllerState
@@ -81,3 +83,44 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert controller.window.status_label.text() == baseline_status_label
     assert observed_states[-1].controller_state == baseline_runtime_queue_state
     assert observed_states[-1].run_state == baseline_runtime_run_state
+
+
+class _StubFrameSource:
+    def __init__(self, frame: object) -> None:
+        self._frame = frame
+
+    def next_frame(self) -> object:
+        return self._frame
+
+
+def test_next_frame_prefers_simulated_overlay_when_replay_mock_and_enabled(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    sentinel = object()
+    controller._frame_source = _StubFrameSource(frame=sentinel)  # type: ignore[assignment]
+    controller.runtime_state.mode = BenchMode.REPLAY
+
+    frame = controller._next_frame()
+
+    assert frame is not sentinel
+    assert frame.frame_id == 0
+
+
+def test_next_frame_uses_frame_source_when_simulated_overlay_disabled(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    disabled_overlay_config = replace(
+        runtime_config,
+        frame_source=replace(runtime_config.frame_source, simulated_overlay=False),
+    )
+    controller = BenchAppController(qapp, disabled_overlay_config)
+
+    sentinel = object()
+    controller._frame_source = _StubFrameSource(frame=sentinel)  # type: ignore[assignment]
+    controller.runtime_state.mode = BenchMode.REPLAY
+
+    frame = controller._next_frame()
+
+    assert frame is sentinel

@@ -5,6 +5,7 @@ frame_source:
   mode: replay
   replay_path: data
   replay_frame_period_s: 0.033333333
+  simulated_overlay: true
 
 camera:
   index: 0

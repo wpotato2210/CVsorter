@@ -416,6 +416,7 @@ class BenchAppController(QObject):
         self._audit_trail: list[dict[str, object]] = []
         self._frame_source: BenchFrameSource | None = None
         self._use_simulated_live_feed = False
+        self._simulated_overlay_enabled = runtime_config.frame_source.simulated_overlay
         self._degraded_mode_active = False
         self._simulated_frame_id = 0
         self._latest_transport_queue_depth = 0
@@ -738,17 +739,7 @@ class BenchAppController(QObject):
         # Runtime/UI state updates happen only from `_on_controller_state_entered`
         # after the Qt state machine confirms the transition by entering a state.
         # `_transition_to` intentionally does not pre-assign runtime state.
-        previous_state = self.runtime_state.controller_state
-        transitioned = self._request_transition(state, overlay_text=overlay_text)
-        if not transitioned and self.runtime_state.controller_state != previous_state:
-            LOGGER.debug(
-                "restoring rejected transition state requested=%s previous=%s current=%s",
-                state.value,
-                previous_state.value,
-                self.runtime_state.controller_state.value,
-            )
-            self.runtime_state._set_controller_state(previous_state)
-        return transitioned
+        return self._request_transition(state, overlay_text=overlay_text)
 
     @Slot()
     def _on_cycle_tick(self) -> None:
@@ -948,6 +939,12 @@ class BenchAppController(QObject):
             pass
 
     def _next_frame(self):
+        if (
+            self.runtime_state.mode == BenchMode.REPLAY
+            and self._selected_transport_kind == "mock"
+            and self._simulated_overlay_enabled
+        ):
+            return self._build_simulated_frame()
         # Temporary POC simplification: if no camera is available in LIVE mode,
         # generate synthetic frames so the GUI and protocol path stay testable.
         if self._use_simulated_live_feed:
