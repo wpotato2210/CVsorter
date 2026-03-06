@@ -445,7 +445,7 @@ class BenchAppController(QObject):
         self._cycle_timer.timeout.connect(self._on_cycle_tick)
 
         self._state_machine = BenchControllerStateMachine(self)
-        self._state_machine.entered.connect(self._on_state_entered)
+        self._state_machine.entered.connect(self._on_controller_state_entered)
 
         self._app.aboutToQuit.connect(self.shutdown)
         self._connect_view_actions()
@@ -454,7 +454,7 @@ class BenchAppController(QObject):
         self.mode_changed.connect(self._on_mode_changed)
         self.transport_response_received.connect(self._on_transport_response_received)
         self._set_serial_status(self._serial_connected)
-        self._on_state_entered(ControllerState.IDLE)
+        self._on_controller_state_entered(ControllerState.IDLE)
 
     @Slot()
     def shutdown(self) -> None:
@@ -585,7 +585,7 @@ class BenchAppController(QObject):
         )
         self.fault_state_requested.emit(self.runtime_state.fault_state)
 
-    def _on_state_entered(self, state: ControllerState) -> None:
+    def _on_controller_state_entered(self, state: ControllerState) -> None:
         self.runtime_state._set_controller_state(state)
         if state == ControllerState.SAFE and self.runtime_state.operator_mode != OperatorMode.SAFE:
             self._set_protocol_mode(OperatorMode.SAFE)
@@ -602,8 +602,8 @@ class BenchAppController(QObject):
             self._pending_overlay = None
         self._emit_runtime_state()
 
-    def _on_controller_state_entered(self, state: ControllerState) -> None:
-        self._on_state_entered(state)
+    def _on_state_entered(self, state: ControllerState) -> None:
+        self._on_controller_state_entered(state)
 
     @Slot(object)
     def _on_mode_changed(self, mode: OperatorMode) -> None:
@@ -735,7 +735,7 @@ class BenchAppController(QObject):
         return self._request_transition(ControllerState.SAFE, overlay_text=overlay_text)
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
-        self._request_transition(state, overlay_text=overlay_text)
+        _ = self._request_transition(state, overlay_text=overlay_text)
 
     @Slot()
     def _on_cycle_tick(self) -> None:
