@@ -9,6 +9,8 @@ class DeterministicConvNet(nn.Module):
 
     def __init__(self, num_classes: int) -> None:
         super().__init__()
+        if num_classes <= 0:
+            raise ValueError("num_classes must be > 0")
         self.backbone = nn.Sequential(
             nn.Conv2d(3, 16, kernel_size=3, stride=2, padding=1),
             nn.ReLU(inplace=True),
@@ -19,6 +21,9 @@ class DeterministicConvNet(nn.Module):
         self.head = nn.Linear(32, num_classes)
 
     def forward(self, tensor_bchw: torch.Tensor) -> torch.Tensor:
-        assert tensor_bchw.ndim == 4 and tensor_bchw.shape[1] == 3, "tensor shape must be (B,C,H,W)"
+        if tensor_bchw.ndim != 4 or tensor_bchw.shape[1] != 3:
+            raise ValueError("tensor shape must be (B,C,H,W)")
+        if not tensor_bchw.is_floating_point():
+            raise TypeError("model input tensor must be floating point")
         features = self.backbone(tensor_bchw)
         return self.head(features.flatten(start_dim=1))

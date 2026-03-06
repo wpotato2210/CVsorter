@@ -15,6 +15,11 @@ class DeterministicFrameDataset:
     def __post_init__(self) -> None:
         if len(self.images_hwc) != len(self.labels):
             raise ValueError("dataset images and labels must have the same length")
+        for image_hwc in self.images_hwc:
+            if image_hwc.ndim != 3 or image_hwc.shape[2] != 3:
+                raise ValueError("image shape must be (H,W,3)")
+            if image_hwc.dtype != np.uint8:
+                raise TypeError("image dtype must be uint8")
 
     def __len__(self) -> int:
         return len(self.images_hwc)
@@ -22,9 +27,13 @@ class DeterministicFrameDataset:
     def __getitem__(self, index: int) -> tuple[np.ndarray, int]:
         image_hwc = self.images_hwc[index]
         label = self.labels[index]
-        assert image_hwc.ndim == 3 and image_hwc.shape[2] == 3, "image shape must be (H,W,3)"
+        if image_hwc.ndim != 3 or image_hwc.shape[2] != 3:
+            raise ValueError("image shape must be (H,W,3)")
+        if image_hwc.dtype != np.uint8:
+            raise TypeError("image dtype must be uint8")
         return image_hwc, label
 
 
 def ensure_dataset_nonempty(dataset: DeterministicFrameDataset) -> None:
-    assert len(dataset) > 0, "dataset nonempty assertion failed"
+    if len(dataset) <= 0:
+        raise ValueError("dataset nonempty assertion failed")

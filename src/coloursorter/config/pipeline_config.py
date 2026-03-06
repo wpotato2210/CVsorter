@@ -64,6 +64,18 @@ class PipelineConfig:
             raise ValueError("physical.queue.queue_depth must be > 0")
         if self.physical.timing.max_latency_ms <= 0:
             raise ValueError("physical.timing.max_latency_ms must be > 0")
+        if self.physical.timing.fps_target <= 0:
+            raise ValueError("physical.timing.fps_target must be > 0")
+        if self.physical.timing.max_actuator_pulse_ms <= 0:
+            raise ValueError("physical.timing.max_actuator_pulse_ms must be > 0")
+        if self.physical.timing.heartbeat_period_ms <= 0:
+            raise ValueError("physical.timing.heartbeat_period_ms must be > 0")
+        if self.physical.timing.heartbeat_timeout_ms <= 0:
+            raise ValueError("physical.timing.heartbeat_timeout_ms must be > 0")
+        if self.physical.timing.estop_response_threshold_ms <= 0:
+            raise ValueError("physical.timing.estop_response_threshold_ms must be > 0")
+        if self.physical.throughput.min_frames_per_second <= 0:
+            raise ValueError("physical.throughput.min_frames_per_second must be > 0")
 
 
 DEFAULT_PIPELINE_CONFIG = PipelineConfig(
