@@ -639,11 +639,13 @@ class BenchAppController(QObject):
         self._emit_runtime_state()
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
-        if state == self.runtime_state.controller_state:
-            if overlay_text is not None:
-                self.lane_overlay_requested.emit(overlay_text)
-            self._emit_runtime_state()
-            return
+        if self.runtime_state.controller_state == ControllerState.SAFE and state != ControllerState.SAFE:
+            if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
+                if overlay_text is not None:
+                    self.lane_overlay_requested.emit(overlay_text)
+                self._emit_runtime_state()
+                return
+        self.runtime_state.controller_state = state
         if state == ControllerState.REPLAY_RUNNING:
             self._state_machine.start_replay.emit()
         elif state == ControllerState.LIVE_RUNNING:
@@ -656,10 +658,11 @@ class BenchAppController(QObject):
             self._state_machine.set_safe.emit()
         if overlay_text is not None:
             self.lane_overlay_requested.emit(overlay_text)
+        self._emit_runtime_state()
 
     @Slot()
     def _on_cycle_tick(self) -> None:
-        if self.runtime_state.controller_state not in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
+        if self.runtime_state.controller_state != ControllerState.REPLAY_RUNNING:
             return
         self._acquire_requests.put({"requested_at": time.monotonic()})
         self._drain_ui_worker_events()
@@ -925,7 +928,7 @@ class BenchAppController(QObject):
         lane = int(self.window.manual_lane_input.value())
         position_mm = float(self.window.manual_position_input.value())
         manual_cfg = self._runtime_config.bench_gui.manual_servo
-        if lane < manual_cfg.min_lane or lane > manual_cfg.max_lane:
+        if lane not in range(manual_cfg.min_lane, manual_cfg.max_lane + 1):
             self._set_last_command_status(f"manual fire rejected: lane {lane} out of range")
             return None
         if position_mm < manual_cfg.min_position_mm or position_mm > manual_cfg.max_position_mm:
@@ -1019,7 +1022,7 @@ class BenchAppController(QObject):
     def recover_safe_to_manual(self) -> bool:
         before_mode = self.runtime_state.operator_mode
         queue_before = self._capture_queue_state()
-        if self.runtime_state.controller_state != ControllerState.SAFE:
+        if self.runtime_state.fault_state != FaultState.SAFE:
             self._audit_operator_command("recover_safe_to_manual", outcome="rejected_not_safe", before_mode=before_mode, queue_before=queue_before)
             return False
         if not self._is_mode_transition_allowed(self.runtime_state.operator_mode, OperatorMode.MANUAL):
@@ -1030,6 +1033,7 @@ class BenchAppController(QObject):
             self._audit_operator_command("recover_safe_to_manual", outcome="nack", before_mode=before_mode, queue_before=queue_before)
             return False
         self.runtime_state.fault_state = FaultState.NORMAL
+        self.runtime_state.controller_state = ControllerState.IDLE
         self._transition_to(ControllerState.IDLE, overlay_text="SAFE cleared; MANUAL mode")
         self.log_entry_requested.emit(
             BenchLogEntry(
@@ -1263,10 +1267,14 @@ class BenchAppController(QObject):
             return
         try:
             transport_cls = SerialMcuTransport if selected_kind == "serial" else Esp32McuTransport
+            selected_port = self.window.com_selector.currentText()
+            selected_baud = int(self.window.baud_selector.currentText())
+            self._selected_serial_port = selected_port
+            self._selected_serial_baud = selected_baud
             self.transport = transport_cls(
                 config=SerialTransportConfig(
-                    port=self._selected_serial_port,
-                    baud=self._selected_serial_baud,
+                    port=selected_port,
+                    baud=selected_baud,
                     timeout_s=self._runtime_config.transport.serial_timeout_s,
                 )
             )

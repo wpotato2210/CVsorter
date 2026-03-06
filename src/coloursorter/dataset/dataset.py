@@ -34,5 +34,10 @@ class DeterministicFrameDataset:
         return image_hwc, label
 
 
+class DatasetNonemptyAssertionError(AssertionError, ValueError):
+    """Raised when a dataset nonempty contract assertion fails."""
+
+
 def ensure_dataset_nonempty(dataset: DeterministicFrameDataset) -> None:
-    assert len(dataset) > 0, "dataset nonempty assertion failed"
+    if len(dataset) <= 0:
+        raise DatasetNonemptyAssertionError("dataset nonempty assertion failed")
