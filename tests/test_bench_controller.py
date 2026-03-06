@@ -35,7 +35,9 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     controller = BenchAppController(qapp, runtime_config)
 
     overlays: list[str] = []
+    entered_states: list[ControllerState] = []
     controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+    controller._state_machine.entered.connect(lambda state: entered_states.append(state))
     observed_states: list[QueueState] = []
     controller.queue_state_requested.connect(lambda state: observed_states.append(state))
 
@@ -47,6 +49,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     baseline_replay_enabled = controller.window.replay_button.isEnabled()
     baseline_live_enabled = controller.window.live_button.isEnabled()
     baseline_overlay_count = len(overlays)
+    baseline_entered_count = len(entered_states)
     baseline_overlay_label = controller.window.lane_overlay_label.text()
     baseline_queue_state_label = controller.window.queue_state_label.text()
     baseline_status_label = controller.window.status_label.text()
@@ -64,6 +67,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert controller.window.lane_overlay_label.text() == baseline_overlay_label
     assert "Live mode active" not in overlays
     assert len(overlays) == baseline_overlay_count
+    assert len(entered_states) == baseline_entered_count
     assert controller.window.queue_state_label.text() == baseline_queue_state_label
     assert controller.window.status_label.text() == baseline_status_label
     assert observed_states[-1].controller_state == baseline_runtime_queue_state
