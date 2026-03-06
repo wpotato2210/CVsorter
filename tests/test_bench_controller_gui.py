@@ -90,20 +90,34 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
 ) -> None:
     controller = BenchAppController(qapp, runtime_config)
 
-    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
-
+    overlays: list[str] = []
+    controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
     observed: list[QueueState] = []
     controller.queue_state_requested.connect(lambda state: observed.append(state))
+
+    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    baseline_state = controller.runtime_state.controller_state
+    baseline_timer_active = controller._cycle_timer.isActive()
+    baseline_replay_enabled = controller.window.replay_button.isEnabled()
+    baseline_live_enabled = controller.window.live_button.isEnabled()
+    baseline_overlay_label = controller.window.lane_overlay_label.text()
+    baseline_queue_state = observed[-1].controller_state
+    baseline_run_state = observed[-1].run_state
+    baseline_overlay_count = len(overlays)
 
     controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
 
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+    assert controller.runtime_state.controller_state == baseline_state
     assert controller._cycle_timer.isActive()
-    assert not controller.window.replay_button.isEnabled()
-    assert not controller.window.live_button.isEnabled()
-    assert controller.window.lane_overlay_label.text() == "Replay mode active"
-    assert observed[-1].controller_state == ControllerState.REPLAY_RUNNING.value
-    assert observed[-1].run_state == ControllerState.REPLAY_RUNNING.value
+    assert controller._cycle_timer.isActive() == baseline_timer_active
+    assert controller.window.replay_button.isEnabled() == baseline_replay_enabled
+    assert controller.window.live_button.isEnabled() == baseline_live_enabled
+    assert controller.window.lane_overlay_label.text() == baseline_overlay_label
+    assert "Live mode active" not in overlays
+    assert len(overlays) == baseline_overlay_count
+    assert observed[-1].controller_state == baseline_queue_state
+    assert observed[-1].run_state == baseline_run_state
 
 def test_safe_recovery_guardrails_follow_protocol(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
