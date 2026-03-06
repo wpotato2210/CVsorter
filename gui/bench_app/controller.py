@@ -203,14 +203,21 @@ GUI_TO_HOST_MODE = {
 }
 
 
-@dataclass
-class BenchRuntimeState:
-    mode: BenchMode
-    previous_timestamp_s: float
-    fault_state: FaultState
-    controller_state: ControllerState
-    operator_mode: OperatorMode
-    scheduler_state: str = "IDLE"
+class RuntimeState:
+    def __init__(self, *, mode: BenchMode, previous_timestamp_s: float, fault_state: FaultState, operator_mode: OperatorMode) -> None:
+        self.mode = mode
+        self.previous_timestamp_s = previous_timestamp_s
+        self.fault_state = fault_state
+        self.operator_mode = operator_mode
+        self.scheduler_state = "IDLE"
+        self._controller_state = ControllerState.IDLE
+
+    @property
+    def controller_state(self) -> ControllerState:
+        return self._controller_state
+
+    def _set_controller_state(self, state: ControllerState) -> None:
+        self._controller_state = state
 
 
 class BenchControllerStateMachine(QObject):
@@ -264,6 +271,43 @@ class BenchControllerStateMachine(QObject):
         self._safe.entered.connect(lambda: self.entered.emit(ControllerState.SAFE))
 
         self._machine.start()
+        self._current_state = ControllerState.IDLE
+        self.entered.connect(self._on_entered)
+
+    @Slot(object)
+    def _on_entered(self, state: ControllerState) -> None:
+        self._current_state = state
+
+    @staticmethod
+    def _is_allowed_transition(current_state: ControllerState, target_state: ControllerState) -> bool:
+        if current_state == target_state:
+            return False
+        if target_state == ControllerState.SAFE:
+            return True
+        allowed_transitions: dict[ControllerState, set[ControllerState]] = {
+            ControllerState.IDLE: {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING},
+            ControllerState.REPLAY_RUNNING: {ControllerState.IDLE},
+            ControllerState.LIVE_RUNNING: {ControllerState.IDLE},
+            ControllerState.FAULTED: {ControllerState.IDLE},
+            ControllerState.SAFE: {ControllerState.IDLE},
+        }
+        return target_state in allowed_transitions.get(current_state, set())
+
+    def request(self, state: ControllerState) -> bool:
+        if not self._is_allowed_transition(self._current_state, state):
+            return False
+        trigger_by_state: dict[ControllerState, Signal] = {
+            ControllerState.REPLAY_RUNNING: self.start_replay,
+            ControllerState.LIVE_RUNNING: self.start_live,
+            ControllerState.IDLE: self.go_idle,
+            ControllerState.FAULTED: self.set_faulted,
+            ControllerState.SAFE: self.set_safe,
+        }
+        trigger = trigger_by_state.get(state)
+        if trigger is None:
+            return False
+        trigger.emit()
+        return True
 
 
 class BenchAppController(QObject):
@@ -301,13 +345,13 @@ class BenchAppController(QObject):
             pulley_circumference_mm=210.0,
             dropout_ratio=0.0,
         )
-        self.runtime_state = BenchRuntimeState(
+        self.runtime_state = RuntimeState(
             mode=BenchMode(runtime_config.frame_source.mode),
             previous_timestamp_s=0.0,
             fault_state=FaultState.NORMAL,
-            controller_state=ControllerState.IDLE,
             operator_mode=OperatorMode.AUTO,
         )
+        self._pending_overlay: str | None = None
         self.cycle_config = BenchCycleConfig(
             period_ms=runtime_config.cycle_timing.period_ms,
             queue_consumption_policy=QueueConsumptionPolicy(runtime_config.cycle_timing.queue_consumption_policy),
@@ -401,7 +445,7 @@ class BenchAppController(QObject):
         self._cycle_timer.timeout.connect(self._on_cycle_tick)
 
         self._state_machine = BenchControllerStateMachine(self)
-        self._state_machine.entered.connect(self._on_controller_state_entered)
+        self._state_machine.entered.connect(self._on_state_entered)
 
         self._app.aboutToQuit.connect(self.shutdown)
         self._connect_view_actions()
@@ -410,7 +454,7 @@ class BenchAppController(QObject):
         self.mode_changed.connect(self._on_mode_changed)
         self.transport_response_received.connect(self._on_transport_response_received)
         self._set_serial_status(self._serial_connected)
-        self._on_controller_state_entered(ControllerState.IDLE)
+        self._on_state_entered(ControllerState.IDLE)
 
     @Slot()
     def shutdown(self) -> None:
@@ -541,8 +585,8 @@ class BenchAppController(QObject):
         )
         self.fault_state_requested.emit(self.runtime_state.fault_state)
 
-    def _on_controller_state_entered(self, state: ControllerState) -> None:
-        self.runtime_state.controller_state = state
+    def _on_state_entered(self, state: ControllerState) -> None:
+        self.runtime_state._set_controller_state(state)
         if state == ControllerState.SAFE and self.runtime_state.operator_mode != OperatorMode.SAFE:
             self._set_protocol_mode(OperatorMode.SAFE)
         running = state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}
@@ -553,7 +597,13 @@ class BenchAppController(QObject):
 
         self._update_buttons_for_controller_state(state)
         self._update_buttons_for_mode(self.runtime_state.operator_mode)
+        if self._pending_overlay is not None:
+            self.lane_overlay_requested.emit(self._pending_overlay)
+            self._pending_overlay = None
         self._emit_runtime_state()
+
+    def _on_controller_state_entered(self, state: ControllerState) -> None:
+        self._on_state_entered(state)
 
     @Slot(object)
     def _on_mode_changed(self, mode: OperatorMode) -> None:
@@ -581,8 +631,21 @@ class BenchAppController(QObject):
         self.mode_changed.emit(mode)
 
     def _update_buttons_for_controller_state(self, state: ControllerState) -> None:
-        self.window.replay_button.setEnabled(state == ControllerState.IDLE)
-        self.window.live_button.setEnabled(state == ControllerState.IDLE)
+        if state == ControllerState.IDLE:
+            self.window.replay_button.setEnabled(True)
+            self.window.live_button.setEnabled(True)
+        elif state == ControllerState.REPLAY_RUNNING:
+            self.window.replay_button.setEnabled(False)
+            self.window.live_button.setEnabled(True)
+        elif state == ControllerState.LIVE_RUNNING:
+            self.window.replay_button.setEnabled(True)
+            self.window.live_button.setEnabled(False)
+        elif state == ControllerState.SAFE:
+            self.window.replay_button.setEnabled(False)
+            self.window.live_button.setEnabled(False)
+        else:
+            self.window.replay_button.setEnabled(False)
+            self.window.live_button.setEnabled(False)
         self.window.home_button.setEnabled(state != ControllerState.FAULTED)
 
     def _update_buttons_for_mode(self, mode: OperatorMode) -> None:
@@ -642,52 +705,37 @@ class BenchAppController(QObject):
             self.runtime_state.scheduler_state = "IDLE"
         self._emit_runtime_state()
 
-    def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
-        # Runtime controller state is only updated from _on_controller_state_entered.
-        # Never pre-assign target state before the state-machine transition is confirmed.
+    def _request_transition(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
         previous_state = self.runtime_state.controller_state
         if previous_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
+                self._pending_overlay = None
                 self._emit_runtime_state()
-                return
-
-        trigger_by_state: dict[ControllerState, Signal] = {
-            ControllerState.REPLAY_RUNNING: self._state_machine.start_replay,
-            ControllerState.LIVE_RUNNING: self._state_machine.start_live,
-            ControllerState.IDLE: self._state_machine.go_idle,
-            ControllerState.FAULTED: self._state_machine.set_faulted,
-            ControllerState.SAFE: self._state_machine.set_safe,
-        }
-        trigger = trigger_by_state.get(state)
-        if trigger is None:
+                return False
+        self._pending_overlay = overlay_text
+        transition_requested = self._state_machine.request(state)
+        if not transition_requested:
+            self._pending_overlay = None
+            LOGGER.debug("ignoring rejected transition requested=%s previous=%s", state.value, previous_state.value)
             self._emit_runtime_state()
-            return
-
-        entered_states: list[ControllerState] = []
-
-        def _record_entered(entered_state: ControllerState) -> None:
-            entered_states.append(entered_state)
-
-        self._state_machine.entered.connect(_record_entered)
-        trigger.emit()
+            return False
         self._app.processEvents()
-        self._state_machine.entered.disconnect(_record_entered)
+        return True
 
-        entered_state = self.runtime_state.controller_state
-        transition_completed = bool(entered_states) and entered_states[-1] == state and previous_state != entered_state
-        if not transition_completed:
-            LOGGER.debug(
-                "ignoring non-transition request requested=%s previous=%s entered=%s",
-                state.value,
-                previous_state.value,
-                entered_state.value,
-            )
-            self._emit_runtime_state()
-            return
+    def request_idle(self, *, overlay_text: str | None = None) -> bool:
+        return self._request_transition(ControllerState.IDLE, overlay_text=overlay_text)
 
-        if overlay_text is not None:
-            self.lane_overlay_requested.emit(overlay_text)
-        self._emit_runtime_state()
+    def request_replay_mode(self) -> bool:
+        return self._request_transition(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+
+    def request_live_mode(self) -> bool:
+        return self._request_transition(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+
+    def request_safe(self, *, overlay_text: str = "SAFE fault active") -> bool:
+        return self._request_transition(ControllerState.SAFE, overlay_text=overlay_text)
+
+    def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
+        self._request_transition(state, overlay_text=overlay_text)
 
     @Slot()
     def _on_cycle_tick(self) -> None:
@@ -718,7 +766,7 @@ class BenchAppController(QObject):
                 self._publish_session_evaluation()
                 self._release_frame_source()
                 self.runtime_state.scheduler_state = "IDLE"
-                self._transition_to(ControllerState.IDLE, overlay_text="Replay complete")
+                self.request_idle(overlay_text="Replay complete")
                 continue
             if event.kind == "faulted":
                 observed_cycle_terminal_event = True
@@ -754,7 +802,7 @@ class BenchAppController(QObject):
             self.runtime_state.fault_state = self.transport.current_fault_state()
             if self.runtime_state.fault_state == FaultState.SAFE:
                 self._set_protocol_mode(OperatorMode.SAFE)
-                self._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active")
+                self.request_safe(overlay_text="SAFE fault active")
                 return
             if self.runtime_state.fault_state == FaultState.WATCHDOG:
                 self.runtime_state.scheduler_state = "IDLE"
@@ -1104,7 +1152,7 @@ class BenchAppController(QObject):
             self._audit_operator_command("recover_safe_to_manual", outcome="nack", before_mode=before_mode, queue_before=queue_before)
             return False
         self.runtime_state.fault_state = FaultState.NORMAL
-        self._transition_to(ControllerState.IDLE, overlay_text="SAFE cleared; MANUAL mode")
+        self.request_idle(overlay_text="SAFE cleared; MANUAL mode")
         self.log_entry_requested.emit(
             BenchLogEntry(
                 frame_timestamp_s=self.runtime_state.previous_timestamp_s,
@@ -1134,7 +1182,7 @@ class BenchAppController(QObject):
             self._audit_operator_command("recover_to_auto", outcome="nack", before_mode=before_mode, queue_before=queue_before)
             return False
         self.runtime_state.fault_state = FaultState.NORMAL
-        self._transition_to(ControllerState.IDLE, overlay_text="AUTO mode active")
+        self.request_idle(overlay_text="AUTO mode active")
         self.log_entry_requested.emit(
             BenchLogEntry(
                 frame_timestamp_s=self.runtime_state.previous_timestamp_s,
@@ -1190,7 +1238,7 @@ class BenchAppController(QObject):
         if not self._activate_frame_source(BenchMode.REPLAY):
             self._audit_operator_command("replay", outcome="source_activation_failed", before_mode=before_mode, queue_before=queue_before)
             return
-        self._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+        self.request_replay_mode()
         self._audit_operator_command("replay", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
@@ -1206,7 +1254,7 @@ class BenchAppController(QObject):
         if not self._activate_frame_source(BenchMode.LIVE):
             self._audit_operator_command("live", outcome="source_activation_failed", before_mode=before_mode, queue_before=queue_before)
             return
-        self._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+        self.request_live_mode()
         self._audit_operator_command("live", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
@@ -1226,7 +1274,7 @@ class BenchAppController(QObject):
         self.runtime_state.previous_timestamp_s = 0.0
         self.runtime_state.fault_state = FaultState.NORMAL
         self.runtime_state.scheduler_state = "IDLE"
-        self._transition_to(ControllerState.IDLE, overlay_text="Homing complete")
+        self.request_idle(overlay_text="Homing complete")
         self.log_entry_requested.emit(
             BenchLogEntry(
                 frame_timestamp_s=0.0,
