@@ -73,9 +73,17 @@ If `python3.12` is not found, try `python -m venv .venv`.
   .\.venv\Scripts\Activate.ps1
   ```
 
+- **Windows Command Prompt (cmd.exe):**
+
+  ```bat
+  .\.venv\Scripts\activate.bat
+  ```
+
 You should see `(.venv)` at the start of your prompt after activation.
 
 ### 5) Install dependencies
+
+Run these commands from the repository root (for example `C:\Users\<you>\Documents\CVsorter-main`), not from `.venv\Scripts`.
 
 ```bash
 python -m pip install --upgrade pip
