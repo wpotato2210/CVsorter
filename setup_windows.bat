@@ -25,6 +25,12 @@ if errorlevel 1 (
 )
 
 echo [3/5] Installing requirements...
+call "%VENV_DIR%\Scripts\python.exe" -m pip install -r requirements.txt
+if errorlevel 1 (
+    echo Failed to install requirements.txt dependencies.
+    exit /b 1
+)
+
 call "%VENV_DIR%\Scripts\python.exe" -m pip install ^
     PySide6^>=6.6^,<7.0 ^
     PySide6-Addons^>=6.6^,<7.0 ^
