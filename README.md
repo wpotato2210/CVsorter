@@ -100,10 +100,10 @@ python -m pip install -e .[dev]     # test dependencies (pytest, tooling)
 ### 6) Quick verification after install
 
 ```bash
-coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
+coloursorter-bench-cli --scenario nominal --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
-If this runs and prints a scenario summary, installation is working.
+If this prints `[PASS] nominal`, installation is working.
 
 ## Quick start
 
@@ -118,7 +118,7 @@ coloursorter-bench-gui --config configs/bench_runtime.yaml
 Scenario evaluator:
 
 ```bash
-coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
+coloursorter-bench-cli --scenario nominal --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
 Replay bench run:

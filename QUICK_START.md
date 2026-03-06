@@ -71,7 +71,7 @@ python -m pip install -e .[dev]      # test dependencies
 ### 5) Confirm install succeeded
 
 ```bash
-coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
+coloursorter-bench-cli --scenario nominal --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
 You should see scenario output with pass/fail values.
@@ -103,7 +103,7 @@ coloursorter-bench-gui --config configs/bench_runtime.yaml
 Scenario CLI check:
 
 ```bash
-coloursorter-bench-cli --avg-rtt-ms 10 --peak-rtt-ms 20
+coloursorter-bench-cli --scenario nominal --avg-rtt-ms 10 --peak-rtt-ms 20
 ```
 
 Baseline replay pipeline run (run from repository root `/path/to/ColourSorter`):
