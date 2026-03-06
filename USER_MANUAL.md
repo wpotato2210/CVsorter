@@ -42,6 +42,7 @@ Expected result: the path ends with `ColourSorter`.
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
 
@@ -50,6 +51,20 @@ Optional extras:
 ```bash
 python -m pip install -e .[serial]
 python -m pip install -e .[dev]
+```
+
+## 4.1 Run tests
+
+From the repository root with the virtual environment activated:
+
+```bash
+pytest -q
+```
+
+Run only the phase-one quality gate tests:
+
+```bash
+pytest -q tests/test_phase1_quality_gate.py
 ```
 
 ## 5. Getting Started
