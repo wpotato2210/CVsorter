@@ -13,23 +13,24 @@ Phase 1 requirements are taken from `docs/high_priority_baseline_bean_sorting_pl
 | CI parity: firmware readiness (strict) | `python tools/firmware_readiness_check.py --strict` | PASS | Strict readiness gate passed. |
 | Hardware workflow parity: PySide6 module check | `python tools/validate_pyside6_modules.py` | PASS | Runtime module presence passed. |
 | Hardware workflow parity: strict readiness report | `python tools/hardware_readiness_report.py --strict` | PASS | Overall status PASS. |
-| Full unit/integration test suite | `pytest -q` | FAIL | 1 failing test in serial transport queue-depth handling. |
+| Phase 1 quality gate tests | `pytest -q tests/test_phase1_quality_gate.py` | PASS | Phase 1 baseline gate logic is fully green in this run. |
+| Full unit/integration test suite | `pytest -q` | PASS | Full repository tests are green in this run. |
 
 ## Phase 1 deliverable verification matrix
 
 | Item | Requirement (Phase 1) | Verification status | Evidence type |
 |---|---|---|---|
-| 1 | Replay-mode bench execution (`--mode replay`, `--source`) with <=3 minute setup | PARTIAL | CLI/documentation flags exist; setup-time SLA not auto-measured in this run. |
-| 2 | Runtime config and calibration reliability >=98% over 50 sessions | PARTIAL | Config assets exist and quality-gate logic exists; no automated 50-session replay run executed here. |
-| 3 | Decision + scheduling payload validity 100% schema-compliant | PARTIAL | Pipeline/scheduler tests exist; no dedicated acceptance-log corpus validation run captured here. |
-| 4 | Artifact generation with 100% parameter-change audit completeness | PARTIAL | Phase-1 baseline evaluator includes artifact completeness gate; not executed against real acceptance artifacts here. |
-| 5 | Scenario threshold evaluator reports pass/fail for all configured thresholds | PARTIAL | Evaluator tests present and baseline gate logic exists; end-to-end scenario pack execution not captured here. |
-| 6 | Detection provider override reliability =100% across acceptance runs | PARTIAL | Provider set and provider tests exist; acceptance-run reliability across full executions not measured here. |
-| 7 | Mock vs serial transport parity with zero protocol-shape mismatches | PARTIAL/AT-RISK | Transport parity is encoded in baseline gate, but current full suite has a serial transport regression failure. |
+| 1 | Replay-mode bench execution (`--mode replay`, `--source`) with <=3 minute setup | PARTIAL | Gate logic is present and tests assert `<=180s`, but operator-time measurement evidence is still run-dependent. |
+| 2 | Runtime config and calibration reliability >=98% over 50 sessions | PARTIAL | Baseline evaluator includes `>=0.98` logic; this assessment run does not include a fresh 50-session replay campaign. |
+| 3 | Decision + scheduling payload validity 100% schema-compliant | PARTIAL | Protocol/scheduler/test gates are passing; explicit acceptance-log corpus report is not attached in this run. |
+| 4 | Artifact generation with 100% parameter-change audit completeness | PARTIAL | Completeness check is encoded and tested; this run does not attach a new acceptance artifact bundle. |
+| 5 | Scenario threshold evaluator reports pass/fail for all configured thresholds | PARTIAL | Coverage gate is encoded and tested; no new operator acceptance scenario export attached in this run. |
+| 6 | Detection provider override reliability =100% across acceptance runs | PARTIAL | Provider selection code/tests are green; no fresh full acceptance execution matrix attached in this run. |
+| 7 | Mock vs serial transport parity with zero protocol-shape mismatches | PASS (code/test gate) | Full test suite and phase gate tests pass, including transport parity conditions. |
 
 ## Blockers and gaps
 
-1. **Automated close blocker:** full test suite is not green (`pytest -q` has one failure).
+1. Remaining blockers are evidence-oriented (campaign artifacts, operator/session measurements), not code-health blockers in this run.
 2. Several Phase 1 acceptance criteria are quantitative and tied to repeated acceptance executions/artifact corpus validation; those are not fully auto-verifiable from static repo state alone without running controlled replay campaigns.
 
 ## Manual review still required
@@ -37,10 +38,10 @@ Phase 1 requirements are taken from `docs/high_priority_baseline_bean_sorting_pl
 1. Confirm the standard operator runbook setup-time measurement method and capture repeatable timings for item 1.
 2. Execute and record a 50-session calibration campaign with approved calibration set for item 2.
 3. Validate acceptance logs/artifacts from representative nominal/stress/fault runs to confirm items 3-6 quantitatively.
-4. Review whether the failing serial transport test reflects a true production parity risk or a stale/incorrect test expectation.
+4. Record and archive the acceptance execution matrix so the quantitative claims are auditable in release review.
 
 ## Readiness decision
 
-**Phase 1 status: NOT READY TO CLOSE.**
+**Phase 1 status: READY TO EXIT FOR CODEBASE QUALITY GATES; CONDITIONAL FOR OPERATIONAL EVIDENCE CLOSEOUT.**
 
-Reason: the all-tests-pass gate is currently failing and multiple quantitative acceptance criteria remain only partially automated in this assessment run.
+Reason: all automated repository quality gates executed in this run passed (including `pytest -q` and strict readiness checks). Remaining closure work is to attach/reconfirm quantitative operational evidence (50-session calibration campaign, replay setup-time measurements, and acceptance artifact bundle) for release audit traceability.
