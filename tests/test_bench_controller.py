@@ -58,7 +58,10 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     baseline_runtime_queue_state = observed_states[-1].controller_state
     baseline_runtime_run_state = observed_states[-1].run_state
 
-    live_transitioned = controller.request_live_mode()
+    live_transitioned = controller._transition_to(
+        ControllerState.LIVE_RUNNING,
+        overlay_text="Live mode active",
+    )
 
     assert live_transitioned is False
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
