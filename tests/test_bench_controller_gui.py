@@ -85,6 +85,21 @@ def test_state_machine_drives_running_and_idle_transitions(qapp: QApplication, r
     assert not controller._cycle_timer.isActive()
 
 
+def test_transition_overlay_emits_only_after_confirmed_enter_callback(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    event_order: list[str] = []
+    controller._state_machine.entered.connect(lambda state: event_order.append(f"entered:{state.value}"))
+    controller.lane_overlay_requested.connect(lambda text: event_order.append(f"overlay:{text}"))
+
+    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+
+    assert event_order == ["entered:replay_running", "overlay:Replay mode active"]
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+
+
 def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     qapp: QApplication, runtime_config: RuntimeConfig
 ) -> None:
@@ -118,6 +133,26 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert len(overlays) == baseline_overlay_count
     assert observed[-1].controller_state == baseline_queue_state
     assert observed[-1].run_state == baseline_run_state
+
+
+def test_on_controller_state_entered_centralizes_runtime_timer_and_button_updates(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    controller._on_controller_state_entered(ControllerState.REPLAY_RUNNING)
+
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+    assert controller._cycle_timer.isActive()
+    assert controller.window.replay_button.isEnabled() is False
+    assert controller.window.live_button.isEnabled() is False
+
+    controller._on_controller_state_entered(ControllerState.IDLE)
+
+    assert controller.runtime_state.controller_state == ControllerState.IDLE
+    assert controller._cycle_timer.isActive() is False
+    assert controller.window.replay_button.isEnabled() is True
+    assert controller.window.live_button.isEnabled() is True
 
 def test_safe_recovery_guardrails_follow_protocol(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
