@@ -80,3 +80,7 @@ def test_runtime_config_and_telemetry_schemas_publish_required_fields() -> None:
         "throughput_fps",
         "estop_response_ms",
     }.issubset(telemetry_required)
+
+
+def test_pipeline_config_validate_contract() -> None:
+    DEFAULT_PIPELINE_CONFIG.validate()
