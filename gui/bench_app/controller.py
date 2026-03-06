@@ -646,16 +646,19 @@ class BenchAppController(QObject):
                 self._emit_runtime_state()
                 return
         previous_state = self.runtime_state.controller_state
-        if state == ControllerState.REPLAY_RUNNING:
-            self._state_machine.start_replay.emit()
-        elif state == ControllerState.LIVE_RUNNING:
-            self._state_machine.start_live.emit()
-        elif state == ControllerState.IDLE:
-            self._state_machine.go_idle.emit()
-        elif state == ControllerState.FAULTED:
-            self._state_machine.set_faulted.emit()
-        elif state == ControllerState.SAFE:
-            self._state_machine.set_safe.emit()
+        trigger_by_state: dict[ControllerState, Signal] = {
+            ControllerState.REPLAY_RUNNING: self._state_machine.start_replay,
+            ControllerState.LIVE_RUNNING: self._state_machine.start_live,
+            ControllerState.IDLE: self._state_machine.go_idle,
+            ControllerState.FAULTED: self._state_machine.set_faulted,
+            ControllerState.SAFE: self._state_machine.set_safe,
+        }
+        trigger = trigger_by_state.get(state)
+        if trigger is None:
+            self._emit_runtime_state()
+            return
+
+        trigger.emit()
         self._app.processEvents()
         entered_state = self.runtime_state.controller_state
         if previous_state == entered_state or entered_state != state:
