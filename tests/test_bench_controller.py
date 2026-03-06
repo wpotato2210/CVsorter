@@ -119,17 +119,6 @@ def test_controller_state_transitions_idle_replay_live_fault(qapp: QApplication,
     assert not controller.window.replay_button.isEnabled()
     assert not controller.window.live_button.isEnabled()
 
-    # Illegal replay->live transition is ignored and UI/timer state remain replay-running.
-    controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
-    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
-    assert controller._cycle_timer.isActive()
-    assert not controller.window.replay_button.isEnabled()
-    assert not controller.window.live_button.isEnabled()
-    assert emitted_states[-1].controller_state == ControllerState.REPLAY_RUNNING.value
-    assert emitted_states[-1].run_state == ControllerState.REPLAY_RUNNING.value
-    assert controller.window.lane_overlay_label.text() == "Replay mode active"
-    assert overlays == ["Replay mode active"]
-
     controller._transition_to(ControllerState.FAULTED, overlay_text="Watchdog fault active")
     assert controller.runtime_state.controller_state == ControllerState.FAULTED
 
@@ -138,6 +127,35 @@ def test_controller_state_transitions_idle_replay_live_fault(qapp: QApplication,
 
     controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
     assert controller.runtime_state.controller_state == ControllerState.LIVE_RUNNING
+
+
+def test_transition_to_live_from_replay_is_rejected_without_runtime_ui_desync(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    overlays: list[str] = []
+    controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+
+    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+
+    baseline_state = controller.runtime_state.controller_state
+    baseline_timer_active = controller._cycle_timer.isActive()
+    baseline_replay_enabled = controller.window.replay_button.isEnabled()
+    baseline_live_enabled = controller.window.live_button.isEnabled()
+    baseline_overlay_text = controller.window.lane_overlay_label.text()
+    baseline_overlay_count = len(overlays)
+
+    controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+    assert controller.runtime_state.controller_state == baseline_state
+    assert controller._cycle_timer.isActive()
+    assert controller._cycle_timer.isActive() == baseline_timer_active
+    assert controller.window.replay_button.isEnabled() == baseline_replay_enabled
+    assert controller.window.live_button.isEnabled() == baseline_live_enabled
+    assert controller.window.lane_overlay_label.text() == baseline_overlay_text
+    assert len(overlays) == baseline_overlay_count
 
 
 def test_cycle_processing_is_deterministic_with_mocked_frame_source_and_clock(
