@@ -41,8 +41,11 @@ def test_schedule_actuation_rejects_negative_timing() -> None:
 
 
 def test_validate_actuation_pulse_rejects_out_of_range() -> None:
-    with pytest.raises(ValueError, match="must be > 0"):
-        validate_actuation_pulse_ms(0, DEFAULT_PIPELINE_CONFIG)
+    with pytest.raises(ValueError, match="min_actuator_pulse_ms"):
+        validate_actuation_pulse_ms(
+            DEFAULT_PIPELINE_CONFIG.physical.timing.min_actuator_pulse_ms - 1,
+            DEFAULT_PIPELINE_CONFIG,
+        )
     with pytest.raises(ValueError, match="max_actuator_pulse_ms"):
         validate_actuation_pulse_ms(
             DEFAULT_PIPELINE_CONFIG.physical.timing.max_actuator_pulse_ms + 1,

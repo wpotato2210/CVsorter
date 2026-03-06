@@ -27,7 +27,7 @@ def test_preprocess_enforces_image_and_tensor_contracts() -> None:
 
 def test_dataset_nonempty_assertion() -> None:
     dataset = DeterministicFrameDataset(images_hwc=tuple(), labels=tuple())
-    with pytest.raises(AssertionError, match="dataset nonempty"):
+    with pytest.raises(ValueError, match="dataset nonempty"):
         ensure_dataset_nonempty(dataset)
 
 
@@ -59,8 +59,15 @@ def test_scheduler_acceptance_thresholds_and_estop_command() -> None:
     assert acceptance.throughput_within_threshold
     assert acceptance.estop_within_threshold
 
-    command = build_actuator_command(scheduled=scheduled, pulse_ms=1, config=DEFAULT_PIPELINE_CONFIG)
-    assert command == "ACT|lane=1|execute_at_ms=1006|pulse_ms=1"
+    command = build_actuator_command(
+        scheduled=scheduled,
+        pulse_ms=DEFAULT_PIPELINE_CONFIG.physical.timing.min_actuator_pulse_ms,
+        config=DEFAULT_PIPELINE_CONFIG,
+    )
+    assert command == (
+        "ACT|lane=1|execute_at_ms=1006|pulse_ms="
+        f"{DEFAULT_PIPELINE_CONFIG.physical.timing.min_actuator_pulse_ms}"
+    )
     assert build_estop_command(frame_timestamp_ms=1000) == "ESTOP|frame_timestamp_ms=1000"
 
 

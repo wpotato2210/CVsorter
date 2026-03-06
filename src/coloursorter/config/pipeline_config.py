@@ -9,6 +9,7 @@ class TimingConfig:
 
     fps_target: int
     max_latency_ms: int
+    min_actuator_pulse_ms: int
     max_actuator_pulse_ms: int
     heartbeat_period_ms: int
     heartbeat_timeout_ms: int
@@ -66,8 +67,12 @@ class PipelineConfig:
             raise ValueError("physical.timing.max_latency_ms must be > 0")
         if self.physical.timing.fps_target <= 0:
             raise ValueError("physical.timing.fps_target must be > 0")
+        if self.physical.timing.min_actuator_pulse_ms <= 0:
+            raise ValueError("physical.timing.min_actuator_pulse_ms must be > 0")
         if self.physical.timing.max_actuator_pulse_ms <= 0:
             raise ValueError("physical.timing.max_actuator_pulse_ms must be > 0")
+        if self.physical.timing.min_actuator_pulse_ms > self.physical.timing.max_actuator_pulse_ms:
+            raise ValueError("physical.timing.min_actuator_pulse_ms must be <= physical.timing.max_actuator_pulse_ms")
         if self.physical.timing.heartbeat_period_ms <= 0:
             raise ValueError("physical.timing.heartbeat_period_ms must be > 0")
         if self.physical.timing.heartbeat_timeout_ms <= 0:
@@ -89,7 +94,8 @@ DEFAULT_PIPELINE_CONFIG = PipelineConfig(
         timing=TimingConfig(
             fps_target=100,
             max_latency_ms=15,
-            max_actuator_pulse_ms=1,
+            min_actuator_pulse_ms=4,
+            max_actuator_pulse_ms=40,
             heartbeat_period_ms=50,
             heartbeat_timeout_ms=150,
             estop_response_threshold_ms=10,
