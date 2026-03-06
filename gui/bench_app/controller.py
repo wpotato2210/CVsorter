@@ -737,6 +737,7 @@ class BenchAppController(QObject):
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
         # Runtime/UI state updates happen only from `_on_controller_state_entered`
         # after the Qt state machine confirms the transition by entering a state.
+        # `_transition_to` intentionally does not pre-assign runtime state.
         return self._request_transition(state, overlay_text=overlay_text)
 
     @Slot()
