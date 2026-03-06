@@ -5,6 +5,7 @@ from pathlib import Path
 from dataclasses import replace
 
 import pytest
+import numpy as np
 
 try:
     from PySide6.QtWidgets import QApplication
@@ -193,6 +194,45 @@ def test_cycle_processing_is_deterministic_with_mocked_frame_source_and_clock(
     assert observed_logs == [expected_log]
     assert controller.runtime_state.previous_timestamp_s == pytest.approx(0.250)
 
+
+class _RaiseThenSucceedDetector:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def detect(self, _frame_bgr):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("simulated unexpected detector failure")
+        return ()
+
+
+def test_frame_worker_unhandled_exception_faults_without_exiting_worker(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    controller.bench_runner = _RecordingRunner(())
+    detector = _RaiseThenSucceedDetector()
+    controller._detector = detector
+
+    frame = BenchFrame(frame_id=11, timestamp_s=0.100, image_bgr=np.zeros((2, 2, 3), dtype=np.uint8))
+    follow_up = BenchFrame(frame_id=12, timestamp_s=0.200, image_bgr=np.zeros((2, 2, 3), dtype=np.uint8))
+    controller._frame_source = _FakeFrameSource([frame, follow_up])
+
+    monkeypatch.setattr("gui.bench_app.controller.cv2.cvtColor", lambda image, _code: image)
+
+    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    controller._on_cycle_tick()
+
+    assert controller.runtime_state.controller_state == ControllerState.FAULTED
+    assert controller.runtime_state.fault_state == FaultState.SAFE
+    assert controller._frame_worker_thread.is_alive()
+
+    controller._transition_to(ControllerState.IDLE)
+    controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    controller._on_cycle_tick()
+
+    assert detector.calls >= 2
+    assert controller._frame_worker_thread.is_alive()
 
 def test_ui_update_side_effects_log_queue_fault_labels(qapp: QApplication) -> None:
     window = BenchMainWindow()
