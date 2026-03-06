@@ -1,3 +1,39 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+try:
+    from PySide6.QtWidgets import QApplication
+except ImportError:  # pragma: no cover
+    pytest.skip("PySide6 is required for GUI tests", allow_module_level=True)
+
+from coloursorter.config import RuntimeConfig
+from gui.bench_app.app import QueueState
+from gui.bench_app.controller import BenchAppController, ControllerState
+
+
+@pytest.fixture(scope="module")
+def qapp() -> QApplication:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    return app
+
+
+@pytest.fixture
+def runtime_config() -> RuntimeConfig:
+    return RuntimeConfig.load_startup(Path(__file__).resolve().parents[1] / "configs" / "bench_runtime.yaml")
+
+
+def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
     overlays: list[str] = []
     controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
     observed_states: list[QueueState] = []
