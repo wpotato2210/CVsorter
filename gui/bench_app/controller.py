@@ -957,19 +957,17 @@ class BenchAppController(QObject):
         lane = int(self.window.manual_lane_input.value())
         position_mm = float(self.window.manual_position_input.value())
         manual_cfg = self._runtime_config.bench_gui.manual_servo
-        raw_position_mm = position_mm
-        if hasattr(self.window.manual_position_input, "cleanText"):
-            raw_text = str(self.window.manual_position_input.cleanText()).strip()
-            if raw_text:
-                try:
-                    raw_position_mm = float(raw_text)
-                except ValueError:
-                    raw_position_mm = position_mm
+        raw_text = str(self.window.manual_position_input.lineEdit().text()).strip()
+        try:
+            raw_position_mm = float(raw_text)
+        except ValueError:
+            self._set_last_command_status(f"manual fire rejected: position '{raw_text}' is not a number")
+            return None
         if lane not in range(manual_cfg.min_lane, manual_cfg.max_lane + 1):
             self._set_last_command_status(f"manual fire rejected: lane {lane} out of range")
             return None
         if raw_position_mm < manual_cfg.min_position_mm or raw_position_mm > manual_cfg.max_position_mm:
-            self._set_last_command_status(f"manual fire rejected: position {raw_position_mm:.1f} out of range")
+            self._set_last_command_status(f"manual fire rejected: position {raw_position_mm} out of range")
             return None
 
         response = self.transport.send(ScheduledCommand(lane=lane, position_mm=position_mm))
