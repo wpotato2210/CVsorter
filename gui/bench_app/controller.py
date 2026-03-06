@@ -643,8 +643,8 @@ class BenchAppController(QObject):
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
         # Runtime controller state is only updated from _on_controller_state_entered.
         # Never pre-assign target state before the state-machine transition is confirmed.
-        current_state = self.runtime_state.controller_state
-        if current_state == ControllerState.SAFE and state != ControllerState.SAFE:
+        previous_state = self.runtime_state.controller_state
+        if previous_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
                 self._emit_runtime_state()
                 return
