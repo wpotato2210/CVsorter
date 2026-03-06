@@ -403,6 +403,37 @@ def test_serial_transport_response_updates_latest_queue_observations(
     assert controller._transport_last_queue_cleared() is True
 
 
+def test_transport_response_queue_cleared_observation_takes_precedence_over_stale_transport_accessor(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serial_runtime = replace(runtime_config, transport=replace(runtime_config.transport, kind="serial"))
+    monkeypatch.setattr("gui.bench_app.controller.SerialMcuTransport", _StubSerialTransport)
+    controller = BenchAppController(qapp, serial_runtime)
+
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.1,
+            trigger_generation_s=0.1,
+            lane=1,
+            decision="accept",
+            rejection_reason=None,
+            protocol_round_trip_ms=4.2,
+            ack_code=AckCode.ACK,
+            queue_depth=5,
+            scheduler_state="ACTIVE",
+            mode="AUTO",
+            queue_cleared=True,
+        )
+    )
+
+    def _stale_accessor() -> bool:
+        raise AssertionError("stale transport accessor should not be used after response observation")
+
+    controller.transport.transport_last_queue_cleared = _stale_accessor
+    controller.transport.last_queue_cleared_observation = _stale_accessor
+
+    assert controller._transport_last_queue_cleared() is True
+
 def test_controller_uses_esp32_transport_when_configured(
     qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
