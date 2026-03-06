@@ -788,6 +788,17 @@ class BenchAppController(QObject):
                 self._ui_event_queue.put(_WorkerEvent(kind="source_fault", payload=str(error)))
             except (DetectionError, cv2.error, TypeError, ValueError) as error:
                 self._ui_event_queue.put(_WorkerEvent(kind="faulted", payload=(FaultState.SAFE, str(error))))
+            except Exception as error:
+                LOGGER.exception("frame_worker_unhandled_exception: %s", error)
+                self._ui_event_queue.put(
+                    _WorkerEvent(
+                        kind="faulted",
+                        payload=(
+                            FaultState.SAFE,
+                            "Frame processing encountered an unexpected error. Switched to SAFE mode.",
+                        ),
+                    )
+                )
 
     def _transport_worker_loop(self) -> None:
         while not self._worker_stop.is_set():
