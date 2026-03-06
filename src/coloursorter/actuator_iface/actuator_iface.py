@@ -5,8 +5,8 @@ from coloursorter.scheduler.scheduler import ScheduledActuation
 
 
 def validate_actuation_pulse_ms(pulse_ms: int, config: PipelineConfig) -> None:
-    if pulse_ms <= 0:
-        raise ValueError("pulse_ms must be > 0")
+    if pulse_ms < config.physical.timing.min_actuator_pulse_ms:
+        raise ValueError("pulse_ms is below physical.timing.min_actuator_pulse_ms")
     if pulse_ms > config.physical.timing.max_actuator_pulse_ms:
         raise ValueError("pulse_ms exceeds physical.timing.max_actuator_pulse_ms")
 
