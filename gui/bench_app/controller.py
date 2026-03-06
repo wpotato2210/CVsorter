@@ -643,11 +643,12 @@ class BenchAppController(QObject):
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
         # Runtime controller state is only updated from _on_controller_state_entered.
         # Never pre-assign target state before the state-machine transition is confirmed.
-        if self.runtime_state.controller_state == ControllerState.SAFE and state != ControllerState.SAFE:
+        current_state = self.runtime_state.controller_state
+        if current_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
                 self._emit_runtime_state()
                 return
-        previous_state = self.runtime_state.controller_state
+
         trigger_by_state: dict[ControllerState, Signal] = {
             ControllerState.REPLAY_RUNNING: self._state_machine.start_replay,
             ControllerState.LIVE_RUNNING: self._state_machine.start_live,
@@ -662,6 +663,7 @@ class BenchAppController(QObject):
 
         trigger.emit()
         self._app.processEvents()
+
         entered_state = self.runtime_state.controller_state
         transition_completed = previous_state != entered_state and entered_state == state
         if not transition_completed:
@@ -673,6 +675,7 @@ class BenchAppController(QObject):
             )
             self._emit_runtime_state()
             return
+
         if overlay_text is not None:
             self.lane_overlay_requested.emit(overlay_text)
         self._emit_runtime_state()
