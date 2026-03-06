@@ -35,5 +35,4 @@ class DeterministicFrameDataset:
 
 
 def ensure_dataset_nonempty(dataset: DeterministicFrameDataset) -> None:
-    if len(dataset) <= 0:
-        raise ValueError("dataset nonempty assertion failed")
+    assert len(dataset) > 0, "dataset nonempty assertion failed"
