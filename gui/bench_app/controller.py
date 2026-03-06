@@ -734,8 +734,10 @@ class BenchAppController(QObject):
     def request_safe(self, *, overlay_text: str = "SAFE fault active") -> bool:
         return self._request_transition(ControllerState.SAFE, overlay_text=overlay_text)
 
-    def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> None:
-        _ = self._request_transition(state, overlay_text=overlay_text)
+    def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
+        # Runtime/UI state updates happen only from `_on_controller_state_entered`
+        # after the Qt state machine confirms the transition by entering a state.
+        return self._request_transition(state, overlay_text=overlay_text)
 
     @Slot()
     def _on_cycle_tick(self) -> None:
