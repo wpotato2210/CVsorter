@@ -137,6 +137,8 @@ def test_transition_to_live_from_replay_is_rejected_without_runtime_ui_desync(
 
     overlays: list[str] = []
     controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+    emitted_states: list[QueueState] = []
+    controller.queue_state_requested.connect(lambda state: emitted_states.append(state))
 
     controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
 
@@ -146,6 +148,7 @@ def test_transition_to_live_from_replay_is_rejected_without_runtime_ui_desync(
     baseline_live_enabled = controller.window.live_button.isEnabled()
     baseline_overlay_text = controller.window.lane_overlay_label.text()
     baseline_overlay_count = len(overlays)
+    baseline_emitted_count = len(emitted_states)
 
     controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
 
@@ -157,6 +160,8 @@ def test_transition_to_live_from_replay_is_rejected_without_runtime_ui_desync(
     assert controller.window.live_button.isEnabled() == baseline_live_enabled
     assert controller.window.lane_overlay_label.text() == baseline_overlay_text
     assert len(overlays) == baseline_overlay_count
+    assert len(emitted_states) == baseline_emitted_count + 1
+    assert emitted_states[-1].controller_state == ControllerState.REPLAY_RUNNING.value
 
 
 def test_cycle_processing_is_deterministic_with_mocked_frame_source_and_clock(
