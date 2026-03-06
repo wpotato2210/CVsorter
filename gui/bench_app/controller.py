@@ -645,7 +645,7 @@ class BenchAppController(QObject):
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
                 self._emit_runtime_state()
                 return
-        previous_state = self.runtime_state.controller_state
+        state_before_trigger = self.runtime_state.controller_state
         trigger_by_state: dict[ControllerState, Signal] = {
             ControllerState.REPLAY_RUNNING: self._state_machine.start_replay,
             ControllerState.LIVE_RUNNING: self._state_machine.start_live,
@@ -661,7 +661,8 @@ class BenchAppController(QObject):
         trigger.emit()
         self._app.processEvents()
         entered_state = self.runtime_state.controller_state
-        if previous_state == entered_state or entered_state != state:
+        transition_completed = entered_state == state and entered_state != state_before_trigger
+        if not transition_completed:
             self._emit_runtime_state()
             return
         if overlay_text is not None:
