@@ -137,15 +137,22 @@ def test_transition_to_live_from_replay_is_rejected_without_runtime_ui_desync(
 
     overlays: list[str] = []
     controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+    observed_states: list[QueueState] = []
+    controller.queue_state_requested.connect(lambda state: observed_states.append(state))
 
     controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
 
+    assert observed_states
     baseline_state = controller.runtime_state.controller_state
     baseline_timer_active = controller._cycle_timer.isActive()
     baseline_replay_enabled = controller.window.replay_button.isEnabled()
     baseline_live_enabled = controller.window.live_button.isEnabled()
-    baseline_overlay_text = controller.window.lane_overlay_label.text()
     baseline_overlay_count = len(overlays)
+    baseline_overlay_label = controller.window.lane_overlay_label.text()
+    baseline_queue_state_label = controller.window.queue_state_label.text()
+    baseline_status_label = controller.window.status_label.text()
+    baseline_runtime_queue_state = observed_states[-1].controller_state
+    baseline_runtime_run_state = observed_states[-1].run_state
 
     controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
 
@@ -155,8 +162,13 @@ def test_transition_to_live_from_replay_is_rejected_without_runtime_ui_desync(
     assert controller._cycle_timer.isActive() == baseline_timer_active
     assert controller.window.replay_button.isEnabled() == baseline_replay_enabled
     assert controller.window.live_button.isEnabled() == baseline_live_enabled
-    assert controller.window.lane_overlay_label.text() == baseline_overlay_text
+    assert controller.window.lane_overlay_label.text() == baseline_overlay_label
+    assert "Live mode active" not in overlays
     assert len(overlays) == baseline_overlay_count
+    assert controller.window.queue_state_label.text() == baseline_queue_state_label
+    assert controller.window.status_label.text() == baseline_status_label
+    assert observed_states[-1].controller_state == baseline_runtime_queue_state
+    assert observed_states[-1].run_state == baseline_runtime_run_state
 
 
 def test_cycle_processing_is_deterministic_with_mocked_frame_source_and_clock(
