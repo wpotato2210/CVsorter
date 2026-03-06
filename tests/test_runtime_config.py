@@ -25,6 +25,7 @@ frame_source:
   mode: replay
   replay_path: data
   replay_frame_period_s: 0.033
+  simulated_overlay: false
 camera:
   index: 0
   frame_period_s: 0.033
@@ -103,7 +104,20 @@ def test_startup_config_accepts_canonical_values() -> None:
     assert config.detection.preprocess.enable_normalization is True
     assert config.cycle_latency_budget.total_ms == 25.0
     assert config.timebase_alignment.strategy == "encoder_epoch"
+    assert config.frame_source.simulated_overlay is False
 
+
+
+
+def test_runtime_config_defaults_simulated_overlay_to_false_when_omitted() -> None:
+    from coloursorter.config.runtime import _parse_simple_yaml
+
+    payload = _parse_simple_yaml(_canonical_text())
+    payload["frame_source"].pop("simulated_overlay")
+
+    config = RuntimeConfig.from_dict(payload)
+
+    assert config.frame_source.simulated_overlay is False
 
 def test_live_update_rejects_unknown_homing_mode() -> None:
     config = RuntimeConfig.from_text(_canonical_text())

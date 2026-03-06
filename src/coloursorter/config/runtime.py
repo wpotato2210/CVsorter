@@ -41,6 +41,7 @@ class FrameSourceConfig:
     mode: str
     replay_path: str
     replay_frame_period_s: float
+    simulated_overlay: bool
 
 
 @dataclass(frozen=True)
@@ -209,6 +210,7 @@ class RuntimeConfig:
         replay_path = _required_str(frame_payload, "replay_path")
         replay_frame_period_s = _required_float(frame_payload, "replay_frame_period_s")
         _validate_range("frame_source.replay_frame_period_s", replay_frame_period_s, min_value=0.001)
+        simulated_overlay = _optional_bool(frame_payload, "simulated_overlay", False)
 
         camera_payload = _required_map(payload, "camera")
         camera_index = _required_int(camera_payload, "index")
@@ -445,6 +447,7 @@ class RuntimeConfig:
                 mode=frame_mode,
                 replay_path=replay_path,
                 replay_frame_period_s=replay_frame_period_s,
+                simulated_overlay=simulated_overlay,
             ),
             camera=CameraConfig(camera_index=camera_index, frame_period_s=camera_frame_period_s),
             transport=TransportConfig(
