@@ -47,6 +47,16 @@ class PhysicalConfig:
 
 
 @dataclass(frozen=True)
+class RuntimeTimingSample:
+    """Runtime timing variables in milliseconds used by the scheduler contract."""
+
+    frame_timestamp_ms: int
+    pipeline_latency_ms: int
+    trigger_offset_ms: int
+    actuation_delay_ms: int
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     device: str
     image: ImageConfig

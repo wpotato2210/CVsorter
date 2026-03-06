@@ -2,15 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from coloursorter.config.pipeline_config import PipelineConfig
+from coloursorter.config.pipeline_config import PipelineConfig, RuntimeTimingSample
 
 
-@dataclass(frozen=True)
-class TimingSample:
-    frame_timestamp_ms: int
-    pipeline_latency_ms: int
-    trigger_offset_ms: int
-    actuation_delay_ms: int
+# Backward-compatible export; canonical definition lives in config.
+TimingSample = RuntimeTimingSample
 
 
 @dataclass(frozen=True)
@@ -26,7 +22,7 @@ class TimingAcceptance:
     estop_within_threshold: bool
 
 
-def schedule_actuation(lane: int, timing: TimingSample, config: PipelineConfig) -> ScheduledActuation:
+def schedule_actuation(lane: int, timing: RuntimeTimingSample, config: PipelineConfig) -> ScheduledActuation:
     """Contract: deterministic schedule from timing model; all timing values in milliseconds."""
     if timing.frame_timestamp_ms < 0:
         raise ValueError("frame_timestamp_ms must be >= 0")
