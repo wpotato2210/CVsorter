@@ -376,6 +376,7 @@ class BenchAppController(QObject):
         self._simulated_frame_id = 0
         self._latest_transport_queue_depth = 0
         self._latest_transport_queue_cleared = False
+        self._latest_transport_queue_cleared_seq = 0
         self._reject_count = 0
         self._ack_fault_count = 0
         self._nack_fault_count = 0
@@ -1046,6 +1047,7 @@ class BenchAppController(QObject):
     def _update_transport_queue_observation(self, depth: object, queue_cleared: object) -> None:
         if isinstance(depth, int) and depth >= 0:
             self._latest_transport_queue_depth = depth
+        self._latest_transport_queue_cleared_seq += 1
         self._latest_transport_queue_cleared = bool(queue_cleared)
 
     @staticmethod
@@ -1121,6 +1123,8 @@ class BenchAppController(QObject):
             self.transport.queue.clear()
 
     def _transport_last_queue_cleared(self) -> bool:
+        if self._latest_transport_queue_cleared_seq > 0:
+            return self._latest_transport_queue_cleared
         for accessor_name in ("transport_last_queue_cleared", "last_queue_cleared_observation"):
             if hasattr(self.transport, accessor_name):
                 accessor = getattr(self.transport, accessor_name)
@@ -1129,9 +1133,9 @@ class BenchAppController(QObject):
                     if isinstance(observed, bool):
                         if observed:
                             self._latest_transport_queue_cleared = True
+                            self._latest_transport_queue_cleared_seq += 1
                             return True
-                        if not self._latest_transport_queue_cleared:
-                            return False
+                        return False
         return self._latest_transport_queue_cleared
 
     def _apply_protocol_queue_side_effects(self, queue_cleared: bool) -> None:
