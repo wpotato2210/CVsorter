@@ -126,6 +126,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     baseline_queue_state = observed[-1].controller_state
     baseline_run_state = observed[-1].run_state
     baseline_status_label = controller.window.status_label.text()
+    baseline_queue_state_label = controller.window.queue_state_label.text()
     baseline_overlay_count = len(overlays)
 
     transitioned = controller.request_live_mode()
@@ -139,6 +140,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert controller.window.live_button.isEnabled() == baseline_live_enabled
     assert controller.window.lane_overlay_label.text() == baseline_overlay_label
     assert controller.window.status_label.text() == baseline_status_label
+    assert controller.window.queue_state_label.text() == baseline_queue_state_label
     assert "Live mode active" not in overlays
     assert len(overlays) == baseline_overlay_count
     assert controller._pending_overlay is None
