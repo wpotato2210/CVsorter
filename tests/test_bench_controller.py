@@ -59,6 +59,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     baseline_status_label = controller.window.status_label.text()
     baseline_runtime_queue_state = observed_states[-1].controller_state
     baseline_runtime_run_state = observed_states[-1].run_state
+    baseline_state_machine_state = controller._state_machine._current_state
 
     live_transitioned = controller._transition_to(
         ControllerState.LIVE_RUNNING,
@@ -79,6 +80,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert len(entered_states) == baseline_entered_count
     assert entered_states[-1] == baseline_last_entered
     assert controller.runtime_state.controller_state == entered_states[-1]
+    assert controller._state_machine._current_state == baseline_state_machine_state
     assert controller.window.queue_state_label.text() == baseline_queue_state_label
     assert controller.window.status_label.text() == baseline_status_label
     assert observed_states[-1].controller_state == baseline_runtime_queue_state
