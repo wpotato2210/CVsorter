@@ -111,11 +111,26 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     entered_states: list[ControllerState] = []
     controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
     controller._state_machine.entered.connect(lambda state: entered_states.append(state))
+    replay_trigger_count = 0
+    live_trigger_count = 0
+
+    def _on_replay_trigger() -> None:
+        nonlocal replay_trigger_count
+        replay_trigger_count += 1
+
+    def _on_live_trigger() -> None:
+        nonlocal live_trigger_count
+        live_trigger_count += 1
+
+    controller._state_machine.start_replay.connect(_on_replay_trigger)
+    controller._state_machine.start_live.connect(_on_live_trigger)
     observed: list[QueueState] = []
     controller.queue_state_requested.connect(lambda state: observed.append(state))
 
     replay_transitioned = controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
     assert replay_transitioned is True
+    assert replay_trigger_count == 1
+    assert live_trigger_count == 0
     baseline_state = controller.runtime_state.controller_state
     baseline_timer_active = controller._cycle_timer.isActive()
     baseline_replay_enabled = controller.window.replay_button.isEnabled()
@@ -135,6 +150,8 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
         overlay_text="Live mode active",
     )
     assert transitioned is False
+    assert replay_trigger_count == 1
+    assert live_trigger_count == 0
 
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
     assert controller.runtime_state.controller_state == baseline_state
