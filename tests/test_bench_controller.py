@@ -87,6 +87,29 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert observed_states[-1].run_state == baseline_runtime_run_state
 
 
+def test_transition_to_does_not_preassign_runtime_state_on_rejected_request(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    transitioned = controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+    assert transitioned is True
+
+    baseline_state = controller.runtime_state.controller_state
+    baseline_overlay_text = controller.window.lane_overlay_label.text()
+    baseline_timer_active = controller._cycle_timer.isActive()
+
+    monkeypatch.setattr(controller._state_machine, "request", lambda _state: False)
+
+    transitioned = controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+
+    assert transitioned is False
+    assert controller.runtime_state.controller_state == baseline_state
+    assert controller._cycle_timer.isActive() == baseline_timer_active
+    assert controller.window.lane_overlay_label.text() == baseline_overlay_text
+    assert controller._pending_overlay is None
+
+
 class _StubFrameSource:
     def __init__(self, frame: object) -> None:
         self._frame = frame
