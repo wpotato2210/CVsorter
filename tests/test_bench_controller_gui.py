@@ -141,6 +141,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     baseline_state_machine_state = controller._state_machine._current_state
     baseline_queue_state = observed[-1].controller_state
     baseline_run_state = observed[-1].run_state
+    baseline_queue_event_count = len(observed)
     baseline_status_label = controller.window.status_label.text()
     baseline_queue_state_label = controller.window.queue_state_label.text()
     baseline_overlay_count = len(overlays)
@@ -171,6 +172,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert controller.runtime_state.controller_state == entered_states[-1]
     assert observed[-1].controller_state == baseline_queue_state
     assert observed[-1].run_state == baseline_run_state
+    assert len(observed) == baseline_queue_event_count + 1
 
 
 def test_on_controller_state_entered_centralizes_runtime_timer_and_button_updates(

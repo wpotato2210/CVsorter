@@ -763,7 +763,16 @@ class BenchAppController(QObject):
         # Runtime/UI state updates happen only from `_on_controller_state_entered`
         # after the Qt state machine confirms the transition by entering a state.
         # `_transition_to` intentionally does not pre-assign runtime state.
-        return self._request_transition(state, overlay_text=overlay_text)
+        previous_state = self.runtime_state.controller_state
+        transitioned = self._request_transition(state, overlay_text=overlay_text)
+        if not transitioned and self.runtime_state.controller_state != previous_state:
+            LOGGER.warning(
+                "runtime/controller state mismatch after rejected transition requested=%s previous=%s current=%s",
+                state.value,
+                previous_state.value,
+                self.runtime_state.controller_state.value,
+            )
+        return transitioned
 
     @Slot()
     def _on_cycle_tick(self) -> None:
