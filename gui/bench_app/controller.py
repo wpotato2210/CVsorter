@@ -709,7 +709,6 @@ class BenchAppController(QObject):
         self._emit_runtime_state()
 
     def _request_transition(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
-        self._app.processEvents()
         previous_state = self.runtime_state.controller_state
         if previous_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
@@ -727,6 +726,18 @@ class BenchAppController(QObject):
             self._emit_runtime_state()
             return False
         self._app.processEvents()
+        transition_completed = self.runtime_state.controller_state == state
+        if not transition_completed:
+            self._pending_overlay = None
+            self._pending_overlay_state = None
+            LOGGER.debug(
+                "transition did not complete requested=%s previous=%s current=%s",
+                state.value,
+                previous_state.value,
+                self.runtime_state.controller_state.value,
+            )
+            self._emit_runtime_state()
+            return False
         return True
 
     def request_idle(self, *, overlay_text: str | None = None) -> bool:
