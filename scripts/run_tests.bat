@@ -8,7 +8,7 @@ cd /d %~dp0\..
 
 echo [1/5] Installing Python test dependencies
 python -m pip install -q -e .[test]
-if errorlevel 1 echo Python dependency install skipped due environment/network limitations
+if errorlevel 1 echo Python dependency install skipped due to environment/network limitations
 
 echo [2/5] Running Python tests
 if not exist test_data\coverage\python mkdir test_data\coverage\python
