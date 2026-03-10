@@ -448,6 +448,9 @@ class BenchAppController(QObject):
 
         self._state_machine = BenchControllerStateMachine(self)
         self._state_machine.entered.connect(self._on_controller_state_entered)
+        # Flush initial state-machine entered event deterministically during init
+        # so later transition observers only see transition-related events.
+        self._app.processEvents()
 
         self._app.aboutToQuit.connect(self.shutdown)
         self._connect_view_actions()
@@ -760,21 +763,32 @@ class BenchAppController(QObject):
         return self._request_transition(ControllerState.SAFE, overlay_text=overlay_text)
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
-        # Runtime/UI state updates happen only from `_on_controller_state_entered`
-        # after the Qt state machine confirms the transition by entering a state.
-        # `_transition_to` intentionally does not pre-assign runtime state.
+        # Legacy transition entrypoint that emits overlay only after state entry
+        # confirmation, preserving deterministic UI event ordering for tests/callers.
+        self._app.processEvents()
         previous_state = self.runtime_state.controller_state
-        transitioned = self._state_machine.transition(new_state)
+        transition_requested = self._state_machine.request(state)
+        if not transition_requested:
+            self._pending_overlay = None
+            self._pending_overlay_state = None
+            LOGGER.debug("ignoring rejected transition requested=%s previous=%s", state.value, previous_state.value)
+            self._emit_runtime_state()
+            return False
 
-            if transitioned:
-            # emit entry first (Qt state machine)
+        transition_completed = False
+        for _ in range(3):
             self._app.processEvents()
+            if self.runtime_state.controller_state == state:
+                transition_completed = True
+                break
+        if not transition_completed:
+            self._emit_runtime_state()
+            return False
 
-            if overlay_text is not None:
-                self.window.lane_overlay_label.setText(overlay_text)
-        self.lane_overlay_requested.emit(overlay_text)
-
-return transitioned
+        if overlay_text is not None:
+            self.window.lane_overlay_label.setText(overlay_text)
+            self.lane_overlay_requested.emit(overlay_text)
+        return True
 
     @Slot()
     def _on_cycle_tick(self) -> None:
