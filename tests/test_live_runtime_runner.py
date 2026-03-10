@@ -65,7 +65,7 @@ scenario_thresholds:
   fault_max_peak_rtt_ms: 80.0
 
 detection:
-  provider: model_stub
+  provider: yolo_provider.YOLOProvider
   opencv_basic:
     min_area_px: 120
     reject_red_threshold: 140

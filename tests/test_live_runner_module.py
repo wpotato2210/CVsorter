@@ -37,7 +37,7 @@ def test_startup_diagnostics_flags_missing_send_command(monkeypatch: pytest.Monk
             active_camera_recipe="a",
             active_lighting_recipe="b",
             profiles=[SimpleNamespace(camera_recipe="a", lighting_recipe="b")],
-            provider="model_stub",
+            provider="yolo_provider.YOLOProvider",
             preprocess=SimpleNamespace(enable_normalization=True, target_luma=128.0, gray_world_strength=0.6),
         )
     )
