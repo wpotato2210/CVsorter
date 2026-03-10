@@ -20,7 +20,7 @@ if errorlevel 1 (
   set PYTEST_COV_ARGS=--cov=src/coloursorter --cov-report=term-missing --cov-report=xml:test_data/coverage/python/coverage.xml
 )
 set PYTHONPATH=src
-python -m pytest tests/automation/python %PYTEST_COV_ARGS%
+python -m pytest tests %PYTEST_COV_ARGS%
 if errorlevel 1 set PYTHON_STATUS=1
 
 echo [3/5] Building firmware GoogleTest suite

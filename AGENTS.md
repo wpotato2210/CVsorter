@@ -264,3 +264,9 @@ Priority order for all agent actions:
 If any task conflicts with these rules:
 
 STOP and request human approval.
+
+## Testing
+- Run tests: `run_tests.bat`
+- Coverage: `pytest --cov=src/coloursorter` produces `coverage.xml`
+- Test files must be in `tests/` folder and named `test_*.py`
+- Do not modify existing source files; add new tests only
