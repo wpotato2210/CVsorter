@@ -789,6 +789,8 @@ class BenchAppController(QObject):
             self.window.lane_overlay_label.setText(overlay_text)
             self.lane_overlay_requested.emit(overlay_text)
         return True
+        # Backward-compatible adapter for legacy callers.
+        return self._request_transition(state, overlay_text=overlay_text)
 
     @Slot()
     def _on_cycle_tick(self) -> None:
