@@ -760,21 +760,8 @@ class BenchAppController(QObject):
         return self._request_transition(ControllerState.SAFE, overlay_text=overlay_text)
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
-        # Runtime/UI state updates happen only from `_on_controller_state_entered`
-        # after the Qt state machine confirms the transition by entering a state.
-        # `_transition_to` intentionally does not pre-assign runtime state.
-        previous_state = self.runtime_state.controller_state
-        transitioned = self._state_machine.transition(new_state)
-
-            if transitioned:
-            # emit entry first (Qt state machine)
-            self._app.processEvents()
-
-            if overlay_text is not None:
-                self.window.lane_overlay_label.setText(overlay_text)
-        self.lane_overlay_requested.emit(overlay_text)
-
-return transitioned
+        # Backward-compatible adapter for legacy callers.
+        return self._request_transition(state, overlay_text=overlay_text)
 
     @Slot()
     def _on_cycle_tick(self) -> None:
