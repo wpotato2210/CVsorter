@@ -1,0 +1,6 @@
+{
+  "hello": {"msg_id": "1", "command": "HELLO", "args": ["3.1", "QUEUE_RESET;HEARTBEAT"]},
+  "heartbeat": {"msg_id": "2", "command": "HEARTBEAT", "args": []},
+  "sched": {"msg_id": "3", "command": "SCHED", "args": ["2", "120.500"]},
+  "bad_crc_frame": "<9|SCHED|1,100.0|DEADBEEF>"
+}
