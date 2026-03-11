@@ -76,3 +76,46 @@ def test_yolo_provider_returns_empty_list_on_inference_failure(monkeypatch) -> N
 
     frame = np.zeros((8, 8, 3), dtype=np.uint8)
     assert provider.predict(frame) == []
+
+
+def test_yolo_provider_sets_degraded_on_init_runtime_failure(monkeypatch, caplog) -> None:
+    class _InitFailingModel(_FakeModel):
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError("model init failure")
+
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "ultralytics", types.SimpleNamespace(YOLO=_InitFailingModel))
+
+    caplog.set_level("ERROR")
+    provider = YOLOProvider(model_path="missing.pt", device="cpu")
+
+    assert provider.degraded is True
+    assert provider.degraded_reason == "runtime_failure"
+    assert provider.predict(np.zeros((8, 8, 3), dtype=np.uint8)) == []
+    assert "stage=runtime" in caplog.text
+    assert "model_path=missing.pt" in caplog.text
+    assert "device=cpu" in caplog.text
+
+
+def test_yolo_provider_sets_degraded_on_inference_failure(monkeypatch, caplog) -> None:
+    class _InferenceFailingModel(_FakeModel):
+        def __call__(self, _frame: np.ndarray, verbose: bool = False) -> list[_FakeResult]:
+            raise RuntimeError("inference failure")
+
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "ultralytics", types.SimpleNamespace(YOLO=_InferenceFailingModel))
+
+    provider = YOLOProvider(model_path="weights/yolov8s.pt", device="cpu")
+    caplog.set_level("ERROR")
+
+    assert provider.degraded is False
+    assert provider.predict(np.zeros((8, 8, 3), dtype=np.uint8)) == []
+    assert provider.degraded is True
+    assert provider.degraded_reason == "inference_failure"
+    assert "stage=inference" in caplog.text
+    assert "model_path=weights/yolov8s.pt" in caplog.text
+    assert "device=cpu" in caplog.text
