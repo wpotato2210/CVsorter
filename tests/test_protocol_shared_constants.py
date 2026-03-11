@@ -30,6 +30,7 @@ from coloursorter.protocol.constants import (
     NACK_UNKNOWN_COMMAND,
     QUEUE_DEPTH_MIN,
     SUPPORTED_CAPABILITIES,
+    SUPPORTED_COMMANDS,
     SUPPORTED_PROTOCOL_VERSION,
     TRIGGER_MM_MAX,
     TRIGGER_MM_MIN,
@@ -90,6 +91,22 @@ def test_protocol_constants_match_commands_json_contract() -> None:
     assert commands_spec["ack_nack"]["nack_codes"] == expected_nack_codes
 
 
+def test_supported_commands_constant_matches_declared_command_names() -> None:
+    commands_spec = json.loads(COMMANDS_PATH.read_text(encoding="utf-8"))
+    declared_names = frozenset(command["name"] for command in commands_spec["commands"])
+
+    assert SUPPORTED_COMMANDS == declared_names
+
+
+def test_nack_code_range_is_contiguous_and_matches_commands_json_bounds() -> None:
+    commands_spec = json.loads(COMMANDS_PATH.read_text(encoding="utf-8"))
+    nack_codes = sorted(int(code) for code in commands_spec["ack_nack"]["nack_codes"].keys())
+
+    assert NACK_CODE_MIN == min(nack_codes)
+    assert NACK_CODE_MAX == max(nack_codes)
+    assert nack_codes == list(range(NACK_CODE_MIN, NACK_CODE_MAX + 1))
+
+
 def test_protocol_constants_match_mcu_response_schema_contract() -> None:
     schema = json.loads(MCU_RESPONSE_SCHEMA_PATH.read_text(encoding="utf-8"))
     properties = schema["properties"]
@@ -107,4 +124,3 @@ def test_code_7_canonical_detail_pair_is_shared_constant() -> None:
     assert code == NACK_BUSY
     assert detail == "BUSY"
     assert canonical_detail_for_code(code) == detail
-
