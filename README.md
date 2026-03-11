@@ -161,6 +161,37 @@ coloursorter-bench-cli --scenario nominal --avg-rtt-ms 9 --peak-rtt-ms 15
 - [User Manual](USER_MANUAL.md)
 - [Developer Guide](DEVELOPER_GUIDE.md)
 
+### Wire Format
+
+Deterministic line protocol rules for parser fixtures:
+
+- ASCII only.
+- Tokens are uppercase.
+- Token separator is a single ASCII space (`0x20`).
+- Line ending is exactly `\n`.
+- No trailing spaces.
+
+Versioned response rules:
+
+| Version | Allowed responses | Payload policy |
+| --- | --- | --- |
+| v1 | `OK`, `ERR` | No payloads permitted. |
+| v2 | `ACK_OK`, `ACK_BUSY`, `ERR_RANGE`, `ERR_TYPE`, `ERR_MODE`, `ERR_QUEUE`, `ERR_FRAME`, `ERR_UNKNOWN` | `ACK_*` must not include payloads. `ERR_*` may include one payload token only when the response definition requires detail text. |
+
+`CAPS?` response normalization (v2):
+
+- Fixed key order: `VER`, `RESP`, `PAYLOAD`.
+- Exact response form: `CAPS VER=v2 RESP=<comma-separated response tokens> PAYLOAD=ERR_*:DETAIL`.
+- No extra keys, no key reordering, no lowercase.
+
+Canonical parser-fixture examples:
+
+```text
+OK\n
+ACK_BUSY\n
+CAPS VER=v2 RESP=ACK_OK,ACK_BUSY,ERR_RANGE,ERR_TYPE,ERR_MODE,ERR_QUEUE,ERR_FRAME,ERR_UNKNOWN PAYLOAD=ERR_*:DETAIL\n
+```
+
 ## Testing (beginner friendly)
 
 Run all testing commands below from the repository root (`/path/to/ColourSorter`) with your virtual environment activated.
