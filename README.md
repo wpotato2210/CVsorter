@@ -81,7 +81,7 @@ If `python3.12` is not found, try `python -m venv .venv`.
 
 You should see `(.venv)` at the start of your prompt after activation.
 
-### 5) Install dependencies
+### 5) Install dependencies (canonical method)
 
 Run these commands from the repository root (for example `C:\Users\<you>\Documents\CVsorter-main`), not from `.venv\Scripts`.
 
@@ -90,11 +90,25 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
+`pyproject.toml` is the source of truth for runtime/dev/optional dependencies. `requirements.txt` is auto-generated from `pyproject.toml` for compatibility workflows.
+
 Optional installs:
 
 ```bash
 python -m pip install -e .[serial]  # serial transport support
 python -m pip install -e .[dev]     # test dependencies (pytest, tooling)
+```
+
+Dependency sync guard (used in CI):
+
+```bash
+python scripts/sync_requirements.py --check
+```
+
+Regenerate `requirements.txt` after dependency edits:
+
+```bash
+python scripts/sync_requirements.py
 ```
 
 ### 6) Quick verification after install

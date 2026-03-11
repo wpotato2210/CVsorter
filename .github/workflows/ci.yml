@@ -37,6 +37,9 @@ jobs:
       - name: Protocol static guard
         run: python tools/protocol_static_guard.py
 
+      - name: Dependency declaration guard
+        run: python scripts/sync_requirements.py --check
+
       - name: Firmware readiness strict checks
         run: python tools/firmware_readiness_check.py --strict
 
