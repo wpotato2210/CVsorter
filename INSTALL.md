@@ -11,7 +11,7 @@ From the repository root:
 What this does:
 
 1. Creates a virtual environment at `.venv`.
-2. Installs the project in editable mode.
+2. Installs the project in editable mode from `pyproject.toml` (canonical dependency source).
 3. Runs a deterministic smoke execution (`nominal` scenario).
 
 ## Docker
@@ -41,3 +41,12 @@ This validates:
 
 - critical imports (`cv2`, `numpy`)
 - bench CLI execution path
+
+
+## Dependency declaration policy
+
+Use `pyproject.toml` as the canonical dependency source for runtime and optional extras.
+
+- `requirements.txt` is generated via `python scripts/sync_requirements.py`.
+- CI guard check: `python scripts/sync_requirements.py --check` fails on divergence.
+- After dependency changes, regenerate `requirements.txt` before committing.
