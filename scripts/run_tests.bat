@@ -6,11 +6,18 @@ set FIRMWARE_STATUS=0
 
 cd /d %~dp0\..
 
-echo [1/5] Installing Python test dependencies
+echo [1/6] Running docs wrapper lint
+python tools\check_docs_wrappers.py
+if errorlevel 1 (
+  echo Docs wrapper lint failed
+  exit /b 1
+)
+
+echo [2/6] Installing Python test dependencies
 python -m pip install -q -e .[test]
 if errorlevel 1 echo Python dependency install skipped due to environment/network limitations
 
-echo [2/5] Running Python tests
+echo [3/6] Running Python tests
 if not exist test_data\coverage\python mkdir test_data\coverage\python
 python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('pytest_cov') else 1)"
 if errorlevel 1 (
@@ -23,7 +30,7 @@ set PYTHONPATH=src
 python -m pytest tests %PYTEST_COV_ARGS%
 if errorlevel 1 set PYTHON_STATUS=1
 
-echo [3/5] Building firmware GoogleTest suite
+echo [4/6] Building firmware GoogleTest suite
 if not exist test_data\build\firmware_gtest mkdir test_data\build\firmware_gtest
 where cmake >nul 2>nul
 if errorlevel 1 (
@@ -40,13 +47,13 @@ if errorlevel 1 (
   )
 )
 
-echo [4/5] Running firmware tests
+echo [5/6] Running firmware tests
 if %FIRMWARE_STATUS%==0 (
   ctest --test-dir test_data/build/firmware_gtest --output-on-failure
   if errorlevel 1 set FIRMWARE_STATUS=1
 )
 
-echo [5/5] Coverage artifact generation
+echo [6/6] Coverage artifact generation
 where lcov >nul 2>nul
 if %FIRMWARE_STATUS%==0 if not errorlevel 1 (
   if not exist test_data\coverage\firmware mkdir test_data\coverage\firmware
