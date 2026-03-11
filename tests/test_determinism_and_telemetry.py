@@ -102,6 +102,28 @@ def test_trigger_timestamp_uses_distance_and_stage_timing_projection() -> None:
     assert log.trigger_timestamp_s >= log.trigger_generation_s + ((log.decision_latency_ms + log.schedule_latency_ms) / 1000.0)
 
 
+def test_trigger_timestamp_matches_generation_plus_schedule_plus_travel_time() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5)),
+        encoder=VirtualEncoder(EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0)),
+    )
+
+    log = runner.run_cycle(
+        frame_id=10,
+        timestamp_s=0.3,
+        image_height_px=720,
+        image_width_px=1056,
+        detections=[_reject_detection()],
+        previous_timestamp_s=0.2,
+    )[0]
+
+    schedule_time_s = (log.decision_latency_ms + log.schedule_latency_ms) / 1000.0
+    travel_time_s = log.trigger_mm / log.belt_speed_mm_s
+    expected_trigger_timestamp_s = log.trigger_generation_s + schedule_time_s + travel_time_s
+    assert abs(log.trigger_timestamp_s - expected_trigger_timestamp_s) < 1e-9
+
+
 def test_trigger_timestamp_is_anchored_to_last_encoder_pulse_across_dropout_cycles() -> None:
     runner = BenchRunner(
         pipeline=_build_pipeline(),
@@ -259,6 +281,28 @@ def test_projected_trigger_timestamp_stops_advancing_under_zero_speed_fault() ->
     )
 
     assert projected == 2.0
+
+
+def test_runner_trigger_timestamp_remains_equal_to_generation_under_zero_speed_fault() -> None:
+    runner = BenchRunner(
+        pipeline=_build_pipeline(),
+        transport=MockMcuTransport(MockTransportConfig(max_queue_depth=8, base_round_trip_ms=2.0, per_item_penalty_ms=0.5)),
+        encoder=VirtualEncoder(
+            EncoderConfig(pulses_per_revolution=100, belt_speed_mm_per_s=300.0, pulley_circumference_mm=200.0),
+            fault_config=EncoderFaultConfig(force_zero_speed=True),
+        ),
+    )
+
+    log = runner.run_cycle(
+        frame_id=11,
+        timestamp_s=0.4,
+        image_height_px=720,
+        image_width_px=1056,
+        detections=[_reject_detection()],
+        previous_timestamp_s=0.3,
+    )[0]
+
+    assert log.trigger_timestamp_s == log.trigger_generation_s
 
 
 def test_trigger_generation_timestamp_uses_previous_pulse_when_dropout_hides_current_interval() -> None:
