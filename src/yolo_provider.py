@@ -24,9 +24,13 @@ Device:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
+
+
+logger = logging.getLogger(__name__)
 
 
 class YOLOProvider:
@@ -36,14 +40,45 @@ class YOLOProvider:
         self.model_path: str = str(model_path)
         self.device: str = str(device)
         self._model: Any | None = None
+        self._degraded: bool = False
+        self._degraded_reason: str | None = None
 
         try:
             from ultralytics import YOLO  # type: ignore[import-untyped]
+        except ImportError as exc:
+            self._set_degraded(reason="import_failure")
+            logger.warning(
+                "yolo_provider degraded mode enabled: stage=import model_path=%s device=%s error=%s",
+                self.model_path,
+                self.device,
+                exc,
+            )
+            return
 
+        try:
             self._model = YOLO(self.model_path)
             self._model.to(self.device)
-        except Exception:
+        except (FileNotFoundError, OSError, RuntimeError, ValueError, TypeError) as exc:
+            self._set_degraded(reason="runtime_failure")
+            logger.error(
+                "yolo_provider degraded mode enabled: stage=runtime model_path=%s device=%s error=%s",
+                self.model_path,
+                self.device,
+                exc,
+            )
             self._model = None
+
+    @property
+    def degraded(self) -> bool:
+        return self._degraded
+
+    @property
+    def degraded_reason(self) -> str | None:
+        return self._degraded_reason
+
+    def _set_degraded(self, reason: str) -> None:
+        self._degraded = True
+        self._degraded_reason = reason
 
     def predict(self, frame: np.ndarray) -> list[dict[str, Any]]:
         """Run YOLO inference on one frame and return pipeline-safe detection dictionaries."""
@@ -56,7 +91,14 @@ class YOLOProvider:
 
         try:
             results = self._model(frame, verbose=False)
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, AttributeError) as exc:
+            self._set_degraded(reason="inference_failure")
+            logger.error(
+                "yolo_provider inference failure: stage=inference model_path=%s device=%s error=%s",
+                self.model_path,
+                self.device,
+                exc,
+            )
             return []
 
         if not results:
