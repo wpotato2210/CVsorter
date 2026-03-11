@@ -109,10 +109,21 @@ def check_runtime_config() -> CheckResult:
     had_deploy_module = deploy_module_name in sys.modules
     original_deploy_module = sys.modules.get(deploy_module_name)
 
+    def _resolve_detection_provider_name(provider_name: str) -> str:
+        normalized = provider_name.strip()
+        if not normalized:
+            raise ValueError("detection provider name must be a non-empty string")
+        allowed_values = ("opencv_basic", "opencv_calibrated", "model_stub")
+        if normalized not in allowed_values:
+            allowed = ", ".join(allowed_values)
+            raise ValueError(f"Unsupported detection provider: {normalized}. Allowed: {allowed}")
+        return normalized
+
     try:
-        sys.modules[deploy_module_name] = types.SimpleNamespace(
-            DETECTION_PROVIDER_VALUES=("opencv_basic", "opencv_calibrated", "model_stub")
-        )
+        deploy_stub = types.ModuleType(deploy_module_name)
+        deploy_stub.DETECTION_PROVIDER_VALUES = ("opencv_basic", "opencv_calibrated", "model_stub")
+        deploy_stub.resolve_detection_provider_name = _resolve_detection_provider_name
+        sys.modules[deploy_module_name] = deploy_stub
         runtime_spec = importlib.util.spec_from_file_location("firmware_readiness_runtime", runtime_module_path)
         if runtime_spec is None or runtime_spec.loader is None:
             return CheckResult(name="runtime_config", passed=False, detail="unable to load runtime validator module")
