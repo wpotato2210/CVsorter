@@ -13,7 +13,7 @@ from coloursorter.config.enums import (
     MOTION_MODE,
     MOTION_MODE_VALUES,
 )
-from coloursorter.deploy import DETECTION_PROVIDER_VALUES
+from coloursorter.deploy import DETECTION_PROVIDER_VALUES, resolve_detection_provider_name
 
 
 class ConfigValidationError(ValueError):
@@ -299,7 +299,7 @@ class RuntimeConfig:
 
         detection_payload = _required_map(payload, "detection")
         provider = _required_str(detection_payload, "provider")
-        _validate_enum("detection.provider", provider, DETECTION_PROVIDER_VALUES)
+        provider = _validate_detection_provider_name(provider)
 
         preprocess_payload = detection_payload.get("preprocess", {})
         if preprocess_payload and not isinstance(preprocess_payload, dict):
@@ -732,6 +732,15 @@ def _validate_enum(field_name: str, value: str, allowed_values: tuple[str, ...])
     if value not in allowed_values:
         allowed = ", ".join(allowed_values)
         raise ConfigValidationError(f"Unknown {field_name}: {value}. Allowed: {allowed}")
+
+
+def _validate_detection_provider_name(value: str) -> str:
+    try:
+        return resolve_detection_provider_name(value)
+    except ValueError as exc:
+        raise ConfigValidationError(
+            f"Invalid detection.provider: {value}. Use one of: {', '.join(DETECTION_PROVIDER_VALUES)}"
+        ) from exc
 
 
 def _validate_finite_number(field_name: str, value: float) -> None:

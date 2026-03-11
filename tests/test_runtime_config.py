@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from pathlib import Path
 
 import pytest
 
@@ -138,7 +139,13 @@ def test_runtime_config_requires_nested_sections() -> None:
 
 def test_runtime_config_rejects_unknown_detection_provider() -> None:
     raw_text = _canonical_text().replace("provider: opencv_basic", "provider: unknown")
-    with pytest.raises(ConfigValidationError, match="Unknown detection.provider"):
+    with pytest.raises(ConfigValidationError, match="Invalid detection.provider"):
+        RuntimeConfig.from_text(raw_text)
+
+
+def test_runtime_config_rejects_dotted_detection_provider() -> None:
+    raw_text = _canonical_text().replace("provider: opencv_basic", "provider: yolo_provider.YOLOProvider")
+    with pytest.raises(ConfigValidationError, match="Invalid detection.provider"):
         RuntimeConfig.from_text(raw_text)
 
 
@@ -233,3 +240,15 @@ def test_runtime_config_rejects_excessive_line_count() -> None:
     raw_text = _canonical_text() + ("# filler\n" * 10_001)
     with pytest.raises(ConfigValidationError, match="exceeds line limit"):
         RuntimeConfig.from_text(raw_text)
+
+
+def test_default_bench_runtime_config_builds_detection_provider() -> None:
+    from coloursorter.runtime.live_runner import build_live_detection_provider
+
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "bench_runtime.yaml"
+    runtime_config = RuntimeConfig.load_startup(config_path)
+
+    provider = build_live_detection_provider(runtime_config)
+
+    assert runtime_config.detection.provider == "opencv_basic"
+    assert provider.provider_version.startswith("opencv_basic")

@@ -401,6 +401,16 @@ class ModelStubDetectionProvider(DetectionProvider):
         return self._active_config_hash
 
 
+def resolve_detection_provider_name(provider_name: str) -> str:
+    normalized = provider_name.strip()
+    if not normalized:
+        raise DetectionError("detection provider name must be a non-empty string")
+    if normalized not in DETECTION_PROVIDER_VALUES:
+        allowed = ", ".join(DETECTION_PROVIDER_VALUES)
+        raise DetectionError(f"Unsupported detection provider: {normalized}. Allowed: {allowed}")
+    return normalized
+
+
 def build_detection_provider(
     provider_name: str,
     basic_config: OpenCvDetectionConfig | None = None,
@@ -408,6 +418,7 @@ def build_detection_provider(
     model_stub_config: ModelStubDetectionConfig | None = None,
     preprocess_config: PreprocessConfig | None = None,
 ) -> DetectionProvider:
+    provider_name = resolve_detection_provider_name(provider_name)
     if provider_name == "opencv_basic":
         return OpenCvDetectionProvider(config=basic_config, preprocess_config=preprocess_config)
     if provider_name == "opencv_calibrated":
