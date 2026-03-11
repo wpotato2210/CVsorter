@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
 from coloursorter.bench.cli import main as bench_main
 
@@ -17,9 +16,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    old_argv = sys.argv
-    sys.argv = [
-        "coloursorter",
+    bench_argv = [
         "--mode",
         args.mode,
         "--source",
@@ -29,10 +26,7 @@ def main(argv: list[str] | None = None) -> int:
         "--artifact-root",
         args.artifact_root,
     ]
-    try:
-        return bench_main()
-    finally:
-        sys.argv = old_argv
+    return bench_main(bench_argv)
 
 
 if __name__ == "__main__":

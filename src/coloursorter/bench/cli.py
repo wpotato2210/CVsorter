@@ -44,7 +44,7 @@ from coloursorter.deploy import (
 )
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for a bench execution session."""
     parser = argparse.ArgumentParser(description="Run ColourSorter bench scenarios.")
     parser.add_argument("--mode", choices=[BenchMode.REPLAY.value, BenchMode.LIVE.value], default=BenchMode.REPLAY.value)
@@ -67,7 +67,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--calibration-mode", choices=["fixed", "adaptive"], default="fixed")
     parser.add_argument("--camera-recipe", default="")
     parser.add_argument("--lighting-recipe", default="")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _load_runtime_config(runtime_config_path: str | Path) -> RuntimeConfig | None:
@@ -255,9 +255,9 @@ def _run_cycles(
     return tuple(logs)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Run the bench CLI entry point and return a process-compatible exit code."""
-    args = _parse_args()
+    args = _parse_args(argv)
     runtime_config = _load_runtime_config(args.runtime_config)
     scenarios = _select_scenarios(args.scenario, runtime_config)
     pipeline = PipelineRunner(lane_config_path=Path(args.lane_config), calibration_path=Path(args.calibration))

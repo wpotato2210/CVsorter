@@ -80,3 +80,60 @@ def test_run_cycles_replay_collects_logs_and_releases_source(monkeypatch: pytest
     logs = cli._run_cycles(args, runner, None, tmp_path, {})
     assert logs == ("log",)
     assert source.released is True
+
+
+def test_module_main_passes_replay_args_to_bench(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Entrypoint: replay options are forwarded as explicit argv to bench main."""
+    import coloursorter.__main__ as module_main
+
+    captured: list[str] = []
+
+    def _fake_bench_main(argv: list[str] | None = None) -> int:
+        assert argv is not None
+        captured.extend(argv)
+        return 0
+
+    monkeypatch.setattr(module_main, "bench_main", _fake_bench_main)
+    rc = module_main.main(["--mode", "replay", "--source", "dataset", "--max-cycles", "9", "--artifact-root", "out"])
+    assert rc == 0
+    assert captured == [
+        "--mode",
+        "replay",
+        "--source",
+        "dataset",
+        "--max-cycles",
+        "9",
+        "--artifact-root",
+        "out",
+    ]
+
+
+def test_module_main_passes_live_args_without_mutating_sys_argv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Entrypoint: live mode forwards argv and leaves global sys.argv untouched."""
+    import sys
+    import coloursorter.__main__ as module_main
+
+    original = ["prog", "--unchanged"]
+    monkeypatch.setattr(sys, "argv", original.copy())
+
+    captured: list[str] = []
+
+    def _fake_bench_main(argv: list[str] | None = None) -> int:
+        assert argv is not None
+        captured.extend(argv)
+        return 0
+
+    monkeypatch.setattr(module_main, "bench_main", _fake_bench_main)
+    rc = module_main.main(["--mode", "live", "--source", "0"])
+    assert rc == 0
+    assert captured == [
+        "--mode",
+        "live",
+        "--source",
+        "0",
+        "--max-cycles",
+        "300",
+        "--artifact-root",
+        "artifacts/bench",
+    ]
+    assert sys.argv == original
