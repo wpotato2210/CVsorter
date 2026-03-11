@@ -108,6 +108,32 @@ def test_startup_config_accepts_canonical_values() -> None:
     assert config.frame_source.simulated_overlay is False
 
 
+def test_runtime_config_from_dict_preserves_transport_values_exactly() -> None:
+    from coloursorter.config.runtime import _parse_simple_yaml
+
+    payload = _parse_simple_yaml(_canonical_text())
+    payload["transport"] = {
+        "kind": "serial",
+        "max_queue_depth": 3,
+        "base_round_trip_ms": 1.5,
+        "per_item_penalty_ms": 0.25,
+        "serial": {
+            "port": "/dev/ttyS9",
+            "baud": 57600,
+            "timeout_s": 0.125,
+        },
+    }
+
+    config = RuntimeConfig.from_dict(payload)
+
+    assert config.transport == RuntimeConfig.from_dict(payload).transport
+    assert config.transport.kind == "serial"
+    assert config.transport.max_queue_depth == 3
+    assert config.transport.base_round_trip_ms == 1.5
+    assert config.transport.per_item_penalty_ms == 0.25
+    assert config.transport.serial_port == "/dev/ttyS9"
+    assert config.transport.serial_baud == 57600
+    assert config.transport.serial_timeout_s == 0.125
 
 
 def test_runtime_config_defaults_simulated_overlay_to_false_when_omitted() -> None:
@@ -119,6 +145,7 @@ def test_runtime_config_defaults_simulated_overlay_to_false_when_omitted() -> No
     config = RuntimeConfig.from_dict(payload)
 
     assert config.frame_source.simulated_overlay is False
+
 
 def test_live_update_rejects_unknown_homing_mode() -> None:
     config = RuntimeConfig.from_text(_canonical_text())
