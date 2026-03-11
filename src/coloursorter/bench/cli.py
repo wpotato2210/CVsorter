@@ -148,10 +148,21 @@ def _build_detector(runtime_config: RuntimeConfig | None, provider_override: str
     selected_camera = camera_recipe or runtime_config.detection.active_camera_recipe
     selected_lighting = lighting_recipe or runtime_config.detection.active_lighting_recipe
     selected_profile = next(
-        profile
-        for profile in runtime_config.detection.profiles
-        if profile.camera_recipe == selected_camera and profile.lighting_recipe == selected_lighting
+        (
+            profile
+            for profile in runtime_config.detection.profiles
+            if profile.camera_recipe == selected_camera and profile.lighting_recipe == selected_lighting
+        ),
+        None,
     )
+    if selected_profile is None:
+        available_pairs = sorted({(profile.camera_recipe, profile.lighting_recipe) for profile in runtime_config.detection.profiles})
+        pair_text = ", ".join(f"{camera}/{lighting}" for camera, lighting in available_pairs)
+        raise ValueError(
+            "Unknown detection profile for "
+            f"camera_recipe={selected_camera}, lighting_recipe={selected_lighting}. "
+            f"Available pairs: {pair_text}"
+        )
 
     basic = OpenCvDetectionConfig(
         min_area_px=selected_profile.opencv_basic.min_area_px,
