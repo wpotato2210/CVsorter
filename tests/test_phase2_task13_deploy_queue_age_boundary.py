@@ -112,3 +112,42 @@ def test_phase2_task13_queue_age_guardrail_is_strictly_greater_than_budget() -> 
     body_source = "\n".join(ast.unparse(stmt) for stmt in queue_age_guard.body)
     assert "QUEUE_AGE_EXCEEDED" in body_source
     assert "command = None" in body_source
+
+
+def test_phase2_task13_queue_age_above_boundary_forces_safe() -> None:
+    detection = ObjectDetection("det-1", 10.0, 10.0, "reject", 0.9)
+    max_queue_age_ms = 20.0
+    runner = BenchRunner(
+        pipeline=_PipelineStub(),
+        transport=_AckTransportStub(),
+        encoder=VirtualEncoder(EncoderConfig(2048, 100.0, 200.0)),
+        safety=BenchSafetyConfig(max_queue_age_ms=max_queue_age_ms),
+    )
+
+    with patch("coloursorter.bench.runner.time.perf_counter") as perf_counter:
+        perf_counter.side_effect = [
+            100.022,
+            100.022,
+            100.03,
+            100.03,
+            100.031,
+            100.031,
+            100.035,
+            100.04,
+            100.045,
+        ]
+        log = runner.run_cycle(
+            1,
+            1.0,
+            20,
+            20,
+            [detection],
+            previous_timestamp_s=0.9,
+            enqueued_monotonic_s=100.0,
+        )[0]
+
+    assert log.transport_sent is False
+    assert log.over_budget is True
+    assert log.fault_event == "QUEUE_AGE_EXCEEDED"
+    assert log.ack_code == AckCode.NACK_SAFE
+    assert log.actuator_command_issued is False
