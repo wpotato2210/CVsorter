@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 from coloursorter.config.enums import (
     HOMING_MODE,
     HOMING_MODE_VALUES,
@@ -440,6 +439,16 @@ class RuntimeConfig:
             max_value=max_position_mm,
         )
 
+        transport_config = TransportConfig(
+            kind=transport_kind,
+            max_queue_depth=max_queue_depth,
+            base_round_trip_ms=base_round_trip_ms,
+            per_item_penalty_ms=per_item_penalty_ms,
+            serial_port=serial_port,
+            serial_baud=serial_baud,
+            serial_timeout_s=serial_timeout_s,
+        )
+
         return cls(
             motion_mode=motion_mode,
             homing_mode=homing_mode,
@@ -450,15 +459,7 @@ class RuntimeConfig:
                 simulated_overlay=simulated_overlay,
             ),
             camera=CameraConfig(camera_index=camera_index, frame_period_s=camera_frame_period_s),
-            transport=TransportConfig(
-                kind=transport_kind,
-                max_queue_depth=max_queue_depth,
-                base_round_trip_ms=base_round_trip_ms,
-                per_item_penalty_ms=per_item_penalty_ms,
-                serial_port=serial_port,
-                serial_baud=serial_baud,
-                serial_timeout_s=serial_timeout_s,
-            ),
+            transport=transport_config,
             cycle_timing=CycleTimingConfig(period_ms=period_ms, queue_consumption_policy=queue_consumption_policy),
             cycle_latency_budget=cycle_latency_budget,
             scheduling_guard=scheduling_guard,
