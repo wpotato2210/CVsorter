@@ -200,11 +200,30 @@ Agents must update or generate tests in:
 tests/*  
 bench/*  
 
-Tests must verify:
+Primary commands to run:
 
-- deterministic behavior
-- protocol compliance
-- latency boundaries
+- firmware unit tests: `run_tests.bat`
+- host test suite: `pytest tests/`
+- integration timing/trace checks: `pytest bench/`
+- coverage artifact (when coverage is required): `pytest --cov=src/coloursorter --cov-report=xml`
+
+Required pass condition:
+
+- all executed commands must be green
+- zero skipped tests for any critical test group
+- deterministic behavior, protocol compliance, and latency boundaries must all be validated
+
+Artifact expectations:
+
+- test logs for each executed command must be captured in terminal output or attached logs
+- `coverage.xml` must be produced when coverage is required
+- any integration trace output required by bench tests must be preserved as run artifacts/logs
+
+Fallback behavior for unavailable dependencies:
+
+- report each blocked command explicitly
+- include the exact blocker reason (missing dependency/tool, platform limitation, or environment failure)
+- provide partial results from all commands that did run, including any produced logs/artifacts
 
 ---
 
