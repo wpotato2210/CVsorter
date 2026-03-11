@@ -137,3 +137,22 @@ def test_module_main_passes_live_args_without_mutating_sys_argv(monkeypatch: pyt
         "artifacts/bench",
     ]
     assert sys.argv == original
+
+
+def test_build_detector_rejects_unknown_recipe_pair_with_available_pairs() -> None:
+    """Error path: unknown camera+lighting recipe raises deterministic ValueError."""
+    runtime_config = SimpleNamespace(
+        detection=SimpleNamespace(
+            active_camera_recipe="cam-a",
+            active_lighting_recipe="light-a",
+            provider="opencv_basic",
+            preprocess=SimpleNamespace(enable_normalization=False, target_luma=0.0, gray_world_strength=0.0),
+            profiles=[
+                SimpleNamespace(camera_recipe="cam-a", lighting_recipe="light-a"),
+                SimpleNamespace(camera_recipe="cam-b", lighting_recipe="light-b"),
+            ],
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"Unknown detection profile for camera_recipe=cam-x, lighting_recipe=light-y\. Available pairs: cam-a/light-a, cam-b/light-b"):
+        cli._build_detector(runtime_config, provider_override="", threshold_override=-1.0, camera_recipe="cam-x", lighting_recipe="light-y")
