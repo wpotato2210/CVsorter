@@ -335,6 +335,76 @@ def test_queue_depth_falls_back_to_latest_transport_response_when_transport_has_
     assert controller.window.queue_depth_label.text() == "Depth: 3/8"
 
 
+def test_gui_queue_depth_cache_is_not_derived_from_mutable_mock_queue_length(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.2,
+            trigger_generation_s=0.2,
+            lane=2,
+            decision="accept",
+            rejection_reason=None,
+            protocol_round_trip_ms=5.0,
+            ack_code=AckCode.ACK,
+            queue_depth=2,
+            scheduler_state="ACTIVE",
+            mode="AUTO",
+            queue_cleared=False,
+        )
+    )
+
+    assert controller._transport_queue_depth() == 2
+
+    if hasattr(controller.transport, "queue"):
+        controller.transport.queue.extend(
+            [
+                ScheduledCommand(lane=1, position_mm=100.0),
+                ScheduledCommand(lane=2, position_mm=110.0),
+                ScheduledCommand(lane=3, position_mm=120.0),
+            ]
+        )
+
+    controller._emit_runtime_state()
+
+    assert controller._transport_queue_depth() == 2
+    assert controller.window.queue_depth_label.text() == "Depth: 2/8"
+
+
+def test_gui_queue_depth_changes_only_after_protocol_ack_observation(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    assert controller._transport_queue_depth() == 0
+
+    if hasattr(controller.transport, "queue"):
+        controller.transport.queue.extend([ScheduledCommand(lane=1, position_mm=100.0)])
+    controller._emit_runtime_state()
+    assert controller._transport_queue_depth() == 0
+
+    controller.transport_response_received.emit(
+        BenchLogEntry(
+            frame_timestamp_s=0.5,
+            trigger_generation_s=0.5,
+            lane=1,
+            decision="accept",
+            rejection_reason=None,
+            protocol_round_trip_ms=5.0,
+            ack_code=AckCode.ACK,
+            queue_depth=1,
+            scheduler_state="ACTIVE",
+            mode="AUTO",
+            queue_cleared=False,
+        )
+    )
+
+    assert controller._transport_queue_depth() == 1
+    assert controller.window.queue_depth_label.text() == "Depth: 1/8"
+
+
 def test_safe_entry_updates_overlay_fault_and_mode(qapp: QApplication, runtime_config: RuntimeConfig) -> None:
     controller = BenchAppController(qapp, runtime_config)
 
