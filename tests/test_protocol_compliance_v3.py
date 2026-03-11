@@ -60,6 +60,26 @@ def test_nack_code_7_is_canonical_busy_only() -> None:
     assert (ack.nack_code, ack.detail) == CANONICAL_NACK_7
 
 
+def test_busy_state_overrides_unknown_command_with_canonical_busy_nack() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2)
+    host.busy = True
+
+    ack = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("DOES_NOT_EXIST", (), msg_id="1"))))
+
+    assert ack.status == "NACK"
+    assert (ack.nack_code, ack.detail) == CANONICAL_NACK_7
+
+
+def test_busy_state_overrides_sched_arg_errors_with_canonical_busy_nack() -> None:
+    host = OpenSpecV3Host(max_queue_depth=2)
+    host.busy = True
+
+    ack = parse_ack_tokens(_response_tokens(host.handle_frame(serialize_packet("SCHED", ("not-a-lane",), msg_id="1"))))
+
+    assert ack.status == "NACK"
+    assert (ack.nack_code, ack.detail) == CANONICAL_NACK_7
+
+
 def test_ack_metadata_parsing_mode_queue_scheduler_and_queue_cleared() -> None:
     host = OpenSpecV3Host(max_queue_depth=4)
     host.handle_frame(serialize_packet("HELLO", ("3.1", "CRC32;SCHED;HEARTBEAT;DEDUPE"), msg_id="1"))
