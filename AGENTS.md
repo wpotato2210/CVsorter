@@ -43,7 +43,13 @@ These documents define:
 
 If a requested task requires modifying any of these files:
 
-STOP and request human approval.
+STOP immediately and report the exact conflict instead of implementing a workaround.
+
+The conflict report must include:
+
+1. the conflicting file path(s),
+2. the required contract change summary,
+3. impacted command(s)/timing guarantees.
 
 Agents must never silently alter system contracts.
 
