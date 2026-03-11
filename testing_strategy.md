@@ -1,333 +1,142 @@
-:::writing{variant=“standard” id=“47261”}
+# Testing Strategy
 
-testing_strategy.md
+## Purpose
 
-Purpose
+Define layered deterministic test coverage for frame processing, queue behavior, mode transitions, scheduler projection, retry semantics, and MCU command emission under bench stress scenarios.
 
-Define layered test coverage that verifies correctness of frame processing, queue behavior, mode transitions, scheduler projection, retry semantics, and MCU command emission under deterministic and stressed bench scenarios.
+## Scope
 
-The strategy ensures regression protection across the full runtime pipeline and guarantees deterministic validation of protocol, scheduler, and queue invariants.
+- Protect runtime pipeline regressions.
+- Verify protocol ACK/NACK behavior and queue invariants.
+- Validate scheduler projection format: `SCHED:<lane>:<position_mm>`.
 
-⸻
+## Executable Test Commands
 
-Inputs / Outputs
+These commands are aligned with repository scripts:
 
-Inputs
-	•	Contracts and protocol artifacts (contracts/*.json, protocol/commands.json)
-	•	Runtime modules in:
-	•	preprocess
-	•	deploy
-	•	eval
-	•	scheduler
-	•	serial_interface
-	•	Bench runtime configurations
-	•	Synthetic frame streams
+| Environment | Command | Notes |
+| --- | --- | --- |
+| Linux/macOS | `scripts/run_tests.sh` | Runs docs guard, Python automation tests, firmware host tests, and coverage artifacts when tooling is available. |
+| Windows | `scripts\\run_tests.bat` | Runs docs guard, Python tests, firmware host tests, and coverage artifacts when tooling is available. |
+| Coverage (direct) | `PYTHONPATH=src python -m pytest tests/automation/python --cov=src/coloursorter --cov-report=xml:test_data/coverage/python/coverage.xml` | Equivalent coverage target used by `scripts/run_tests.sh` when `pytest-cov` is present. |
 
-Outputs
-	•	Pass/fail evidence for:
-	•	CV pipeline correctness
-	•	protocol conformance
-	•	queue/state invariants
-	•	Regression protection for:
-	•	scheduler projection SCHED:<lane>:<position_mm>
-	•	SAFE mode behavior
-	•	retry semantics
-	•	malformed frame handling
+## Layered Test Model
 
-⸻
+### Unit
 
-Terminology Alignment (Protocol + Architecture)
+| Area | Deterministic Checks |
+| --- | --- |
+| Preprocess | Stable transform outputs for identical frames. |
+| Eval/deploy | Stable decision payload generation. |
+| Scheduler | Stable projection math and ordering. |
+| Queue | FIFO ordering, bounded depth, atomic reset. |
+| Protocol parser | Canonical validation and error mapping. |
+| Retry logic | Stable retry count/interval/termination behavior. |
 
-Assertions and fixtures must use protocol-native command and state labels.
+### Integration
 
-All failure assertions must verify canonical NACK error codes defined in protocol.md.
+| Path | Contract Checks |
+| --- | --- |
+| `preprocess -> eval` | Data shape/value continuity and deterministic decisions. |
+| `eval -> scheduler` | Deterministic projection command generation. |
+| `scheduler -> serial_interface` | Correct wire payload and ACK/NACK handling with mocked transport. |
+| Queue propagation | State and depth continuity across module boundaries. |
 
-Layered test suites must map directly to the architecture pipeline:
+### Bench E2E
 
-preprocess/calibration → deploy/eval → scheduler → transport
+| Scenario | Required Assertions |
+| --- | --- |
+| Full runtime pipeline | Correct command emission and mode enforcement (`AUTO`, `MANUAL`, `SAFE`). |
+| Simulated transport failures | Retry behavior preserves queue invariants and ordering. |
+| Deterministic synthetic streams | Stable outputs for identical replay inputs. |
 
+## Mode and Queue Matrix
 
-⸻
+### Mode transitions
 
-Test Execution Layers
+| From | To | Expected behavior |
+| --- | --- | --- |
+| `SAFE` | `AUTO` | Rejected |
+| `SAFE` | `MANUAL` | Allowed |
+| `AUTO` | `SAFE` | Queue cleared |
+| `MANUAL` | `SAFE` | Queue cleared |
 
-unit
+### Queue states to cover
 
-Validates deterministic behavior of individual modules.
+- Empty
+- Partial
+- Full
 
-Scope:
-	•	preprocess transforms
-	•	evaluation logic
-	•	scheduler projection math
-	•	protocol parsing
-	•	queue logic
-	•	retry logic
+All mode transitions must be validated across all queue states.
 
-Characteristics:
-	•	no external IO
-	•	deterministic inputs
-	•	no concurrency
+## Queue Invariants
 
-⸻
+- Queue never exceeds configured maximum depth.
+- Queue ordering remains FIFO.
+- `RESET_QUEUE` clears queue atomically.
+- Scheduler does not consume from empty queue.
+- Mode transitions that require clearing enforce queue clearing.
 
-integration
+## Retry Semantics
 
-Validates interactions between runtime modules.
+### Eligibility
 
-Scope:
-	•	preprocess → eval
-	•	eval → scheduler
-	•	scheduler → serial interface
-	•	queue state propagation
-	•	protocol encoding/decoding
+| Retryable | Non-retryable |
+| --- | --- |
+| Timeout (no response) | Protocol NACK for invalid command |
+| Corrupted response frame | Argument validation failure |
+| Transport/serial error | Illegal state transition |
+|  | Out-of-range values |
 
-Characteristics:
-	•	module boundaries exercised
-	•	MCU transport mocked
-	•	scheduler/queue interactions verified
+### Required behavior
 
-⸻
+- Scheduler emits each command once.
+- Transport owns retry attempts for in-flight command only.
+- Retries do not requeue commands or change scheduler ordering.
+- `RESET_QUEUE` cancels in-flight command and retries.
+- Default retry policy check: interval `100 ms`, max attempts `3`.
 
-bench_e2e
+## Protocol Negative Tests
 
-End-to-end validation using bench runtime configuration.
+Validate canonical NACK handling for:
 
-Scope:
-	•	full runtime pipeline
-	•	MCU command emission
-	•	scheduler projection correctness
-	•	SAFE/AUTO/MANUAL mode enforcement
-	•	retry behavior with simulated failures
+- Malformed frame structure
+- Invalid command arguments
+- Out-of-range numeric values
+- Unknown command identifiers
 
-Characteristics:
-	•	deterministic synthetic frame streams
-	•	real protocol frame encoding
-	•	runtime configuration parity
+Assertions must verify NACK code and unchanged scheduler/queue state.
 
-⸻
+## Determinism Rules
 
-Runtime Mode Test Matrix
+- No wall-clock sleeps in unit/integration tests.
+- Use simulated clocks, deterministic ticks, or virtual time advancement.
+- Keep deterministic correctness tests separate from concurrency stress tests.
 
-Modes under test:
-	•	AUTO
-	•	MANUAL
-	•	SAFE
+## Coverage Matrix
 
-Queue depth scenarios:
-	•	empty
-	•	partial
-	•	full
+| Module | Invariant | Unit | Integration | Bench E2E |
+| --- | --- | --- | --- | --- |
+| `preprocess` | Deterministic frame transforms | ✓ | ✓ | ✓ |
+| `deploy/eval` | Decision payload correctness | ✓ | ✓ | ✓ |
+| `scheduler` | Canonical projection formatting | ✓ | ✓ | ✓ |
+| `queue` | Bounded depth, atomic reset, FIFO | ✓ | ✓ | ✓ |
+| `serial_interface` | Wire encoding and ACK/NACK parsing | ✓ | ✓ | ✓ |
+| `protocol parser` | Validation and bounds checking | ✓ | ✓ | ✓ |
+| `runtime controller` | `SAFE/AUTO/MANUAL` transition rules | ✓ | ✓ | ✓ |
+| `retry logic` | Timeout/backoff semantics | ✓ | ✓ | ✓ |
 
-All mode transitions must be validated across these queue states.
+## Dependencies
 
-⸻
+- `tests/` suite and fixtures
+- `protocol.md` ACK/NACK behavior
+- `constraints.md` numeric bounds and transition rules
+- `deployment.md` staging/production parity testing
 
-Runtime Mode Transition Tests
+## Docs Lint Guard
 
-The following transitions must be validated.
+Malformed wrapper markers and corrupted typography are blocked by:
 
-From	To	Expected Behavior
-SAFE	AUTO	rejected
-SAFE	MANUAL	allowed
-AUTO	SAFE	queue cleared
-MANUAL	SAFE	queue cleared
+- `python tools/check_docs_wrappers.py`
 
-Assertions must verify:
-	•	resulting runtime state
-	•	emitted protocol commands
-	•	queue depth effects
-	•	scheduler cancellation behavior
-
-⸻
-
-Queue Invariants
-
-Tests must verify the following invariants:
-	•	queue never exceeds maximum depth
-	•	queue ordering is FIFO
-	•	RESET_QUEUE clears the queue atomically
-	•	scheduler never consumes from an empty queue
-	•	mode transitions that require queue clearing enforce it
-
-⸻
-
-Retry and Queue Interaction
-
-Retries must not re-enter the scheduler queue.
-
-Retry state is owned by the transport layer and applies only to the currently in-flight command.
-
-Behavior rules:
-	•	scheduler emits a command once
-	•	transport layer manages retries for that command
-	•	retries do not modify scheduler queue depth
-	•	retries do not alter scheduler ordering
-	•	RESET_QUEUE cancels any in-flight command and its retries
-
-This prevents queue overflow and ordering corruption during retry storms.
-
-⸻
-
-Retry Eligibility Rules
-
-Retries must only occur for transport-level failures.
-
-Retryable conditions
-	•	no response received within timeout
-	•	corrupted response frame
-	•	serial transport error
-
-Non-retryable conditions
-	•	protocol NACK responses indicating invalid commands
-	•	argument validation failures
-	•	illegal state transitions
-	•	out-of-range values
-
-When a non-retryable NACK is received:
-	•	retries must stop immediately
-	•	the error must be surfaced to the caller
-	•	scheduler queue state must remain unchanged
-
-⸻
-
-Protocol Negative Tests
-
-Tests must verify canonical NACK behavior for:
-	•	malformed frame structure
-	•	invalid command arguments
-	•	out-of-range numeric values
-	•	unknown command identifiers
-
-Assertions must confirm:
-	•	correct NACK code
-	•	no scheduler side effects
-	•	queue state unchanged
-
-⸻
-
-Retry Behavior Verification
-
-Retry tests must verify:
-	•	retry count
-	•	retry interval (100 ms)
-	•	maximum retry attempts (3)
-	•	retry termination behavior
-
-Retry exhaustion must produce a deterministic failure state.
-
-⸻
-
-Determinism Requirements
-
-Tests must not depend on wall-clock timing.
-
-Allowed mechanisms:
-	•	simulated clocks
-	•	deterministic scheduler ticks
-	•	virtual time advancement
-
-Real-time sleep calls must not be used in unit or integration tests.
-
-⸻
-
-Deterministic Scheduler Execution
-
-Scheduler tests must run under deterministic execution ordering.
-
-Allowed mechanisms:
-	•	single-threaded scheduler mode
-	•	controlled worker pools
-	•	deterministic task execution
-
-Concurrency stress tests must be separated from deterministic correctness tests.
-
-⸻
-
-Stress Test Scenarios
-
-Bench stress tests should simulate:
-	•	burst frame streams
-	•	concurrent command bursts
-	•	retry storms
-	•	queue saturation
-
-Assertions must verify:
-	•	no deadlock
-	•	scheduler ordering preserved
-	•	BUSY state publication correct
-	•	queue depth invariants maintained
-
-⸻
-
-Test Coverage Matrix
-
-The following matrix maps runtime modules to the invariants they must enforce.
-
-Module	Invariants	Unit	Integration	Bench E2E
-preprocess	deterministic frame transforms	✓	✓	✓
-deploy / eval	decision payload correctness	✓	✓	✓
-scheduler	canonical projection SCHED:<lane>:<position_mm>	✓	✓	✓
-queue	bounded depth, atomic reset, FIFO ordering	✓	✓	✓
-serial_interface	correct wire encoding and ACK/NACK parsing	✓	✓	✓
-protocol parser	command validation and bounds checking	✓	✓	✓
-runtime controller	SAFE/AUTO/MANUAL transition rules	✓	✓	✓
-retry logic	timeout and backoff semantics	✓	✓	✓
-
-
-⸻
-
-Cross-Layer Invariant Enforcement
-
-The following invariants must be validated across multiple test layers.
-
-Invariant	Unit	Integration	Bench
-queue never exceeds max depth	✓	✓	✓
-RESET_QUEUE clears queue atomically	✓	✓	✓
-SAFE mode rejects AUTO transition	✓	✓	✓
-scheduler emits canonical projection	✓	✓	✓
-malformed frames produce canonical NACK	✓	✓	✓
-retry policy respects timeout/backoff	✓	✓	✓
-
-
-⸻
-
-Dependencies
-	•	tests/ suite and fixtures
-	•	protocol.md ACK/NACK behavior
-	•	architecture.md pipeline ordering and module boundaries
-	•	threading_model.md concurrency invariants
-	•	constraints.md numeric bounds and transition rules
-	•	error_model.md recovery behavior
-	•	security_model.md malformed/flood/throttle policies
-	•	deployment.md staging/production parity testing
-
-⸻
-
-Performance and Concurrency Notes
-
-Insufficient stress testing can hide:
-	•	queue contention
-	•	scheduler ordering violations
-	•	BUSY publication race conditions
-	•	retry storms under burst traffic
-
-Bench traffic patterns must approximate worst-case concurrent frame and command load.
-
-⸻
-
-Open Questions (Requires Input)
-	•	minimum coverage targets per module area
-	•	whether stress benches must simulate maximum load
-	•	whether long-running soak tests are required for release gating
-	•	which execution model assumptions (single-threaded vs concurrent producers) must be release blockers
-
-⸻
-
-Missing or Future Test Areas
-
-The following areas are not yet defined and should be addressed in future revisions:
-	•	hardware-in-the-loop MCU validation
-	•	servo timing verification
-	•	real transport latency tolerance
-	•	long-duration reliability soak tests
-:::
+This check is executed by both test runner scripts.

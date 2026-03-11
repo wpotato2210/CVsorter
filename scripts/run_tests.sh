@@ -7,7 +7,13 @@ FIRMWARE_STATUS=0
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR" || exit 1
 
-echo "[1/5] Installing Python test dependencies"
+echo "[1/6] Running docs wrapper lint"
+if ! python tools/check_docs_wrappers.py; then
+  echo "Docs wrapper lint failed"
+  exit 1
+fi
+
+echo "[2/6] Installing Python test dependencies"
 if ! python -m pip install -q -e '.[test]'; then
   echo "Python dependency install skipped due environment/network limitations"
 fi
@@ -16,7 +22,7 @@ PY_TEST_TARGET="tests/automation/python"
 PY_COV_DIR="test_data/coverage/python"
 mkdir -p "$PY_COV_DIR"
 
-echo "[2/5] Running Python tests"
+echo "[3/6] Running Python tests"
 PYTEST_ARGS=("$PY_TEST_TARGET")
 if PYTHONPATH=src python - <<'PY' >/dev/null 2>&1
 import importlib.util
@@ -31,7 +37,7 @@ if ! PYTHONPATH=src python -m pytest "${PYTEST_ARGS[@]}"; then
   PYTHON_STATUS=1
 fi
 
-echo "[3/5] Building firmware GoogleTest suite"
+echo "[4/6] Building firmware GoogleTest suite"
 FW_BUILD_DIR="test_data/build/firmware_gtest"
 mkdir -p "$FW_BUILD_DIR"
 if command -v cmake >/dev/null 2>&1; then
@@ -46,12 +52,12 @@ else
   FIRMWARE_STATUS=2
 fi
 
-echo "[4/5] Running firmware tests"
+echo "[5/6] Running firmware tests"
 if [ "$FIRMWARE_STATUS" -eq 0 ]; then
   ctest --test-dir "$FW_BUILD_DIR" --output-on-failure || FIRMWARE_STATUS=1
 fi
 
-echo "[5/5] Coverage artifact generation"
+echo "[6/6] Coverage artifact generation"
 if [ "$FIRMWARE_STATUS" -eq 0 ] && command -v lcov >/dev/null 2>&1; then
   mkdir -p test_data/coverage/firmware
   lcov --capture --directory "$FW_BUILD_DIR" --output-file test_data/coverage/firmware/lcov.info >/tmp/cvsorter_lcov.log 2>&1 || true
