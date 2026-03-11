@@ -13,6 +13,7 @@ from .detection import (
     PreprocessConfig,
     capture_fault_reason,
     build_detection_provider,
+    resolve_detection_provider_name,
 )
 from .pipeline import PipelineResult, PipelineRunner, ScheduledDecision
 from .actuator_timing import ActuatorCalibration, ActuatorTimingCalibrator
@@ -47,4 +48,5 @@ __all__ = [
     "ModelStubDetectionConfig",
     "ModelStubDetectionProvider",
     "build_detection_provider",
+    "resolve_detection_provider_name",
 ]
