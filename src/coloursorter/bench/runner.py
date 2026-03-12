@@ -7,7 +7,9 @@ import time
 
 from coloursorter.deploy import (
     ActuatorTimingCalibrator,
+    CaptureBaselineConfig,
     PipelineRunner,
+    capture_fault_reason,
     to_canonical_timing_diagnostics,
 )
 from coloursorter.ingest import DeterministicDropPolicy, IngestBoundary
@@ -54,6 +56,8 @@ class BenchRunner:
         provider_version: str = "",
         model_version: str = "",
         active_config_hash: str = "",
+        runtime_reject_thresholds: dict[str, float] | None = None,
+        capture_baseline_config: CaptureBaselineConfig | None = None,
     ) -> None:
         self._pipeline = pipeline
         self._transport = transport
@@ -71,6 +75,8 @@ class BenchRunner:
         self._provider_version = provider_version
         self._model_version = model_version
         self._active_config_hash = active_config_hash
+        self._runtime_reject_thresholds = dict(runtime_reject_thresholds or {})
+        self._capture_baseline = capture_baseline_config or CaptureBaselineConfig()
 
     def process_ingest_payload(self, payload: dict[str, object]) -> tuple[BenchLogEntry, ...]:
         self._ingest_boundary.submit(payload)
@@ -133,7 +139,16 @@ class BenchRunner:
         frame_staleness_ms = max(0.0, (cycle_started - captured_monotonic_s) * 1000.0) if captured_monotonic_s > 0.0 else 0.0
 
         decision_started = time.perf_counter()
-        pipeline_result = self._pipeline.run(frame=frame, detections=detections)
+        capture_fault = capture_fault_reason(preprocess_metrics or {}, self._capture_baseline)
+        try:
+            pipeline_result = self._pipeline.run(
+                frame=frame,
+                detections=detections,
+                thresholds=self._runtime_reject_thresholds,
+                capture_fault_reason=capture_fault,
+            )
+        except TypeError:
+            pipeline_result = self._pipeline.run(frame=frame, detections=detections)
         decision_latency_ms = (time.perf_counter() - decision_started) * 1000.0
 
         schedule_started = time.perf_counter()
