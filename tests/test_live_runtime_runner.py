@@ -327,3 +327,55 @@ def test_live_runner_startup_gate_emits_failure_sink_payload(
     assert result.startup_failed is True
     assert result.startup_failure_payload is not None
     assert emitted == [result.startup_failure_payload]
+
+
+def test_live_runner_fails_closed_on_stale_frames(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime_path = _write_runtime_config(tmp_path, mode="live")
+
+    class _StaleFrameSource:
+        def __init__(self) -> None:
+            from time import perf_counter
+
+            self._index = 0
+            base_ts = perf_counter()
+            self._frames = [
+                BenchFrame(frame_id=0, timestamp_s=base_ts, image_bgr=np.zeros((4, 4, 3), dtype=np.uint8)),
+                BenchFrame(frame_id=1, timestamp_s=base_ts, image_bgr=np.zeros((4, 4, 3), dtype=np.uint8)),
+            ]
+
+        def open(self) -> None:
+            return None
+
+        def next_frame(self):
+            if self._index >= len(self._frames):
+                return None
+            frame = self._frames[self._index]
+            self._index += 1
+            return frame
+
+        def release(self) -> None:
+            return None
+
+    class _TrackingDetector(_FakeDetector):
+        def __init__(self) -> None:
+            self.detect_calls = 0
+
+        def detect(self, _image_bgr: object) -> list[ObjectDetection]:
+            self.detect_calls += 1
+            return super().detect(_image_bgr)
+
+    detector = _TrackingDetector()
+    emitted: list[dict[str, str]] = []
+
+    monkeypatch.setattr("coloursorter.runtime.live_runner.LiveFrameSource", lambda _cfg: _StaleFrameSource())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_detection_provider", lambda _cfg: detector)
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_transport", lambda _cfg: _FakeTransport())
+
+    runner = LiveRuntimeRunner(runtime_config_path=runtime_path, failure_sink=emitted.append)
+    result = runner.run(max_cycles=5, enable_reporting=False)
+
+    assert result.stale_frame_failed is True
+    assert result.stale_frame_error_message == "STALE_FRAME_DETECTED: camera frames stopped updating"
+    assert result.cycle_count == 1
+    assert detector.detect_calls == 1
+    assert emitted == [{"status": "runtime_failed", "reason": "STALE_FRAME_DETECTED: camera frames stopped updating"}]

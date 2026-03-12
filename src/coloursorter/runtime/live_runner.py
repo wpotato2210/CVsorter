@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import time
 from dataclasses import dataclass
@@ -42,6 +43,46 @@ from coloursorter.protocol.constants import CMD_HEARTBEAT
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+STALE_FRAME_ERROR_MESSAGE = "STALE_FRAME_DETECTED: camera frames stopped updating"
+MAX_REPEATED_FRAMES = 3
+
+
+def _frame_content_hash(frame_image_bgr: object) -> str:
+    if isinstance(frame_image_bgr, np.ndarray):
+        return hashlib.blake2s(frame_image_bgr.tobytes(), digest_size=16).hexdigest()
+    return hashlib.blake2s(bytes(frame_image_bgr), digest_size=16).hexdigest()
+
+
+class FrameFreshnessGuard:
+    def __init__(self, max_repeats: int = MAX_REPEATED_FRAMES, frame_timeout_ms: float = 0.0) -> None:
+        self._last_timestamp_s: float | None = None
+        self._last_hash: str | None = None
+        self._repeat_count = 0
+        self._max_repeats = int(max_repeats)
+        self._frame_timeout_s = max(0.0, float(frame_timeout_ms) / 1000.0)
+
+    def check(self, frame_timestamp_s: float, frame_image_bgr: object, capture_time_s: float | None = None) -> None:
+        frame_hash = _frame_content_hash(frame_image_bgr)
+        timestamp_s = float(frame_timestamp_s)
+
+        if self._last_timestamp_s is not None:
+            if timestamp_s <= self._last_timestamp_s:
+                raise RuntimeError(STALE_FRAME_ERROR_MESSAGE)
+            if self._frame_timeout_s > 0.0 and (timestamp_s - self._last_timestamp_s) > self._frame_timeout_s:
+                raise RuntimeError(STALE_FRAME_ERROR_MESSAGE)
+
+
+        if frame_hash == self._last_hash:
+            self._repeat_count += 1
+            if self._repeat_count > self._max_repeats:
+                raise RuntimeError(STALE_FRAME_ERROR_MESSAGE)
+        else:
+            self._repeat_count = 0
+
+        self._last_hash = frame_hash
+        self._last_timestamp_s = timestamp_s
 
 
 def _resolve_runtime_reject_thresholds(project_root: Path) -> dict[str, float]:
@@ -97,6 +138,8 @@ class LiveRuntimeRunResult:
     reports: tuple[LiveRuntimeCycleReport, ...] = ()
     startup_failed: bool = False
     startup_failure_payload: dict[str, str] | None = None
+    stale_frame_failed: bool = False
+    stale_frame_error_message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -394,11 +437,28 @@ class LiveRuntimeRunner:
         assert frame_source is not None and detector is not None and pipeline is not None and transport is not None
 
         frame_source.open()
+        freshness_guard = FrameFreshnessGuard(
+            max_repeats=MAX_REPEATED_FRAMES,
+            frame_timeout_ms=self._runtime_config.scheduling_guard.max_frame_staleness_ms,
+        )
+        stale_frame_error_message: str | None = None
         try:
             while max_cycles is None or cycle_count < max_cycles:
                 cycle_start = self._now()
                 frame = frame_source.next_frame()
                 if frame is None:
+                    break
+                try:
+                    freshness_guard.check(
+                        frame_timestamp_s=frame.timestamp_s,
+                        frame_image_bgr=frame.image_bgr,
+                        capture_time_s=cycle_start,
+                    )
+                except RuntimeError as exc:
+                    stale_frame_error_message = str(exc)
+                    LOGGER.error("stale_frame_guard_failed error=%s", stale_frame_error_message)
+                    if self._failure_sink is not None:
+                        self._failure_sink({"status": "runtime_failed", "reason": stale_frame_error_message})
                     break
 
                 detect_start = self._now()
@@ -466,6 +526,8 @@ class LiveRuntimeRunner:
             cycle_count=cycle_count,
             sent_command_count=sent_command_count,
             reports=tuple(reports),
+            stale_frame_failed=stale_frame_error_message is not None,
+            stale_frame_error_message=stale_frame_error_message,
         )
 
 
