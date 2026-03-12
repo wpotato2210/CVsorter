@@ -81,6 +81,22 @@ If `python3.12` is not found, try `python -m venv .venv`.
 
 You should see `(.venv)` at the start of your prompt after activation.
 
+### Windows `cmd.exe` troubleshooting (common pitfalls)
+
+If you see errors like `'..\\..' is not recognized` or `'.' is not recognized as an internal or external command`, `cmd.exe` is treating text as commands.
+
+- Use `cd ..\\..` to move folders. Do **not** run `..\\..` by itself.
+- Run test commands from the repo root, not from `.venv\\Scripts`.
+- Do not paste pytest output (dots, coverage table rows) back into the terminal. Those lines are output, not commands.
+- Prefer module-invoked commands to avoid PATH ambiguity:
+
+  ```bat
+  python -m pytest tests
+  python -m pytest --cov=src/coloursorter --cov-report=term --cov-report=xml
+  ```
+
+If you get `AttributeError: module 'logging' has no attribute 'getLogger'`, check for a local file named `logging.py` in your current working directory and rename/remove it; it can shadow Python's standard `logging` module.
+
 ### 5) Install dependencies (canonical method)
 
 Run these commands from the repository root (for example `C:\Users\<you>\Documents\CVsorter-main`), not from `.venv\Scripts`.
