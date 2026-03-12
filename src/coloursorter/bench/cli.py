@@ -35,6 +35,7 @@ from coloursorter.bench import (
 from coloursorter.bench.evaluation import evaluate_logs, write_artifacts
 from coloursorter.config import RuntimeConfig
 from coloursorter.deploy import (
+    CaptureBaselineConfig,
     CalibratedOpenCvDetectionConfig,
     ModelStubDetectionConfig,
     OpenCvDetectionConfig,
@@ -43,6 +44,12 @@ from coloursorter.deploy import (
     build_detection_provider,
 )
 
+from coloursorter.eval.reject_profiles import (
+    RejectProfileValidationError,
+    default_profile,
+    load_reject_profiles,
+    selected_thresholds,
+)
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for a bench execution session."""
@@ -68,6 +75,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--camera-recipe", default="")
     parser.add_argument("--lighting-recipe", default="")
     return parser.parse_args(argv)
+
+
+def _resolve_runtime_reject_thresholds(project_root: Path) -> dict[str, float]:
+    profiles_path = project_root / "configs" / "reject_profiles.yaml"
+    try:
+        profiles, selected_name = load_reject_profiles(profiles_path)
+        resolved = selected_thresholds(profiles, selected_name)
+    except RejectProfileValidationError:
+        resolved = default_profile().thresholds
+    return {key: float(resolved[key]) for key in sorted(resolved)}
 
 
 def _load_runtime_config(runtime_config_path: str | Path) -> RuntimeConfig | None:
@@ -294,7 +311,16 @@ def main(argv: list[str] | None = None) -> int:
             jitter_warn_ms=runtime_config.telemetry_alarm.jitter_warn_ms,
             jitter_critical_ms=runtime_config.telemetry_alarm.jitter_critical_ms,
         )
-    runner = BenchRunner(pipeline=pipeline, transport=transport, encoder=VirtualEncoder(encoder), safety=safety)
+    project_root = Path(__file__).resolve().parents[3]
+    runtime_reject_thresholds = _resolve_runtime_reject_thresholds(project_root)
+    runner = BenchRunner(
+        pipeline=pipeline,
+        transport=transport,
+        encoder=VirtualEncoder(encoder),
+        safety=safety,
+        runtime_reject_thresholds=runtime_reject_thresholds,
+        capture_baseline_config=CaptureBaselineConfig(),
+    )
 
     ground_truth_by_object_id = _load_ground_truth(args.ground_truth_manifest)
     logs = _run_cycles(args, runner, runtime_config, Path(args.artifact_root), ground_truth_by_object_id)
