@@ -95,6 +95,8 @@ class LiveRuntimeRunResult:
     cycle_count: int
     sent_command_count: int
     reports: tuple[LiveRuntimeCycleReport, ...] = ()
+    startup_failed: bool = False
+    startup_failure_payload: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,17 @@ class StartupDiagnosticsReport:
             and self.detector_metadata.passed
             and self.transport_ping.passed
         )
+
+
+def serialize_startup_failure(report: StartupDiagnosticsReport) -> dict[str, str]:
+    """Build a deterministic startup failure payload from diagnostics checks."""
+    return {
+        "status": "startup_failed",
+        "config_and_profile": report.config_and_profile.reason,
+        "detector_metadata": report.detector_metadata.reason,
+        "frame_source_frame": report.frame_source_frame.reason,
+        "transport_ping": report.transport_ping.reason,
+    }
 
 
 def _resolve_detection_profile(runtime_config: RuntimeConfig):
@@ -192,25 +205,26 @@ class LiveRuntimeRunner:
         calibration_path: str | Path = "configs/calibration.json",
         sleep_fn: Callable[[float], None] | None = None,
         now_fn: Callable[[], float] | None = None,
+        failure_sink: Callable[[dict[str, str]], None] | None = None,
     ) -> None:
         self._runtime_config = RuntimeConfig.load_startup(runtime_config_path)
         project_root = Path(__file__).resolve().parents[3]
         self.runtime_reject_thresholds = _resolve_runtime_reject_thresholds(project_root)
         if self._runtime_config.frame_source.mode != "live":
             raise ValueError("LiveRuntimeRunner requires frame_source.mode=live")
-        self._pipeline = PipelineRunner(lane_config_path=lane_config_path, calibration_path=calibration_path)
-        setattr(self._pipeline, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
-        self._frame_source = LiveFrameSource(
-            LiveConfig(
-                camera_index=self._runtime_config.camera.camera_index,
-                frame_period_s=self._runtime_config.camera.frame_period_s,
-            )
+        self._lane_config_path = lane_config_path
+        self._calibration_path = calibration_path
+        self._frame_source_config = LiveConfig(
+            camera_index=self._runtime_config.camera.camera_index,
+            frame_period_s=self._runtime_config.camera.frame_period_s,
         )
-        self._detector = build_live_detection_provider(self._runtime_config)
         self._capture_baseline = CaptureBaselineConfig()
-        setattr(self._detector, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
-        self._transport = build_live_transport(self._runtime_config)
+        self._pipeline: PipelineRunner | None = None
+        self._frame_source: LiveFrameSource | None = None
+        self._detector = None
+        self._transport = None
         self.startup_diagnostics = self._run_startup_diagnostics()
+        self._failure_sink = failure_sink
         self._sleep = sleep_fn or time.sleep
         self._now = now_fn or time.perf_counter
 
@@ -228,10 +242,12 @@ class LiveRuntimeRunner:
                 ),
             )
 
+        existing_frame_source = getattr(self, "_frame_source", None)
+        frame_source = existing_frame_source if existing_frame_source is not None else LiveFrameSource(self._frame_source_config)
         frame_check = StartupDiagnosticCheck(passed=False, reason="frame_capture_not_attempted")
         try:
-            self._frame_source.open()
-            frame = self._frame_source.next_frame()
+            frame_source.open()
+            frame = frame_source.next_frame()
             if frame is None:
                 frame_check = StartupDiagnosticCheck(passed=False, reason="frame_source_returned_none")
             elif not isinstance(frame.image_bgr, np.ndarray):
@@ -254,11 +270,13 @@ class LiveRuntimeRunner:
         except Exception as exc:  # pragma: no cover - exercised via integration errors
             frame_check = StartupDiagnosticCheck(passed=False, reason=f"frame_source_error={exc}")
         finally:
-            self._frame_source.release()
+            frame_source.release()
 
-        provider_version = str(getattr(self._detector, "provider_version", "")).strip()
-        model_version = str(getattr(self._detector, "model_version", "")).strip()
-        active_config_hash = str(getattr(self._detector, "active_config_hash", "")).strip()
+        existing_detector = getattr(self, "_detector", None)
+        detector = existing_detector if existing_detector is not None else build_live_detection_provider(self._runtime_config)
+        provider_version = str(getattr(detector, "provider_version", "")).strip()
+        model_version = str(getattr(detector, "model_version", "")).strip()
+        active_config_hash = str(getattr(detector, "active_config_hash", "")).strip()
         missing_metadata_fields = [
             field_name
             for field_name, value in (
@@ -278,7 +296,9 @@ class LiveRuntimeRunner:
         )
 
         ping_check = StartupDiagnosticCheck(passed=False, reason="transport_ping_not_attempted")
-        send_command = getattr(self._transport, "send_command", None)
+        existing_transport = getattr(self, "_transport", None)
+        transport = existing_transport if existing_transport is not None else build_live_transport(self._runtime_config)
+        send_command = getattr(transport, "send_command", None)
         if callable(send_command):
             try:
                 send_command(CMD_HEARTBEAT)
@@ -293,6 +313,9 @@ class LiveRuntimeRunner:
                     "mock_transport_requires_send_command_for_deterministic_noop"
                 ),
             )
+        close_transport = getattr(transport, "close", None)
+        if callable(close_transport):
+            close_transport()
 
         report = StartupDiagnosticsReport(
             config_and_profile=config_check,
@@ -333,26 +356,55 @@ class LiveRuntimeRunner:
         enable_reporting: bool = False,
         report_callback: Callable[[LiveRuntimeCycleReport], None] | None = None,
     ) -> LiveRuntimeRunResult:
+        if not self.startup_diagnostics.all_passed:
+            payload = serialize_startup_failure(self.startup_diagnostics)
+            if self._failure_sink is not None:
+                self._failure_sink(payload)
+            LOGGER.error("startup_gate_failed payload=%s", payload)
+            return LiveRuntimeRunResult(
+                cycle_count=0,
+                sent_command_count=0,
+                reports=(),
+                startup_failed=True,
+                startup_failure_payload=payload,
+            )
+
+        self._pipeline = PipelineRunner(
+            lane_config_path=self._lane_config_path,
+            calibration_path=self._calibration_path,
+        )
+        setattr(self._pipeline, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
+        self._frame_source = LiveFrameSource(self._frame_source_config)
+        self._detector = build_live_detection_provider(self._runtime_config)
+        setattr(self._detector, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
+        self._transport = build_live_transport(self._runtime_config)
+
         reports: list[LiveRuntimeCycleReport] = []
         cycle_count = 0
         sent_command_count = 0
         cycle_period_s = self._runtime_config.cycle_timing.period_ms / 1000.0
 
-        self._frame_source.open()
+        frame_source = self._frame_source
+        detector = self._detector
+        pipeline = self._pipeline
+        transport = self._transport
+        assert frame_source is not None and detector is not None and pipeline is not None and transport is not None
+
+        frame_source.open()
         try:
             while max_cycles is None or cycle_count < max_cycles:
                 cycle_start = self._now()
-                frame = self._frame_source.next_frame()
+                frame = frame_source.next_frame()
                 if frame is None:
                     break
 
                 detect_start = self._now()
-                detections = self._detector.detect(frame.image_bgr)
+                detections = detector.detect(frame.image_bgr)
                 detect_latency_ms = (self._now() - detect_start) * 1000.0
 
                 pipeline_start = self._now()
-                preprocess_metrics = getattr(self._detector, "last_validation_metrics", {})
-                result = self._pipeline.run(
+                preprocess_metrics = getattr(detector, "last_validation_metrics", {})
+                result = pipeline.run(
                     frame=FrameMetadata(
                         frame_id=frame.frame_id,
                         timestamp_s=frame.timestamp_s,
@@ -370,7 +422,7 @@ class LiveRuntimeRunner:
 
                 send_start = self._now()
                 for scheduled in result.scheduled_events:
-                    self._transport.send(scheduled.command)
+                    transport.send(scheduled.command)
                     sent_command_count += 1
                 send_latency_ms = (self._now() - send_start) * 1000.0
 
@@ -402,8 +454,8 @@ class LiveRuntimeRunner:
                 if remaining_s > 0.0:
                     self._sleep(remaining_s)
         finally:
-            self._frame_source.release()
-            close_transport = getattr(self._transport, "close", None)
+            frame_source.release()
+            close_transport = getattr(transport, "close", None)
             if callable(close_transport):
                 close_transport()
 
