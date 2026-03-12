@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import monotonic
 
 import cv2
 
@@ -38,7 +39,7 @@ class LiveFrameSource:
 
         frame = BenchFrame(
             frame_id=self._frame_id,
-            timestamp_s=self._frame_id * self._config.frame_period_s,
+            timestamp_s=monotonic(),
             image_bgr=frame,
         )
         self._frame_id += 1
