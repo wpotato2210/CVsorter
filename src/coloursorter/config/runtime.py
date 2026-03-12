@@ -12,9 +12,6 @@ from coloursorter.config.enums import (
     MOTION_MODE,
     MOTION_MODE_VALUES,
 )
-from coloursorter.deploy import DETECTION_PROVIDER_VALUES, resolve_detection_provider_name
-
-
 class ConfigValidationError(ValueError):
     pass
 
@@ -736,6 +733,8 @@ def _validate_enum(field_name: str, value: str, allowed_values: tuple[str, ...])
 
 
 def _validate_detection_provider_name(value: str) -> str:
+    from coloursorter.deploy import DETECTION_PROVIDER_VALUES, resolve_detection_provider_name
+
     try:
         return resolve_detection_provider_name(value)
     except ValueError as exc:
