@@ -1,0 +1,35 @@
+{
+  "vector_pack": "T3-003",
+  "seed": 3003,
+  "status_classes": [
+    "terminal_acknowledged",
+    "terminal_missed_window",
+    "terminal_not_observed"
+  ],
+  "vectors": [
+    {
+      "id": "accepted_terminal_acknowledged",
+      "msg_id": "m-3003-001",
+      "command": "SCHED",
+      "lane": 0,
+      "accepted": true,
+      "terminal_status": "terminal_acknowledged"
+    },
+    {
+      "id": "accepted_terminal_missed_window",
+      "msg_id": "m-3003-002",
+      "command": "SCHED",
+      "lane": 1,
+      "accepted": true,
+      "terminal_status": "terminal_missed_window"
+    },
+    {
+      "id": "accepted_terminal_not_observed",
+      "msg_id": "m-3003-003",
+      "command": "SET_MODE",
+      "lane": 0,
+      "accepted": true,
+      "terminal_status": "terminal_not_observed"
+    }
+  ]
+}
