@@ -83,16 +83,24 @@ def test_runtime_config_load_startup_with_filesystem_mock(monkeypatch: pytest.Mo
 
 def test_live_frame_source_with_mock_camera(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("coloursorter.bench.live_source.cv2.VideoCapture", _FakeVideoCapture)
+    monotonic_samples = iter((10.25, 10.5))
+    monkeypatch.setattr("coloursorter.bench.live_source.monotonic", lambda: next(monotonic_samples))
 
     source = LiveFrameSource(LiveConfig(camera_index=0, frame_period_s=0.05))
     source.open()
-    frame = source.next_frame()
+    frame0 = source.next_frame()
+    frame1 = source.next_frame()
     source.release()
 
-    assert frame is not None
-    assert frame.frame_id == 0
-    assert frame.timestamp_s == pytest.approx(0.0, abs=1e-12)
-    assert frame.image_bgr.shape == (4, 4, 3)
+    assert frame0 is not None
+    assert frame1 is not None
+    assert frame0.frame_id == 0
+    assert frame1.frame_id == 1
+    assert frame0.timestamp_s == pytest.approx(10.25, abs=1e-12)
+    assert frame1.timestamp_s == pytest.approx(10.5, abs=1e-12)
+    assert frame0.timestamp_s <= frame1.timestamp_s
+    assert frame0.image_bgr.shape == (4, 4, 3)
+    assert frame1.image_bgr.shape == (4, 4, 3)
 
 
 def test_host_protocol_encode_decode_and_malformed_packet() -> None:
