@@ -1,0 +1,30 @@
+{
+  "vector_pack": "T3-004",
+  "seed": 3004,
+  "runs": [
+    {
+      "scenario_id": "stable_reject_path",
+      "run_index": 1,
+      "trace_hash": "9a8b2f4d",
+      "expected_status": "informational_pass"
+    },
+    {
+      "scenario_id": "stable_reject_path",
+      "run_index": 2,
+      "trace_hash": "9a8b2f4d",
+      "expected_status": "informational_pass"
+    },
+    {
+      "scenario_id": "stable_accept_path",
+      "run_index": 1,
+      "trace_hash": "4f77c0ae",
+      "expected_status": "informational_pass"
+    },
+    {
+      "scenario_id": "stable_accept_path",
+      "run_index": 2,
+      "trace_hash": "4f77c0ae",
+      "expected_status": "informational_pass"
+    }
+  ]
+}
