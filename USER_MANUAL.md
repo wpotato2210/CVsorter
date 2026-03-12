@@ -117,7 +117,8 @@ set PYTHONPATH=src && python -m coloursorter.bench.cli ^
 
 ### Replay frame processing
 - Reads replay frames from a directory, video, or image path.
-- Converts each frame to RGB for downstream processing.
+- Uses OpenCV BGR frames at ingest (`image_shape` must be `(H, W, 3)`).
+- Rejects non-3-channel ingest payloads deterministically with: `image_shape channels must be exactly 3 (BGR H,W,3)`.
 - Runs configured detection provider on each frame.
 
 ### Detection provider selection

@@ -107,8 +107,8 @@ class IngestPayloadAdapter:
         height_px, width_px, channels = image_shape
         if height_px <= 0 or width_px <= 0:
             raise IngestValidationError("image_shape height and width must be > 0")
-        if channels not in {1, 3, 4}:
-            raise IngestValidationError("image_shape channels must be one of: 1, 3, 4")
+        if channels != 3:
+            raise IngestValidationError("image_shape channels must be exactly 3 (BGR H,W,3)")
 
         previous_timestamp_s = payload.get("previous_timestamp_s", 0.0)
         if isinstance(previous_timestamp_s, bool) or not isinstance(previous_timestamp_s, (int, float)):
