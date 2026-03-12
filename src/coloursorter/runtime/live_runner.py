@@ -5,7 +5,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 import numpy as np
 
@@ -203,13 +203,18 @@ class LiveRuntimeRunner:
         runtime_config_path: str | Path,
         lane_config_path: str | Path = "configs/lane_geometry.yaml",
         calibration_path: str | Path = "configs/calibration.json",
+        runtime_reject_thresholds: Mapping[str, float] | None = None,
         sleep_fn: Callable[[float], None] | None = None,
         now_fn: Callable[[], float] | None = None,
         failure_sink: Callable[[dict[str, str]], None] | None = None,
     ) -> None:
         self._runtime_config = RuntimeConfig.load_startup(runtime_config_path)
-        project_root = Path(__file__).resolve().parents[3]
-        self.runtime_reject_thresholds = _resolve_runtime_reject_thresholds(project_root)
+        if runtime_reject_thresholds is None:
+            project_root = Path(__file__).resolve().parents[3]
+            resolved_thresholds = _resolve_runtime_reject_thresholds(project_root)
+        else:
+            resolved_thresholds = {key: float(value) for key, value in sorted(runtime_reject_thresholds.items())}
+        self.runtime_reject_thresholds = resolved_thresholds
         if self._runtime_config.frame_source.mode != "live":
             raise ValueError("LiveRuntimeRunner requires frame_source.mode=live")
         self._lane_config_path = lane_config_path
@@ -373,10 +378,8 @@ class LiveRuntimeRunner:
             lane_config_path=self._lane_config_path,
             calibration_path=self._calibration_path,
         )
-        setattr(self._pipeline, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
         self._frame_source = LiveFrameSource(self._frame_source_config)
         self._detector = build_live_detection_provider(self._runtime_config)
-        setattr(self._detector, "runtime_reject_thresholds", dict(self.runtime_reject_thresholds))
         self._transport = build_live_transport(self._runtime_config)
 
         reports: list[LiveRuntimeCycleReport] = []

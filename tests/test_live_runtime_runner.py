@@ -154,6 +154,39 @@ def _write_runtime_config(tmp_path: Path, mode: str) -> Path:
     return path
 
 
+def test_live_runner_accepts_explicit_runtime_thresholds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime_path = _write_runtime_config(tmp_path, mode="live")
+    transport = _FakeTransport()
+    thresholds = {"rot": 321.0, "curve": 123.0}
+
+    monkeypatch.setattr("coloursorter.runtime.live_runner.LiveFrameSource", lambda _cfg: _FakeFrameSource())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_detection_provider", lambda _cfg: _FakeDetector())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_transport", lambda _cfg: transport)
+
+    runner = LiveRuntimeRunner(runtime_config_path=runtime_path, runtime_reject_thresholds=thresholds)
+    result = runner.run(max_cycles=1, enable_reporting=False)
+
+    assert result.cycle_count == 1
+    assert runner.runtime_reject_thresholds == {"curve": 123.0, "rot": 321.0}
+
+
+def test_live_runner_resolves_thresholds_when_not_injected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime_path = _write_runtime_config(tmp_path, mode="live")
+    transport = _FakeTransport()
+
+    monkeypatch.setattr("coloursorter.runtime.live_runner.LiveFrameSource", lambda _cfg: _FakeFrameSource())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_detection_provider", lambda _cfg: _FakeDetector())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_transport", lambda _cfg: transport)
+    monkeypatch.setattr(
+        "coloursorter.runtime.live_runner._resolve_runtime_reject_thresholds",
+        lambda _root: {"inf": 11.0, "rot": 22.0},
+    )
+
+    runner = LiveRuntimeRunner(runtime_config_path=runtime_path)
+
+    assert runner.runtime_reject_thresholds == {"inf": 11.0, "rot": 22.0}
+
+
 def test_live_runner_executes_loop_and_sends_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runtime_path = _write_runtime_config(tmp_path, mode="live")
     transport = _FakeTransport()
