@@ -64,6 +64,8 @@ def test_schema_validation_rejects_bad_payload() -> None:
         {"frame_id": 1, "timestamp": float("nan"), "image_shape": [1, 2, 3]},
         {"frame_id": 1, "timestamp": 0.1, "image_shape": [0, 2, 3]},
         {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 2]},
+        {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 1]},
+        {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 4]},
         {"frame_id": 1, "timestamp": 0.1, "image_shape": [1, 2, 3], "previous_timestamp_s": 0.2},
     ],
 )
@@ -71,6 +73,19 @@ def test_schema_validation_rejects_invalid_ranges_and_shapes(payload: dict[str, 
     adapter = IngestPayloadAdapter(CONTRACT)
     with pytest.raises(IngestValidationError):
         adapter.adapt(payload)
+
+
+def test_schema_validation_rejects_non_bgr_channel_count_with_deterministic_message() -> None:
+    adapter = IngestPayloadAdapter(CONTRACT)
+    with pytest.raises(IngestValidationError, match=r"^image_shape channels must be exactly 3 \(BGR H,W,3\)$"):
+        adapter.adapt({"frame_id": 1, "timestamp": 0.1, "image_shape": [480, 640, 1]})
+
+
+def test_schema_validation_accepts_bgr_three_channel_shape() -> None:
+    adapter = IngestPayloadAdapter(CONTRACT)
+    adapted = adapter.adapt({"frame_id": 8, "timestamp": 0.8, "image_shape": [480, 640, 3]})
+    assert adapted.frame.image_height_px == 480
+    assert adapted.frame.image_width_px == 640
 
 
 def test_scheduler_boundary_timing_semantics_preserved() -> None:
