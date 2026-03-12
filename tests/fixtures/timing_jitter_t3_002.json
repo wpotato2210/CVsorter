@@ -1,0 +1,52 @@
+{
+  "vector_pack": "T3-002",
+  "seed": 3002,
+  "description": "Fixed-seed timing-jitter replay corpus for scheduler/deploy bench envelope boundaries.",
+  "envelope": {
+    "max_jitter_ms": 10.0,
+    "max_missed_window_count": 0,
+    "min_reject_reliability": 0.99
+  },
+  "vectors": [
+    {
+      "id": "inside_envelope",
+      "max_jitter_ms": 9.999,
+      "missed_window_count": 0,
+      "reject_reliability": 1.0,
+      "expected_pass": true,
+      "expected_hard_gate_pass": true
+    },
+    {
+      "id": "edge_envelope",
+      "max_jitter_ms": 10.0,
+      "missed_window_count": 0,
+      "reject_reliability": 0.99,
+      "expected_pass": true,
+      "expected_hard_gate_pass": true
+    },
+    {
+      "id": "outside_jitter",
+      "max_jitter_ms": 10.001,
+      "missed_window_count": 0,
+      "reject_reliability": 1.0,
+      "expected_pass": false,
+      "expected_hard_gate_pass": false
+    },
+    {
+      "id": "outside_missed_window",
+      "max_jitter_ms": 4.0,
+      "missed_window_count": 1,
+      "reject_reliability": 1.0,
+      "expected_pass": false,
+      "expected_hard_gate_pass": false
+    },
+    {
+      "id": "outside_reliability",
+      "max_jitter_ms": 3.5,
+      "missed_window_count": 0,
+      "reject_reliability": 0.989,
+      "expected_pass": false,
+      "expected_hard_gate_pass": false
+    }
+  ]
+}
