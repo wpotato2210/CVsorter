@@ -1,0 +1,90 @@
+{
+  "vector_pack": "T3-001",
+  "description": "Deterministic command/ACK vectors for OpenSpec v3 host command paths.",
+  "vectors": [
+    {
+      "id": "hello_sync",
+      "request": {
+        "msg_id": "1",
+        "command": "HELLO",
+        "args": ["3.1", "CRC32;SCHED;HEARTBEAT;DEDUPE"],
+        "frame": "<1|HELLO|3.1,CRC32;SCHED;HEARTBEAT;DEDUPE|E2E9EDE9>"
+      },
+      "expected_response": {
+        "command": "ACK",
+        "args": ["AUTO", "0", "IDLE", "false", "SYNCING"],
+        "frame": "<1|ACK|AUTO,0,IDLE,false,SYNCING|6F32C4F5>"
+      }
+    },
+    {
+      "id": "heartbeat_ready",
+      "request": {
+        "msg_id": "2",
+        "command": "HEARTBEAT",
+        "args": [],
+        "frame": "<2|HEARTBEAT||D0303E46>"
+      },
+      "expected_response": {
+        "command": "ACK",
+        "args": ["AUTO", "0", "IDLE", "false", "READY"],
+        "frame": "<2|ACK|AUTO,0,IDLE,false,READY|050E5912>"
+      }
+    },
+    {
+      "id": "set_mode_manual",
+      "request": {
+        "msg_id": "3",
+        "command": "SET_MODE",
+        "args": ["MANUAL"],
+        "frame": "<3|SET_MODE|MANUAL|ECA61ADB>"
+      },
+      "expected_response": {
+        "command": "ACK",
+        "args": ["MANUAL", "0", "IDLE", "false", "READY"],
+        "frame": "<3|ACK|MANUAL,0,IDLE,false,READY|028F6121>"
+      }
+    },
+    {
+      "id": "sched_enqueue",
+      "request": {
+        "msg_id": "4",
+        "command": "SCHED",
+        "args": ["2", "123.456"],
+        "frame": "<4|SCHED|2,123.456|9DFA5B2D>"
+      },
+      "expected_response": {
+        "command": "ACK",
+        "args": ["MANUAL", "1", "ACTIVE", "false", "READY"],
+        "frame": "<4|ACK|MANUAL,1,ACTIVE,false,READY|C56E3FCB>"
+      }
+    },
+    {
+      "id": "get_state_snapshot",
+      "request": {
+        "msg_id": "5",
+        "command": "GET_STATE",
+        "args": [],
+        "frame": "<5|GET_STATE||34DC558D>"
+      },
+      "expected_response": {
+        "command": "ACK",
+        "args": ["MANUAL", "1", "ACTIVE", "false", "READY"],
+        "frame": "<5|ACK|MANUAL,1,ACTIVE,false,READY|F39CAF38>"
+      }
+    },
+    {
+      "id": "reset_queue",
+      "request": {
+        "msg_id": "6",
+        "command": "RESET_QUEUE",
+        "args": [],
+        "frame": "<6|RESET_QUEUE||3248840F>"
+      },
+      "expected_response": {
+        "command": "ACK",
+        "args": ["MANUAL", "0", "IDLE", "true", "READY"],
+        "frame": "<6|ACK|MANUAL,0,IDLE,true,READY|4B94C26D>"
+      }
+    }
+  ]
+}
