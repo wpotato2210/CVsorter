@@ -213,3 +213,84 @@ def test_live_runner_requires_live_mode(tmp_path: Path) -> None:
     runtime_path = _write_runtime_config(tmp_path, mode="replay")
     with pytest.raises(ValueError, match="frame_source.mode=live"):
         LiveRuntimeRunner(runtime_config_path=runtime_path)
+
+
+def test_live_runner_startup_gate_prevents_runtime_initialization_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtime_path = _write_runtime_config(tmp_path, mode="live")
+    calls: list[str] = []
+
+    class _FailingFrameSource:
+        def open(self) -> None:
+            calls.append("diag_frame_open")
+
+        def next_frame(self):
+            calls.append("diag_frame_next")
+            return None
+
+        def release(self) -> None:
+            calls.append("diag_frame_release")
+
+    class _InitTrackerTransport(_FakeTransport):
+        def send_command(self, _command, _args=()):
+            calls.append("diag_transport_ping")
+            return None
+
+    def _build_detector(_cfg):
+        calls.append("diag_detector_build")
+        return _FakeDetector()
+
+    def _build_transport(_cfg):
+        calls.append("diag_transport_build")
+        return _InitTrackerTransport()
+
+    monkeypatch.setattr("coloursorter.runtime.live_runner.LiveFrameSource", lambda _cfg: _FailingFrameSource())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_detection_provider", _build_detector)
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_transport", _build_transport)
+
+    runner = LiveRuntimeRunner(runtime_config_path=runtime_path)
+    result = runner.run(max_cycles=1, enable_reporting=False)
+
+    assert result.startup_failed is True
+    assert result.cycle_count == 0
+    assert result.sent_command_count == 0
+    assert result.startup_failure_payload is not None
+    assert result.startup_failure_payload["status"] == "startup_failed"
+    assert result.startup_failure_payload["frame_source_frame"] == "frame_source_returned_none"
+    assert calls == [
+        "diag_frame_open",
+        "diag_frame_next",
+        "diag_frame_release",
+        "diag_detector_build",
+        "diag_transport_build",
+        "diag_transport_ping",
+    ]
+
+
+def test_live_runner_startup_gate_emits_failure_sink_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtime_path = _write_runtime_config(tmp_path, mode="live")
+    emitted: list[dict[str, str]] = []
+
+    class _FailingFrameSource:
+        def open(self) -> None:
+            return None
+
+        def next_frame(self):
+            return None
+
+        def release(self) -> None:
+            return None
+
+    monkeypatch.setattr("coloursorter.runtime.live_runner.LiveFrameSource", lambda _cfg: _FailingFrameSource())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_detection_provider", lambda _cfg: _FakeDetector())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_transport", lambda _cfg: _FakeTransport())
+
+    runner = LiveRuntimeRunner(runtime_config_path=runtime_path, failure_sink=emitted.append)
+    result = runner.run(max_cycles=1, enable_reporting=False)
+
+    assert result.startup_failed is True
+    assert result.startup_failure_payload is not None
+    assert emitted == [result.startup_failure_payload]
