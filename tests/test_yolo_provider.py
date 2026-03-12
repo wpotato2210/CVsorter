@@ -119,3 +119,49 @@ def test_yolo_provider_sets_degraded_on_inference_failure(monkeypatch, caplog) -
     assert "stage=inference" in caplog.text
     assert "model_path=weights/yolov8s.pt" in caplog.text
     assert "device=cpu" in caplog.text
+
+
+def test_yolo_provider_skips_malformed_box_and_preserves_valid_detection(monkeypatch) -> None:
+    class _MalformedBox:
+        def __init__(self) -> None:
+            self.xyxy = np.array([[1.0, 2.0]], dtype=np.float32)
+            self.cls = np.array([0], dtype=np.float32)
+            self.conf = np.array([0.1], dtype=np.float32)
+
+    class _MixedModel(_FakeModel):
+        def __call__(self, _frame: np.ndarray, verbose: bool = False) -> list[_FakeResult]:
+            assert verbose is False
+            boxes: list[Any] = [_MalformedBox(), _FakeBox([10, 20, 30, 40], 1, 0.75)]
+            return [_FakeResult(boxes, names={1: "reject"})]
+
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "ultralytics", types.SimpleNamespace(YOLO=_MixedModel))
+    provider = YOLOProvider(model_path="weights/yolov8s.pt", device="cpu")
+
+    detections = provider.predict(np.zeros((8, 8, 3), dtype=np.uint8))
+
+    assert detections == [{"bbox": [10.0, 20.0, 30.0, 40.0], "class": "reject", "confidence": 0.75}]
+
+
+def test_yolo_provider_falls_back_to_numeric_class_label_for_out_of_range_name_list(monkeypatch) -> None:
+    class _NameListModel(_FakeModel):
+        def __call__(self, _frame: np.ndarray, verbose: bool = False) -> list[_FakeResult]:
+            assert verbose is False
+            result = _FakeResult([_FakeBox([1, 2, 3, 4], 3, 0.4)])
+            result.names = ["only-class-zero"]
+            return [result]
+
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "ultralytics", types.SimpleNamespace(YOLO=_NameListModel))
+    provider = YOLOProvider(model_path="weights/yolov8s.pt", device="cpu")
+
+    detections = provider.predict(np.zeros((8, 8, 3), dtype=np.uint8))
+
+    assert len(detections) == 1
+    assert detections[0]["bbox"] == [1.0, 2.0, 3.0, 4.0]
+    assert detections[0]["class"] == "3"
+    assert detections[0]["confidence"] == pytest.approx(0.4)
