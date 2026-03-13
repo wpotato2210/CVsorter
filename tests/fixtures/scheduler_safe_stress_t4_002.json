@@ -1,0 +1,13 @@
+{
+  "max_queue_depth": 8,
+  "commands": [
+    {"lane": 0, "position_mm": 10.0},
+    {"lane": 3, "position_mm": 42.5},
+    {"lane": 7, "position_mm": 99.0},
+    {"lane": 1, "position_mm": 150.25},
+    {"lane": 5, "position_mm": 333.333},
+    {"lane": 2, "position_mm": 444.0},
+    {"lane": 6, "position_mm": 555.5},
+    {"lane": 4, "position_mm": 777.75}
+  ]
+}
