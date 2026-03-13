@@ -1,0 +1,87 @@
+{
+  "vector_pack": "T4-004",
+  "seed": 4004,
+  "description": "Deterministic replay+jitter timing drift regression vectors for bench/runtime harness checks.",
+  "drift_window_ms": {
+    "warn": 5.0,
+    "critical": 10.0
+  },
+  "vectors": [
+    {
+      "id": "stable_within_window",
+      "round_trip_ms": [
+        5.0,
+        6.0,
+        5.5,
+        6.5
+      ],
+      "expected_drift_ms": [
+        0.0,
+        1.0,
+        0.5,
+        1.0
+      ],
+      "expected_warn": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "expected_critical": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "expected_pass": true
+    },
+    {
+      "id": "warn_window_crossed",
+      "round_trip_ms": [
+        5.0,
+        11.2,
+        10.4
+      ],
+      "expected_drift_ms": [
+        0.0,
+        6.2,
+        0.8
+      ],
+      "expected_warn": [
+        false,
+        true,
+        false
+      ],
+      "expected_critical": [
+        false,
+        false,
+        false
+      ],
+      "expected_pass": true
+    },
+    {
+      "id": "critical_window_crossed",
+      "round_trip_ms": [
+        5.0,
+        16.4,
+        6.1
+      ],
+      "expected_drift_ms": [
+        0.0,
+        11.4,
+        10.3
+      ],
+      "expected_warn": [
+        false,
+        true,
+        true
+      ],
+      "expected_critical": [
+        false,
+        true,
+        true
+      ],
+      "expected_pass": false
+    }
+  ]
+}
