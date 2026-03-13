@@ -87,3 +87,36 @@ bool scheduler_schedule(uint8_t lane, float position_mm) {
 bool scheduler_should_trigger(int32_t current_tick, int32_t target_tick) {
   return (int32_t)(current_tick - target_tick) >= 0;
 }
+
+dispatch_result_t scheduler_dispatch_ready_slot(int32_t current_tick, uint8_t *lane_out) {
+  event_t event;
+
+  if (lane_out == NULL) {
+    return DISPATCH_RESULT_NONE;
+  }
+
+  if (scheduler_safe_state()) {
+    return DISPATCH_RESULT_SAFE_BLOCKED;
+  }
+
+  if (!queue_peek(&event)) {
+    return DISPATCH_RESULT_NONE;
+  }
+
+  if (!scheduler_should_trigger(current_tick, event.trigger_tick)) {
+    return DISPATCH_RESULT_NONE;
+  }
+
+  if ((int32_t)(current_tick - event.trigger_tick) > (int32_t)FW_DISPATCH_MISS_TICKS) {
+    (void)queue_pop(&event);
+    return DISPATCH_RESULT_MISSED_WINDOW;
+  }
+
+  if (!queue_pop(&event)) {
+    return DISPATCH_RESULT_NONE;
+  }
+
+  *lane_out = event.lane;
+  return DISPATCH_RESULT_EXECUTED;
+}
+
