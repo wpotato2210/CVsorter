@@ -2,6 +2,8 @@
 
 extern "C" {
 #include "command_dispatch.h"
+#include "encoder.h"
+#include "safety.h"
 #include "scheduler.h"
 #include "watchdog.h"
 }
@@ -62,4 +64,28 @@ TEST(FirmwareWatchdogTest, ExpiryWithoutBlockingDelay) {
   watchdog_kick();
   EXPECT_FALSE(watchdog_expired(4));
   EXPECT_TRUE(watchdog_expired(6));
+}
+
+TEST(FirmwareSchedulerPhase32Test, ScheduleUsesDeterministicTickMathAndLaneCompensation) {
+  scheduler_reset();
+  safety_clear_safe();
+  encoder_ticks = 1'000;
+
+  ASSERT_TRUE(scheduler_schedule(2, 5.0F));
+  EXPECT_EQ(scheduler_depth(), 1);
+
+  scheduler_slot_t out{};
+  ASSERT_TRUE(scheduler_dequeue(&out));
+  EXPECT_EQ(out.lane, 2);
+  EXPECT_EQ(out.trigger_mm, 1'058);
+}
+
+TEST(FirmwareSchedulerPhase32Test, ScheduleIsSafeModeGatedAndQueueRemainsUnchanged) {
+  scheduler_reset();
+  safety_enter_safe(FAULT_BROWNOUT);
+
+  EXPECT_FALSE(scheduler_schedule(1, 3.0F));
+  EXPECT_EQ(scheduler_depth(), 0);
+
+  safety_clear_safe();
 }
