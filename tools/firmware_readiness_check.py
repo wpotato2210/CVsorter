@@ -130,6 +130,13 @@ def check_runtime_config() -> CheckResult:
         runtime_module = importlib.util.module_from_spec(runtime_spec)
         sys.modules[runtime_spec.name] = runtime_module
         runtime_spec.loader.exec_module(runtime_module)
+
+        try:
+            runtime_module.RuntimeConfig.load_startup(config_path)
+        except runtime_module.ConfigValidationError as exc:
+            return CheckResult(name="runtime_config", passed=False, detail=f"invalid runtime config: {exc}")
+        except Exception as exc:  # pragma: no cover - unexpected parser/runtime failure
+            return CheckResult(name="runtime_config", passed=False, detail=f"runtime config load failure: {exc}")
     except Exception as exc:  # pragma: no cover - import failure only
         return CheckResult(name="runtime_config", passed=False, detail=f"unable to import runtime config validator: {exc}")
     finally:
@@ -138,13 +145,6 @@ def check_runtime_config() -> CheckResult:
             sys.modules[deploy_module_name] = original_deploy_module
         else:
             sys.modules.pop(deploy_module_name, None)
-
-    try:
-        runtime_module.RuntimeConfig.load_startup(config_path)
-    except runtime_module.ConfigValidationError as exc:
-        return CheckResult(name="runtime_config", passed=False, detail=f"invalid runtime config: {exc}")
-    except Exception as exc:  # pragma: no cover - unexpected parser/runtime failure
-        return CheckResult(name="runtime_config", passed=False, detail=f"runtime config load failure: {exc}")
 
     return CheckResult(name="runtime_config", passed=True, detail="RuntimeConfig.load_startup validation passed")
 
