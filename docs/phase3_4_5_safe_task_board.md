@@ -30,7 +30,7 @@ Do **not** change production protocol/schema/runtime semantics in this board.
 | T4-002 | scheduler | Add SAFE-mode invariant tests to ensure no actuation in SAFE | Scheduler/dispatch invariants in tests | Include queue ordering assertions under stress fixtures |
 | T4-003 | bench, runtime, config | Add bench/live differential trace comparator suite | `tests/test_*parity*.py` trace comparisons | Compare decision, rejection reason, mode, scheduler state fields |
 | T4-004 | bench, runtime | Add timing drift regression harness with injected transport jitter | Replay+jitter harness tests | Keep deterministic seed and fixed expected windows |
-| T5-PLAN-001 | OpenSpec artifacts, config, GUI | Draft proposed Phase 5 backlog template (ops hardening, UX diagnostics, release evidence) | Planning doc only | No executable/runtime changes allowed until approved |
+| T5-PLAN-001 | OpenSpec artifacts, config, GUI | Draft proposed Phase 5 backlog template (ops hardening, UX diagnostics, release evidence) | `docs/phase5_backlog_template.md` | No executable/runtime changes allowed until approved |
 
 ## Beginner implementation slices (first 3 PRs)
 
