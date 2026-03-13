@@ -1,0 +1,57 @@
+{
+  "vector_pack": "PHASE-3.2",
+  "seed": 3202,
+  "color_format": "BGR",
+  "device": "mcu",
+  "dispatcher_contract": {
+    "inputs": [
+      "queue event: lane:uint8 trigger_tick:int32",
+      "current_tick:int32",
+      "safe_state:bool"
+    ],
+    "outputs": [
+      "dequeue:bool",
+      "trigger:bool",
+      "actuator_emit:bool"
+    ],
+    "side_effects": [
+      "queue pop when trigger window reached",
+      "no actuation in safe mode"
+    ],
+    "update_rate": "per control loop"
+  },
+  "vectors": [
+    {
+      "id": "before_target_tick",
+      "current_tick": 99,
+      "target_tick": 100,
+      "safe_state": false,
+      "expected_trigger": false,
+      "expected_actuator_emit": false
+    },
+    {
+      "id": "at_target_tick",
+      "current_tick": 100,
+      "target_tick": 100,
+      "safe_state": false,
+      "expected_trigger": true,
+      "expected_actuator_emit": true
+    },
+    {
+      "id": "after_target_tick",
+      "current_tick": 101,
+      "target_tick": 100,
+      "safe_state": false,
+      "expected_trigger": true,
+      "expected_actuator_emit": true
+    },
+    {
+      "id": "safe_mode_block",
+      "current_tick": 120,
+      "target_tick": 100,
+      "safe_state": true,
+      "expected_trigger": true,
+      "expected_actuator_emit": false
+    }
+  ]
+}
