@@ -14,6 +14,7 @@ add_library(firmware_core STATIC
   src/isr.c
   src/scheduler.c
   src/command_dispatch.c
+  src/actuator.c
 )
 
 target_include_directories(firmware_core PUBLIC
