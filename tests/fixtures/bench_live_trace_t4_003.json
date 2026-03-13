@@ -1,0 +1,49 @@
+{
+  "vectors": [
+    {
+      "name": "threshold_boundary_reject",
+      "frame": {
+        "frame_id": 403,
+        "timestamp_s": 1.0,
+        "image_height_px": 240,
+        "image_width_px": 1100
+      },
+      "detection": {
+        "object_id": "obj-t4-reject",
+        "centroid_x_px": 80.0,
+        "centroid_y_px": 80.0,
+        "classification": "accept",
+        "infection_score_delta": 0.0
+      },
+      "preprocess_metrics": null,
+      "expected": {
+        "decision": "reject",
+        "rejection_reason": "infection_score_threshold"
+      }
+    },
+    {
+      "name": "capture_fault_precedence",
+      "frame": {
+        "frame_id": 404,
+        "timestamp_s": 2.0,
+        "image_height_px": 240,
+        "image_width_px": 1100
+      },
+      "detection": {
+        "object_id": "obj-t4-fault",
+        "centroid_x_px": 80.0,
+        "centroid_y_px": 80.0,
+        "classification": "reject",
+        "infection_score_delta": 1.0
+      },
+      "preprocess_metrics": {
+        "preprocess_valid": false,
+        "luma_after": 120.0
+      },
+      "expected": {
+        "decision": "unknown",
+        "rejection_reason": "capture_preprocess_invalid"
+      }
+    }
+  ]
+}
