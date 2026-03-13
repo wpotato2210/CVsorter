@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -225,6 +226,28 @@ def test_live_runner_reporting_is_optional(tmp_path: Path, monkeypatch: pytest.M
     assert report.pipeline_latency_ms == report.timing.pipeline_latency_ms
     assert report.trigger_offset_ms == report.timing.trigger_offset_ms
     assert report.actuation_delay_ms == report.timing.actuation_delay_ms
+
+
+def test_live_runner_writes_runtime_trace_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime_path = _write_runtime_config(tmp_path, mode="live")
+    transport = _FakeTransport()
+    trace_path = tmp_path / "runtime_trace.jsonl"
+
+    monkeypatch.setattr("coloursorter.runtime.live_runner.LiveFrameSource", lambda _cfg: _FakeFrameSource())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_detection_provider", lambda _cfg: _FakeDetector())
+    monkeypatch.setattr("coloursorter.runtime.live_runner.build_live_transport", lambda _cfg: transport)
+
+    runner = LiveRuntimeRunner(runtime_config_path=runtime_path, trace_log_path=trace_path)
+    result = runner.run(max_cycles=1, enable_reporting=False)
+
+    assert result.cycle_count == 1
+    lines = trace_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["frame_id"] == 0
+    assert payload["color_class"] == "reject"
+    assert payload["decision"] == "reject"
+    assert payload["actuator_command"] == {"lane": 0, "position_mm": 510.0}
 
 
 def test_live_runner_startup_diagnostics_report_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

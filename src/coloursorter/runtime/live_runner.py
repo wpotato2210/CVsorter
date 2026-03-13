@@ -40,6 +40,7 @@ from coloursorter.eval.reject_profiles import (
 )
 from coloursorter.model import FrameMetadata
 from coloursorter.protocol.constants import CMD_HEARTBEAT
+from coloursorter.runtime.trace_logger import RuntimeTraceEntry, RuntimeTraceLogger
 
 
 LOGGER = logging.getLogger(__name__)
@@ -250,6 +251,7 @@ class LiveRuntimeRunner:
         sleep_fn: Callable[[float], None] | None = None,
         now_fn: Callable[[], float] | None = None,
         failure_sink: Callable[[dict[str, str]], None] | None = None,
+        trace_log_path: str | Path | None = None,
     ) -> None:
         self._runtime_config = RuntimeConfig.load_startup(runtime_config_path)
         if runtime_reject_thresholds is None:
@@ -275,6 +277,7 @@ class LiveRuntimeRunner:
         self._failure_sink = failure_sink
         self._sleep = sleep_fn or time.sleep
         self._now = now_fn or time.perf_counter
+        self._trace_logger = RuntimeTraceLogger(trace_log_path)
 
     def _run_startup_diagnostics(self) -> StartupDiagnosticsReport:
         selected_profile = _resolve_detection_profile(self._runtime_config)
@@ -443,6 +446,7 @@ class LiveRuntimeRunner:
         )
         stale_frame_error_message: str | None = None
         try:
+            self._trace_logger.open()
             while max_cycles is None or cycle_count < max_cycles:
                 cycle_start = self._now()
                 frame = frame_source.next_frame()
@@ -489,6 +493,35 @@ class LiveRuntimeRunner:
                     sent_command_count += 1
                 send_latency_ms = (self._now() - send_start) * 1000.0
 
+                scheduled_by_object_id = {event.object_id: event.command for event in result.scheduled_events}
+                decision_by_object_id = {decision.object_id: decision for decision in result.decisions}
+                per_object_latency_ms = decision_latency_ms + send_latency_ms
+                for detection in detections:
+                    decision = decision_by_object_id[detection.object_id]
+                    command = scheduled_by_object_id.get(detection.object_id)
+                    self._trace_logger.write(
+                        RuntimeTraceEntry(
+                            timestamp=frame.timestamp_s,
+                            frame_id=frame.frame_id,
+                            lane_id=decision.lane,
+                            bbox=(
+                                detection.centroid_x_px,
+                                detection.centroid_y_px,
+                                detection.centroid_x_px,
+                                detection.centroid_y_px,
+                            ),
+                            color_class=detection.classification,
+                            confidence=detection.infection_score,
+                            decision=decision.classification,
+                            actuator_command=(
+                                None
+                                if command is None
+                                else {"lane": command.lane, "position_mm": command.position_mm}
+                            ),
+                            latency_ms=per_object_latency_ms,
+                        )
+                    )
+
                 cycle_count += 1
                 cycle_latency_ms = (self._now() - cycle_start) * 1000.0
                 if enable_reporting:
@@ -521,6 +554,7 @@ class LiveRuntimeRunner:
             close_transport = getattr(transport, "close", None)
             if callable(close_transport):
                 close_transport()
+            self._trace_logger.close()
 
         return LiveRuntimeRunResult(
             cycle_count=cycle_count,
@@ -538,6 +572,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--calibration", default="configs/calibration.json")
     parser.add_argument("--max-cycles", type=int, default=0)
     parser.add_argument("--enable-reporting", action="store_true")
+    parser.add_argument("--trace-log-path", default="")
     return parser.parse_args()
 
 
@@ -547,6 +582,7 @@ def main() -> int:
         runtime_config_path=args.runtime_config,
         lane_config_path=args.lane_config,
         calibration_path=args.calibration,
+        trace_log_path=args.trace_log_path or None,
     )
     max_cycles = None if args.max_cycles <= 0 else args.max_cycles
     result = runner.run(max_cycles=max_cycles, enable_reporting=args.enable_reporting)
