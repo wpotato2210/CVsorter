@@ -101,6 +101,10 @@ The table below captures operational intent-level transitions. Command-level con
 | Offline | Production | Cloud restored (optional) and local production prerequisites remain valid. | Normal production exit rules apply. | Supervisor, System policy | Flush deferred telemetry/config reconciliation without blocking safety-critical control. |
 | Any | Maintenance | Fault, service request, or manual intervention requirement. | Service complete and authorized transition selected. | Technician, Engineer | If severe fault (watchdog/brownout) occurs, firmware may latch `SAFE_HALT`; recovery path must honor controller/firmware state machine constraints. |
 
+## Document authority and location
+
+This architecture document is the authoritative OpenSpec architecture reference in the current repository layout. Legacy process text that mentions `architecture/*` refers to pre-import paths; equivalent architecture authority is maintained under `docs/openspec/v3/`.
+
 ## Consistency with state-machine specifications
 
 To keep semantics consistent across OpenSpec artifacts:

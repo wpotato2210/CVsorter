@@ -40,6 +40,13 @@ Source commit for all files imported in this pass: `01cf4bd17fb56664efe11f0ca67d
 | `docs/openspec/v3/gui/ui_main_layout.json` | `gui/ui_main_layout.json` | `01cf4bd17fb56664efe11f0ca67d427f62469c66` |
 
 
+
+## Architecture document authority
+
+- Process references to `architecture/*` are legacy wording from pre-import layouts.
+- The canonical architecture authority for OpenSpec is `docs/openspec/v3/system_architecture.md`.
+- State-machine command/fault behavior remains normative in `docs/openspec/v3/state_machine.md` and `docs/openspec/v3/firmware_state_machine.md`.
+
 ## Governance artifacts
 
 - System architecture and operating modes: `docs/openspec/v3/system_architecture.md`.

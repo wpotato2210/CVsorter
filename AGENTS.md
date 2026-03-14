@@ -30,8 +30,9 @@ The following files define system architecture and protocol contracts.
 Agents MUST NOT modify these files.
 
 protocol.md  
-openspec/*  
-architecture/*  
+docs/openspec/*  
+# Legacy alias retained for historical references; canonical architecture docs live under docs/openspec/v3/.
+architecture/* (legacy reference only)  
 bench_spec.md  
 
 These documents define:
