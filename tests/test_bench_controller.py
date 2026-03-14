@@ -61,7 +61,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
 
     assert replay_transitioned is True
     assert replay_trigger_count == 1
-    assert live_trigger_count == 1
+    assert live_trigger_count == 0
     assert observed_states
     baseline_state = controller.runtime_state.controller_state
     baseline_timer_active = controller._cycle_timer.isActive()
@@ -130,6 +130,41 @@ def test_transition_to_does_not_preassign_runtime_state_on_rejected_request(
     assert controller.runtime_state.controller_state == baseline_state
     assert controller._cycle_timer.isActive() == baseline_timer_active
     assert controller.window.lane_overlay_label.text() == baseline_overlay_text
+    assert controller._pending_overlay is None
+
+
+def test_transition_to_rejected_request_keeps_runtime_and_ui_consistent_when_trigger_signal_fires(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    assert controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active") is True
+    baseline_state = controller.runtime_state.controller_state
+    baseline_timer_active = controller._cycle_timer.isActive()
+    baseline_overlay_text = controller.window.lane_overlay_label.text()
+
+    entered_states: list[ControllerState] = []
+    overlays: list[str] = []
+    live_trigger_count = 0
+
+    controller._state_machine.entered.connect(lambda state: entered_states.append(state))
+    controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+
+    def _on_live_trigger() -> None:
+        nonlocal live_trigger_count
+        live_trigger_count += 1
+
+    controller._state_machine.start_live.connect(_on_live_trigger)
+
+    transitioned = controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+
+    assert transitioned is False
+    assert live_trigger_count == 1
+    assert entered_states == []
+    assert controller.runtime_state.controller_state == baseline_state
+    assert controller._cycle_timer.isActive() == baseline_timer_active
+    assert controller.window.lane_overlay_label.text() == baseline_overlay_text
+    assert overlays == []
     assert controller._pending_overlay is None
 
 
