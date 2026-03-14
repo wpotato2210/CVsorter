@@ -229,6 +229,15 @@ python -m pip install -e .[dev]
 pytest -q
 ```
 
+### 2a) Phase 3 exit check (required): generate and verify `coverage.xml`
+
+```bash
+python -m pytest tests -q --cov=src/coloursorter --cov-report=xml
+test -f coverage.xml
+```
+
+This Phase 3 gate is required for local verification and CI parity.
+
 ### 3) Run one test file (faster when debugging)
 
 ```bash

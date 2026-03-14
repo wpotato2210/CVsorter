@@ -60,3 +60,11 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]
 ignore = ["E501"]
+
+
+[tool.coverage.run]
+source = ["src/coloursorter"]
+branch = false
+
+[tool.coverage.xml]
+output = "coverage.xml"
