@@ -26,3 +26,19 @@ def test_root_run_tests_bat_prints_progress_and_summary() -> None:
     assert 'echo [harness] Detecting pytest...' in script
     assert 'echo [harness] PASS: all tests completed successfully.' in script
     assert 'echo [harness] FAIL: one or more checks failed.' in script
+
+
+
+def test_readme_documents_run_tests_bat_as_windows_only() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert "run_tests.bat" in readme
+    assert "Windows-only harness" in readme
+    assert "Linux/macOS hosts" in readme
+
+
+def test_ci_workflow_has_windows_harness_guard_note() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "Guard Windows-only run_tests.bat execution on Linux hosts" in workflow
+    assert "Linux CI runners execute pytest directly" in workflow
