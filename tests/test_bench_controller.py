@@ -43,10 +43,25 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     controller._state_machine.entered.connect(lambda state: entered_states.append(state))
     observed_states: list[QueueState] = []
     controller.queue_state_requested.connect(lambda state: observed_states.append(state))
+    replay_trigger_count = 0
+    live_trigger_count = 0
+
+    def _on_replay_trigger() -> None:
+        nonlocal replay_trigger_count
+        replay_trigger_count += 1
+
+    def _on_live_trigger() -> None:
+        nonlocal live_trigger_count
+        live_trigger_count += 1
+
+    controller._state_machine.start_replay.connect(_on_replay_trigger)
+    controller._state_machine.start_live.connect(_on_live_trigger)
 
     replay_transitioned = controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
 
     assert replay_transitioned is True
+    assert replay_trigger_count == 1
+    assert live_trigger_count == 0
     assert observed_states
     baseline_state = controller.runtime_state.controller_state
     baseline_timer_active = controller._cycle_timer.isActive()
@@ -70,6 +85,8 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     )
 
     assert live_transitioned is False
+    assert replay_trigger_count == 1
+    assert live_trigger_count == 0
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
     assert controller.runtime_state.controller_state == baseline_state
     assert controller._cycle_timer.isActive()
