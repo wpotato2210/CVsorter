@@ -70,6 +70,9 @@ jobs:
       - name: Install project + test dependencies (editable)
         run: python -m pip install -e .[test]
 
+      - name: Guard Windows-only run_tests.bat execution on Linux hosts
+        run: echo "run_tests.bat is a Windows cmd.exe harness; Linux CI runners execute pytest directly."
+
       - name: Run pytest suite with coverage artifact generation (Phase 3 gate)
         run: PYTHONPATH=src python -m pytest tests -q --cov=src/coloursorter --cov-report=xml
 

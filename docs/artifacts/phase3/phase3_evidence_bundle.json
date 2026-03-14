@@ -1,20 +1,48 @@
 {
-  "checks": {
-    "hil_repeatability": {
-      "detail": "ok",
-      "ok": true
+  "phase": "phase3",
+  "task_id": "T3-006",
+  "artifact": "phase3_exit_checklist",
+  "overall_status": "conditional_pass",
+  "gates": [
+    {
+      "name": "firmware_unit_tests",
+      "required": true,
+      "command": "./run_tests.bat",
+      "status": "blocked",
+      "exit_code": 126,
+      "stdout": "",
+      "stderr": "/bin/bash: line 1: ./run_tests.bat: Permission denied\n",
+      "blocker_reason": "Windows batch test runner is not executable in the active Linux shell environment."
     },
-    "protocol_parity": {
-      "detail": "ok",
-      "ok": true
+    {
+      "name": "host_test_suite",
+      "required": true,
+      "command": "pytest tests/",
+      "status": "pass",
+      "exit_code": 0,
+      "stdout": "........................................................................ [ 15%]\n........................................................................ [ 30%]\n........................................................................ [ 45%]\n..............................x......................................... [ 60%]\n......................x................................................. [ 76%]\n........................................................................ [ 91%]\n.........................................                                [100%]\n471 passed, 2 skipped, 2 xfailed in 11.59s\n",
+      "stderr": "",
+      "blocker_reason": null
     },
-    "timing_envelope": {
-      "detail": "ok",
-      "ok": true
+    {
+      "name": "integration_timing_trace_checks",
+      "required": true,
+      "command": "pytest bench/",
+      "status": "pass",
+      "exit_code": 0,
+      "stdout": ".                                                                        [100%]\n1 passed in 0.02s\n",
+      "stderr": "",
+      "blocker_reason": null
     },
-    "trigger_correlation": {
-      "detail": "ok",
-      "ok": true
+    {
+      "name": "coverage_artifact",
+      "required": true,
+      "command": "pytest --cov=src/coloursorter --cov-report=xml",
+      "status": "blocked",
+      "exit_code": 4,
+      "stdout": "",
+      "stderr": "ERROR: usage: pytest [options] [file_or_dir] [file_or_dir] [...]\npytest: error: unrecognized arguments: --cov=src/coloursorter --cov-report=xml\n  inifile: /workspace/CVsorter/pyproject.toml\n  rootdir: /workspace/CVsorter\n",
+      "blocker_reason": "pytest-cov plugin/options are unavailable in this environment; coverage.xml cannot be generated until dependency is installed."
     }
   },
   "deterministic_inputs": {
@@ -64,4 +92,9 @@
       "evidence": []
     }
   }
+  ],
+  "notes": [
+    "Blocked required commands are explicitly captured with exact stderr and blocker rationale.",
+    "Host and bench runtime gates passed in this environment."
+  ]
 }

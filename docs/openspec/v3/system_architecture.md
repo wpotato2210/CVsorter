@@ -6,6 +6,10 @@ Related state machine references:
 - Controller mode/scheduler semantics: [`state_machine.md`](./state_machine.md)
 - Firmware runtime/fault semantics: [`firmware_state_machine.md`](./firmware_state_machine.md)
 
+## Document authority and location
+
+This file is the authoritative OpenSpec architecture reference for this repository. Process references that point to `architecture/*` should be interpreted as referring to `docs/openspec/` (and specifically this document for system architecture semantics).
+
 ## High-level block diagram
 
 ```mermaid

@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
+from ast import AnnAssign, Assign, Call, Constant, Name, Set, parse
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,6 +30,9 @@ CONTRACT_PARITY_FILES = (
     "mcu_response_schema_strict.json",
     "sched_schema.json",
 )
+PROTOCOL_COMMANDS_JSON = Path("protocol/commands.json")
+OPENSPEC_COMMANDS_JSON = Path("docs/openspec/v3/protocol/commands.json")
+PROTOCOL_CONSTANTS_PATH = Path("src/coloursorter/protocol/constants.py")
 
 
 @dataclass(frozen=True)
@@ -118,11 +123,100 @@ def find_contract_schema_parity_violations() -> list[Violation]:
     return violations
 
 
+def _read_json(path: Path) -> dict[str, object]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_supported_commands_from_constants(path: Path) -> frozenset[str]:
+    tree = parse(path.read_text(encoding="utf-8"), filename=path.as_posix())
+    command_literals: dict[str, str] = {}
+    supported_commands: set[str] | None = None
+
+    def _assignment_target_name(node: Assign | AnnAssign) -> str | None:
+        target = node.targets[0] if isinstance(node, Assign) else node.target
+        if isinstance(target, Name):
+            return target.id
+        return None
+
+    def _assignment_value(node: Assign | AnnAssign):
+        return node.value
+
+    for node in tree.body:
+        if not isinstance(node, (Assign, AnnAssign)):
+            continue
+        if isinstance(node, Assign) and len(node.targets) != 1:
+            continue
+        target_name = _assignment_target_name(node)
+        value = _assignment_value(node)
+        if target_name is None or value is None:
+            continue
+        if target_name.startswith("CMD_") and isinstance(value, Constant) and isinstance(value.value, str):
+            command_literals[target_name] = value.value
+            continue
+        if target_name != "SUPPORTED_COMMANDS":
+            continue
+        if isinstance(value, Call) and isinstance(value.func, Name) and value.func.id == "frozenset" and value.args:
+            value = value.args[0]
+        if not isinstance(value, Set):
+            continue
+        resolved_values: set[str] = set()
+        for entry in value.elts:
+            if isinstance(entry, Name) and entry.id in command_literals:
+                resolved_values.add(command_literals[entry.id])
+            elif isinstance(entry, Constant) and isinstance(entry.value, str):
+                resolved_values.add(entry.value)
+        supported_commands = resolved_values
+    if supported_commands is None:
+        raise ValueError("SUPPORTED_COMMANDS assignment was not found in constants.py")
+    return frozenset(supported_commands)
+
+
+def find_protocol_command_alignment_violations() -> list[Violation]:
+    violations: list[Violation] = []
+    if not PROTOCOL_COMMANDS_JSON.exists():
+        return [Violation(path=PROTOCOL_COMMANDS_JSON, line_no=1, detail="missing protocol commands catalog")]
+    if not OPENSPEC_COMMANDS_JSON.exists():
+        return [Violation(path=OPENSPEC_COMMANDS_JSON, line_no=1, detail="missing openspec mirrored protocol commands catalog")]
+    protocol_doc = _read_json(PROTOCOL_COMMANDS_JSON)
+    openspec_doc = _read_json(OPENSPEC_COMMANDS_JSON)
+    if protocol_doc != openspec_doc:
+        violations.append(
+            Violation(
+                path=OPENSPEC_COMMANDS_JSON,
+                line_no=1,
+                detail=(
+                    "protocol command catalog parity mismatch against protocol/commands.json"
+                    f" (canonical_sha256={_sha256(PROTOCOL_COMMANDS_JSON)} mirror_sha256={_sha256(OPENSPEC_COMMANDS_JSON)})"
+                ),
+            )
+        )
+
+    command_set: frozenset[str] = frozenset(
+        str(item["name"]) for item in protocol_doc.get("commands", []) if isinstance(item, dict) and "name" in item
+    )
+    constant_set = _load_supported_commands_from_constants(PROTOCOL_CONSTANTS_PATH)
+    if command_set != constant_set:
+        missing_in_constants = sorted(command_set - constant_set)
+        extra_in_constants = sorted(constant_set - command_set)
+        violations.append(
+            Violation(
+                path=PROTOCOL_CONSTANTS_PATH,
+                line_no=1,
+                detail=(
+                    "SUPPORTED_COMMANDS mismatch with protocol/commands.json "
+                    f"(missing_in_constants={missing_in_constants}, extra_in_constants={extra_in_constants})"
+                ),
+            )
+        )
+    return violations
+
+
 def main() -> int:
     violations = [
         *find_forbidden_nack7_details(),
         *find_duplicate_protocol_authority_declarations(),
         *find_contract_schema_parity_violations(),
+        *find_protocol_command_alignment_violations(),
     ]
     if violations:
         print("Protocol static guard: FAIL")

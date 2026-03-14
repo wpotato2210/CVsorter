@@ -40,6 +40,10 @@ Source commit for all files imported in this pass: `01cf4bd17fb56664efe11f0ca67d
 | `docs/openspec/v3/gui/ui_main_layout.json` | `gui/ui_main_layout.json` | `01cf4bd17fb56664efe11f0ca67d427f62469c66` |
 
 
+## Architecture authority
+
+Some legacy process references still mention an `architecture/*` path. In this repository, the authoritative architecture source is `docs/openspec/`, with the v3 system architecture document at `docs/openspec/v3/system_architecture.md`. Treat the OpenSpec path as the normative architecture location for audits and process evidence.
+
 ## Governance artifacts
 
 - System architecture and operating modes: `docs/openspec/v3/system_architecture.md`.
