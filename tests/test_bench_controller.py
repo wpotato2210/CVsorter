@@ -31,6 +31,7 @@ def runtime_config() -> RuntimeConfig:
     return RuntimeConfig.load_startup(Path(__file__).resolve().parents[1] / "configs" / "bench_runtime.yaml")
 
 
+@pytest.mark.gui_transition_gate
 def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     qapp: QApplication, runtime_config: RuntimeConfig
 ) -> None:
@@ -61,6 +62,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     baseline_runtime_queue_state = observed_states[-1].controller_state
     baseline_runtime_run_state = observed_states[-1].run_state
     baseline_state_machine_state = controller._state_machine._current_state
+    baseline_trigger_state = controller.runtime_state.controller_state
 
     live_transitioned = controller._transition_to(
         ControllerState.LIVE_RUNNING,
@@ -88,6 +90,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert "Live mode active" not in controller.window.lane_overlay_label.text()
     assert observed_states[-1].controller_state == baseline_runtime_queue_state
     assert observed_states[-1].run_state == baseline_runtime_run_state
+    assert controller.runtime_state.controller_state == baseline_trigger_state
 
 
 def test_transition_to_does_not_preassign_runtime_state_on_rejected_request(

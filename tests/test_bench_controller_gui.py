@@ -102,6 +102,7 @@ def test_transition_overlay_emits_only_after_confirmed_enter_callback(
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
 
 
+@pytest.mark.gui_transition_gate
 def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     qapp: QApplication, runtime_config: RuntimeConfig
 ) -> None:
