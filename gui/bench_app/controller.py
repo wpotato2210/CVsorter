@@ -764,6 +764,8 @@ class BenchAppController(QObject):
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
         # Backward-compatible adapter for legacy callers.
+        # runtime_state.controller_state is only mutated from _on_controller_state_entered
+        # once the Qt state-machine enter callback confirms transition completion.
         return self._request_transition(state, overlay_text=overlay_text)
 
     @Slot()

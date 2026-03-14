@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,14 @@ SCANNED_SUFFIXES = {".py", ".json", ".yml", ".yaml"}
 FORBIDDEN_NACK7_RE = re.compile(r"NACK\|7\|([A-Z_]+)")
 AUTHORITY_ASSIGN_RE = re.compile(r"^\s*AUTHORITATIVE_PROTOCOL_JSON(?:\s*:[^=]+)?\s*=")
 AUTHORITY_PATH = Path("src/coloursorter/protocol/authority.py")
+CONTRACT_CANONICAL_DIR = Path("contracts")
+CONTRACT_MIRROR_DIR = Path("docs/openspec/v3/contracts")
+CONTRACT_PARITY_FILES = (
+    "frame_schema.json",
+    "mcu_response_schema.json",
+    "mcu_response_schema_strict.json",
+    "sched_schema.json",
+)
 
 
 @dataclass(frozen=True)
@@ -74,8 +83,47 @@ def find_duplicate_protocol_authority_declarations() -> list[Violation]:
     ]
 
 
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def find_contract_schema_parity_violations() -> list[Violation]:
+    violations: list[Violation] = []
+    for filename in CONTRACT_PARITY_FILES:
+        canonical_path = CONTRACT_CANONICAL_DIR / filename
+        mirror_path = CONTRACT_MIRROR_DIR / filename
+        if not canonical_path.exists():
+            violations.append(
+                Violation(path=canonical_path, line_no=1, detail="missing canonical contract schema in contracts/")
+            )
+            continue
+        if not mirror_path.exists():
+            violations.append(
+                Violation(path=mirror_path, line_no=1, detail="missing mirrored contract schema in docs/openspec/v3/contracts/")
+            )
+            continue
+        canonical_hash = _sha256(canonical_path)
+        mirror_hash = _sha256(mirror_path)
+        if canonical_hash != mirror_hash:
+            violations.append(
+                Violation(
+                    path=mirror_path,
+                    line_no=1,
+                    detail=(
+                        "contract schema parity mismatch against canonical contracts/"
+                        f" ({filename} canonical_sha256={canonical_hash} mirror_sha256={mirror_hash})"
+                    ),
+                )
+            )
+    return violations
+
+
 def main() -> int:
-    violations = [*find_forbidden_nack7_details(), *find_duplicate_protocol_authority_declarations()]
+    violations = [
+        *find_forbidden_nack7_details(),
+        *find_duplicate_protocol_authority_declarations(),
+        *find_contract_schema_parity_violations(),
+    ]
     if violations:
         print("Protocol static guard: FAIL")
         for violation in violations:

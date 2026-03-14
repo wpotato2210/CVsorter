@@ -3,54 +3,186 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "msg_id": { "type": "string", "minLength": 1 },
-    "status": { "type": "string", "enum": ["ACK", "NACK"] },
-    "nack_code": { "type": "integer", "minimum": 1, "maximum": 8 },
-    "detail": { "type": "string", "minLength": 1 },
-    "queue_depth": { "type": "integer", "minimum": 0 },
-    "queue_cleared": { "type": "boolean" },
-    "mode": { "type": "string", "enum": ["AUTO", "MANUAL", "SAFE"] },
-    "scheduler_state": { "type": "string", "enum": ["IDLE", "ACTIVE"] },
-    "link_state": { "type": "string", "enum": ["DISCONNECTED", "SYNCING", "READY", "DEGRADED"] }
+    "msg_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ACK",
+        "NACK"
+      ]
+    },
+    "nack_code": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+    },
+    "detail": {
+      "type": "string",
+      "minLength": 1
+    },
+    "queue_depth": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "queue_cleared": {
+      "type": "boolean"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "AUTO",
+        "MANUAL",
+        "SAFE"
+      ]
+    },
+    "scheduler_state": {
+      "type": "string",
+      "enum": [
+        "IDLE",
+        "ACTIVE"
+      ]
+    },
+    "link_state": {
+      "type": "string",
+      "enum": [
+        "DISCONNECTED",
+        "SYNCING",
+        "READY",
+        "DEGRADED"
+      ]
+    }
   },
-  "required": ["msg_id", "status"],
+  "required": [
+    "msg_id",
+    "status"
+  ],
   "allOf": [
     {
-      "if": { "properties": { "status": { "const": "ACK" } }, "required": ["status"] },
-      "then": { "required": ["mode", "queue_depth", "scheduler_state", "queue_cleared"] }
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ACK"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "mode",
+          "queue_depth",
+          "scheduler_state",
+          "queue_cleared"
+        ]
+      }
     },
     {
-      "if": { "properties": { "status": { "const": "NACK" } }, "required": ["status"] },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "NACK"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
       "then": {
-        "required": ["nack_code"],
+        "required": [
+          "nack_code"
+        ],
         "not": {
           "anyOf": [
-            { "required": ["queue_depth"] },
-            { "required": ["queue_cleared"] },
-            { "required": ["mode"] },
-            { "required": ["scheduler_state"] },
-            { "required": ["link_state"] }
+            {
+              "required": [
+                "queue_depth"
+              ]
+            },
+            {
+              "required": [
+                "queue_cleared"
+              ]
+            },
+            {
+              "required": [
+                "mode"
+              ]
+            },
+            {
+              "required": [
+                "scheduler_state"
+              ]
+            },
+            {
+              "required": [
+                "link_state"
+              ]
+            }
           ]
         }
       },
       "else": {
-        "not": { "required": ["nack_code"] },
+        "not": {
+          "required": [
+            "nack_code"
+          ]
+        },
         "anyOf": [
           {
             "not": {
               "anyOf": [
-                { "required": ["queue_depth"] },
-                { "required": ["queue_cleared"] },
-                { "required": ["mode"] },
-                { "required": ["scheduler_state"] },
-                { "required": ["link_state"] }
+                {
+                  "required": [
+                    "queue_depth"
+                  ]
+                },
+                {
+                  "required": [
+                    "queue_cleared"
+                  ]
+                },
+                {
+                  "required": [
+                    "mode"
+                  ]
+                },
+                {
+                  "required": [
+                    "scheduler_state"
+                  ]
+                },
+                {
+                  "required": [
+                    "link_state"
+                  ]
+                }
               ]
             }
           },
-          { "required": ["queue_depth", "queue_cleared", "mode", "scheduler_state"] },
-          { "required": ["queue_depth", "queue_cleared", "mode", "scheduler_state", "link_state"] }
+          {
+            "required": [
+              "queue_depth",
+              "queue_cleared",
+              "mode",
+              "scheduler_state"
+            ]
+          },
+          {
+            "required": [
+              "queue_depth",
+              "queue_cleared",
+              "mode",
+              "scheduler_state",
+              "link_state"
+            ]
+          }
         ]
       }
     }
-  ]
+  ],
+  "$comment": "Single source policy: contracts/mcu_response_schema.json is authoritative; docs/openspec/v3/contracts/mcu_response_schema.json must stay byte-identical via tools/protocol_static_guard.py."
 }
