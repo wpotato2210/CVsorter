@@ -278,21 +278,6 @@ class BenchControllerStateMachine(QObject):
     def _on_entered(self, state: ControllerState) -> None:
         self._current_state = state
 
-    @staticmethod
-    def _is_allowed_transition(current_state: ControllerState, target_state: ControllerState) -> bool:
-        if current_state == target_state:
-            return False
-        if target_state == ControllerState.SAFE:
-            return True
-        allowed_transitions: dict[ControllerState, set[ControllerState]] = {
-            ControllerState.IDLE: {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING},
-            ControllerState.REPLAY_RUNNING: {ControllerState.IDLE},
-            ControllerState.LIVE_RUNNING: {ControllerState.IDLE},
-            ControllerState.FAULTED: {ControllerState.IDLE},
-            ControllerState.SAFE: {ControllerState.IDLE},
-        }
-        return target_state in allowed_transitions.get(current_state, set())
-
     def request(self, state: ControllerState) -> bool:
         if state == self._current_state:
             return False
@@ -305,9 +290,6 @@ class BenchControllerStateMachine(QObject):
         }
         trigger = trigger_by_state.get(state)
         if trigger is None:
-            return False
-        transition_allowed = self._is_allowed_transition(self._current_state, state)
-        if not transition_allowed:
             return False
         trigger.emit()
         return True
