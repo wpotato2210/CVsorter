@@ -97,6 +97,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert "Live mode active" not in overlays
     assert len(overlays) == baseline_overlay_count
     assert controller._pending_overlay is None
+    assert controller._pending_overlay_state is None
     assert len(entered_states) == baseline_entered_count
     assert entered_states[-1] == baseline_last_entered
     assert controller.runtime_state.controller_state == entered_states[-1]
@@ -131,6 +132,7 @@ def test_transition_to_does_not_preassign_runtime_state_on_rejected_request(
     assert controller._cycle_timer.isActive() == baseline_timer_active
     assert controller.window.lane_overlay_label.text() == baseline_overlay_text
     assert controller._pending_overlay is None
+    assert controller._pending_overlay_state is None
 
 
 def test_transition_to_rejected_request_keeps_runtime_and_ui_consistent_when_trigger_signal_fires(
@@ -166,6 +168,7 @@ def test_transition_to_rejected_request_keeps_runtime_and_ui_consistent_when_tri
     assert controller.window.lane_overlay_label.text() == baseline_overlay_text
     assert overlays == []
     assert controller._pending_overlay is None
+    assert controller._pending_overlay_state is None
 
 
 class _StubFrameSource:
