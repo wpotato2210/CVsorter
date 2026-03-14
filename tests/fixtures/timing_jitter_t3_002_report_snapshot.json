@@ -1,0 +1,44 @@
+{
+  "report": [
+    {
+      "id": "inside_envelope",
+      "scenario_pass": true,
+      "hard_gate_pass": true,
+      "reject_reliability": 1.0,
+      "max_jitter_ms": 9.999,
+      "missed_window_count": 0
+    },
+    {
+      "id": "edge_envelope",
+      "scenario_pass": true,
+      "hard_gate_pass": true,
+      "reject_reliability": 0.99,
+      "max_jitter_ms": 10.0,
+      "missed_window_count": 0
+    },
+    {
+      "id": "outside_jitter",
+      "scenario_pass": false,
+      "hard_gate_pass": false,
+      "reject_reliability": 1.0,
+      "max_jitter_ms": 10.001,
+      "missed_window_count": 0
+    },
+    {
+      "id": "outside_missed_window",
+      "scenario_pass": false,
+      "hard_gate_pass": false,
+      "reject_reliability": 1.0,
+      "max_jitter_ms": 4.0,
+      "missed_window_count": 1
+    },
+    {
+      "id": "outside_reliability",
+      "scenario_pass": false,
+      "hard_gate_pass": false,
+      "reject_reliability": 0.989,
+      "max_jitter_ms": 3.5,
+      "missed_window_count": 0
+    }
+  ]
+}
