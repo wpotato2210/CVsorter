@@ -170,7 +170,9 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert "Live mode active" not in overlays
     assert len(overlays) == baseline_overlay_count
     assert controller._pending_overlay is None
+    assert controller._pending_overlay_state is None
     assert len(entered_states) == baseline_entered_count
+    assert ControllerState.LIVE_RUNNING not in entered_states
     assert entered_states[-1] == baseline_last_entered
     assert controller._state_machine._current_state == baseline_state_machine_state
     assert controller.runtime_state.controller_state == entered_states[-1]
