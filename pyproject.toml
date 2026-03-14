@@ -49,6 +49,9 @@ include = ["coloursorter*", "gui*"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+markers = [
+  "gui_transition_gate: enforces replay→live illegal transition invariants under PySide6",
+]
 
 [tool.ruff]
 line-length = 100

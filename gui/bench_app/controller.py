@@ -764,9 +764,18 @@ class BenchAppController(QObject):
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
         # Backward-compatible adapter for legacy callers.
-        # runtime_state.controller_state is only mutated from _on_controller_state_entered
-        # once the Qt state-machine enter callback confirms transition completion.
-        return self._request_transition(state, overlay_text=overlay_text)
+        # runtime_state.controller_state is intentionally not pre-assigned here;
+        # _on_controller_state_entered remains the single source of truth.
+        previous_state = self.runtime_state.controller_state
+        transitioned = self._request_transition(state, overlay_text=overlay_text)
+        if not transitioned and self.runtime_state.controller_state != previous_state:
+            LOGGER.debug(
+                "rejected transition mutated runtime state unexpectedly requested=%s previous=%s current=%s",
+                state.value,
+                previous_state.value,
+                self.runtime_state.controller_state.value,
+            )
+        return transitioned
 
     @Slot()
     def _on_cycle_tick(self) -> None:
