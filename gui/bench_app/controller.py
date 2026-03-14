@@ -294,7 +294,7 @@ class BenchControllerStateMachine(QObject):
         return target_state in allowed_transitions.get(current_state, set())
 
     def request(self, state: ControllerState) -> bool:
-        if not self._is_allowed_transition(self._current_state, state):
+        if state == self._current_state:
             return False
         trigger_by_state: dict[ControllerState, Signal] = {
             ControllerState.REPLAY_RUNNING: self.start_replay,
@@ -307,7 +307,7 @@ class BenchControllerStateMachine(QObject):
         if trigger is None:
             return False
         trigger.emit()
-        return True
+        return self._is_allowed_transition(self._current_state, state)
 
 
 class BenchAppController(QObject):
