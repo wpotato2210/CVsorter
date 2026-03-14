@@ -30,9 +30,14 @@ The following files define system architecture and protocol contracts.
 Agents MUST NOT modify these files.
 
 protocol.md  
-openspec/*  
-architecture/*  
+docs/openspec/*  
 bench_spec.md  
+
+Architecture authority note:
+
+- Historical process text may reference an `architecture/*` path.
+- In this repository, authoritative architecture documents live under `docs/openspec/`, with system architecture defined in `docs/openspec/v3/system_architecture.md`.
+- Treat that OpenSpec location as the contract source of truth for architecture semantics.
 
 These documents define:
 
