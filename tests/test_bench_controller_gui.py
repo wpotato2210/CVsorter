@@ -179,6 +179,35 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert len(observed) == baseline_queue_event_count + 1
 
 
+
+
+def test_transition_request_does_not_preassign_runtime_state_before_entered_callback(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    replay_trigger_observed_state: list[ControllerState] = []
+    live_trigger_observed_state: list[ControllerState] = []
+
+    controller._state_machine.start_replay.connect(
+        lambda: replay_trigger_observed_state.append(controller.runtime_state.controller_state)
+    )
+    controller._state_machine.start_live.connect(
+        lambda: live_trigger_observed_state.append(controller.runtime_state.controller_state)
+    )
+
+    replay_transitioned = controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+
+    assert replay_transitioned is True
+    assert replay_trigger_observed_state == [ControllerState.IDLE]
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+
+    live_transitioned = controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+
+    assert live_transitioned is False
+    assert live_trigger_observed_state == [ControllerState.REPLAY_RUNNING]
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+
 def test_on_controller_state_entered_centralizes_runtime_timer_and_button_updates(
     qapp: QApplication, runtime_config: RuntimeConfig
 ) -> None:
