@@ -31,5 +31,37 @@
   },
   "overall_ok": true,
   "phase": "phase3",
-  "task_id": "T3-006"
+  "task_id": "T3-006",
+  "verification_scope_tags": {
+    "VERIFIED": "Explicitly validated by a passing Phase 3 deterministic check in this bundle.",
+    "NOT VERIFIED": "Not directly validated by a passing Phase 3 deterministic check in this bundle."
+  },
+  "subsystem_viability_matrix": {
+    "bench": {
+      "viability": "VIABLE",
+      "verification_scope": "VERIFIED",
+      "evidence": [
+        "hil_repeatability",
+        "timing_envelope",
+        "trigger_correlation"
+      ]
+    },
+    "protocol_host": {
+      "viability": "VIABLE",
+      "verification_scope": "VERIFIED",
+      "evidence": [
+        "protocol_parity"
+      ]
+    },
+    "live_runtime": {
+      "viability": "PARTIAL",
+      "verification_scope": "NOT VERIFIED",
+      "evidence": []
+    },
+    "gui": {
+      "viability": "PARTIAL",
+      "verification_scope": "NOT VERIFIED",
+      "evidence": []
+    }
+  }
 }
