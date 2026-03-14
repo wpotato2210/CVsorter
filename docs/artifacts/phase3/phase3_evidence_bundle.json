@@ -44,6 +44,54 @@
       "stderr": "ERROR: usage: pytest [options] [file_or_dir] [file_or_dir] [...]\npytest: error: unrecognized arguments: --cov=src/coloursorter --cov-report=xml\n  inifile: /workspace/CVsorter/pyproject.toml\n  rootdir: /workspace/CVsorter\n",
       "blocker_reason": "pytest-cov plugin/options are unavailable in this environment; coverage.xml cannot be generated until dependency is installed."
     }
+  },
+  "deterministic_inputs": {
+    "hil_repeatability_vectors": "tests/fixtures/hil_gate_t3_004.json",
+    "protocol_vectors": "tests/fixtures/protocol_vectors_t3_001.json",
+    "timing_report_snapshot": "tests/fixtures/timing_jitter_t3_002_report_snapshot.json",
+    "trigger_correlation_vectors": "tests/fixtures/trigger_correlation_t3_003.json"
+  },
+  "fingerprints": {
+    "hil_repeatability": "e503292449445b3a1908f6e42ff2d6cb5687b25a72503771fd6034bd0679015e",
+    "protocol_parity": "3f63946102785e780a53f9acdec0515c55ed26ee5bcbaac258377e97508fc9c5",
+    "timing_envelope": "fb166d3b199dcde356617be8242a97644fe0f025c100d3544b31a32786ea57d9",
+    "trigger_correlation": "69ddb1cbca2ea4c5db618da8f12dbe512bf8874f9cdf8632c3ffde1672c453f1"
+  },
+  "overall_ok": true,
+  "phase": "phase3",
+  "task_id": "T3-006",
+  "verification_scope_tags": {
+    "VERIFIED": "Explicitly validated by a passing Phase 3 deterministic check in this bundle.",
+    "NOT VERIFIED": "Not directly validated by a passing Phase 3 deterministic check in this bundle."
+  },
+  "subsystem_viability_matrix": {
+    "bench": {
+      "viability": "VIABLE",
+      "verification_scope": "VERIFIED",
+      "evidence": [
+        "hil_repeatability",
+        "timing_envelope",
+        "trigger_correlation"
+      ]
+    },
+    "protocol_host": {
+      "viability": "VIABLE",
+      "verification_scope": "VERIFIED",
+      "evidence": [
+        "protocol_parity"
+      ]
+    },
+    "live_runtime": {
+      "viability": "PARTIAL",
+      "verification_scope": "NOT VERIFIED",
+      "evidence": []
+    },
+    "gui": {
+      "viability": "PARTIAL",
+      "verification_scope": "NOT VERIFIED",
+      "evidence": []
+    }
+  }
   ],
   "notes": [
     "Blocked required commands are explicitly captured with exact stderr and blocker rationale.",
