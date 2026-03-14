@@ -734,6 +734,11 @@ class BenchAppController(QObject):
                 transition_completed = True
                 break
         if not transition_completed:
+            return self._reject_transition_request(
+                requested_state=state,
+                previous_state=previous_state,
+                reason="transition_not_completed",
+            )
             LOGGER.debug(
                 "transition did not complete requested=%s previous=%s current=%s",
                 state.value,
@@ -742,6 +747,25 @@ class BenchAppController(QObject):
             )
             return _reject_transition("timeout_not_entered")
         return True
+
+    def _reject_transition_request(
+        self,
+        *,
+        requested_state: ControllerState,
+        previous_state: ControllerState,
+        reason: str,
+    ) -> bool:
+        self._pending_overlay = None
+        self._pending_overlay_state = None
+        LOGGER.debug(
+            "transition rejected reason=%s requested=%s previous=%s current=%s",
+            reason,
+            requested_state.value,
+            previous_state.value,
+            self.runtime_state.controller_state.value,
+        )
+        self._emit_runtime_state()
+        return False
 
     def request_idle(self, *, overlay_text: str | None = None) -> bool:
         return self._request_transition(ControllerState.IDLE, overlay_text=overlay_text)
