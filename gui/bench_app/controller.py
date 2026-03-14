@@ -770,16 +770,7 @@ class BenchAppController(QObject):
         # runtime_state.controller_state must only be updated by
         # _on_controller_state_entered after an entered-state callback confirms
         # that the transition completed.
-        previous_state = self.runtime_state.controller_state
-        transitioned = self._request_transition(state, overlay_text=overlay_text)
-        if not transitioned and self.runtime_state.controller_state != previous_state:
-            LOGGER.debug(
-                "rejected transition mutated runtime state unexpectedly requested=%s previous=%s current=%s",
-                state.value,
-                previous_state.value,
-                self.runtime_state.controller_state.value,
-            )
-        return transitioned
+        return self._request_transition(state, overlay_text=overlay_text)
 
     @Slot()
     def _on_cycle_tick(self) -> None:
