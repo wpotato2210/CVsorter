@@ -35,10 +35,40 @@ def _build_summary(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "vector_pack": payload.get("vector_pack"),
         "seed": payload.get("seed"),
-        "informational_only": True,
+        "informational_only": False,
         "rerun_consistent": rerun_consistent,
         "deterministic_fingerprint": "|".join(sorted(normalized_rows)),
     }
+
+
+def _evaluate_release_gate(payload: dict[str, Any], summary: dict[str, Any]) -> tuple[bool, list[str]]:
+    failures: list[str] = []
+    runs = payload["runs"]
+
+    if payload.get("vector_pack") != "T3-004":
+        failures.append("vector_pack must be T3-004")
+
+    if payload.get("seed") != 3004:
+        failures.append("seed must be deterministic value 3004")
+
+    if not runs:
+        failures.append("runs must be non-empty")
+
+    expected_statuses = sorted({str(run["expected_status"]) for run in runs})
+    if expected_statuses != ["informational_pass"]:
+        failures.append("expected_status entries must all be informational_pass")
+
+    inconsistent_scenarios = [
+        scenario_id
+        for scenario_id, consistent in summary["rerun_consistent"].items()
+        if not consistent
+    ]
+    if inconsistent_scenarios:
+        failures.append(
+            "rerun consistency failed for scenarios: " + ", ".join(inconsistent_scenarios)
+        )
+
+    return len(failures) == 0, failures
 
 
 def main() -> int:
@@ -55,8 +85,14 @@ def main() -> int:
 
     payload = _load_fixture(args.fixture)
     summary = _build_summary(payload)
-    print(json.dumps(summary, indent=2, sort_keys=True))
-    return 0
+    passed, failures = _evaluate_release_gate(payload, summary)
+    report = {
+        **summary,
+        "gate_passed": passed,
+        "gate_failures": failures,
+    }
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

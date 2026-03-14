@@ -5,7 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 
 FIXTURE_PATH = Path("tests/fixtures/hil_gate_t3_004.json")
@@ -46,20 +45,25 @@ def test_t3_004_tool_is_deterministic_across_reruns() -> None:
     assert first.returncode == 0, first.stdout + first.stderr
     assert second.returncode == 0, second.stdout + second.stderr
     assert first.stdout == second.stdout
+    report = json.loads(first.stdout)
+    assert report["gate_passed"] is True
+    assert report["gate_failures"] == []
+    assert report["informational_only"] is False
 
 
-@pytest.mark.xfail(
-    reason="T3-004 remains informational/non-release gating until real HIL executor wiring lands",
-    strict=False,
-)
-def test_t3_004_placeholder_hil_enforcement_non_gating() -> None:
+def test_t3_004_hil_enforcement_release_gating() -> None:
     payload = _load_fixture()
-    runs = payload["runs"]
+    command = [
+        sys.executable,
+        "tools/hil_informational_gate.py",
+        "--fixture",
+        str(FIXTURE_PATH),
+    ]
+    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
-    observed_by_scenario = {
-        str(run["scenario_id"]): "pending_hil_wiring" for run in runs
-    }
-    expected = {
-        str(run["scenario_id"]): str(run["expected_status"]) for run in runs
-    }
-    assert observed_by_scenario == expected
+    report = json.loads(completed.stdout)
+    assert report["gate_passed"] is True
+    assert report["gate_failures"] == []
+    assert report["vector_pack"] == "T3-004"
+    assert report["seed"] == 3004
