@@ -20,5 +20,6 @@
     "lane_index",
     "trigger_mm",
     "classification"
-  ]
+  ],
+  "$comment": "Single source policy: contracts/sched_schema.json is authoritative; docs/openspec/v3/contracts/sched_schema.json must stay byte-identical via tools/protocol_static_guard.py."
 }

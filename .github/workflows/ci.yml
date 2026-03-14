@@ -34,7 +34,7 @@ jobs:
       - name: Validate package import integrity
         run: python -c "import coloursorter"
 
-      - name: Protocol static guard
+      - name: Protocol static guard (authority + contract parity)
         run: python tools/protocol_static_guard.py
 
       - name: Dependency declaration guard

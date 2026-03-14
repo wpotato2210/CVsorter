@@ -25,5 +25,6 @@
     "command",
     "payload",
     "crc"
-  ]
+  ],
+  "$comment": "Single source policy: contracts/frame_schema.json is authoritative; docs/openspec/v3/contracts/frame_schema.json must stay byte-identical via tools/protocol_static_guard.py."
 }
