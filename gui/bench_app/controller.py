@@ -739,13 +739,6 @@ class BenchAppController(QObject):
                 previous_state=previous_state,
                 reason="transition_not_completed",
             )
-            LOGGER.debug(
-                "transition did not complete requested=%s previous=%s current=%s",
-                state.value,
-                previous_state.value,
-                self.runtime_state.controller_state.value,
-            )
-            return _reject_transition("timeout_not_entered")
         return True
 
     def _reject_transition_request(
