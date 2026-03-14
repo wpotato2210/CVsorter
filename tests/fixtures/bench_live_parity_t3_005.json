@@ -1,0 +1,77 @@
+{
+  "vector_pack": "T3-005",
+  "seed": 3005,
+  "vectors": [
+    {
+      "name": "reject_command_ack_path",
+      "frame": {
+        "frame_id": 501,
+        "timestamp_s": 1.501,
+        "image_height_px": 240,
+        "image_width_px": 1100
+      },
+      "detection": {
+        "object_id": "obj-t3-005-r1",
+        "centroid_x_px": 120.0,
+        "centroid_y_px": 84.0,
+        "classification": "reject",
+        "infection_score_delta": 0.5
+      },
+      "preprocess_metrics": null,
+      "transport_response": {
+        "queue_depth": 1,
+        "scheduler_state": "ARMED",
+        "mode": "AUTO",
+        "queue_cleared": false,
+        "round_trip_ms": 1.0,
+        "ack_code": "ACK"
+      },
+      "expected": {
+        "decision": "reject",
+        "rejection_reason": "infection_score_threshold",
+        "mode": "AUTO",
+        "queue_depth": 1,
+        "scheduler_state": "ARMED",
+        "queue_cleared": false,
+        "scheduler_transition": "IDLE->ARMED"
+      }
+    },
+    {
+      "name": "capture_fault_skip_path",
+      "frame": {
+        "frame_id": 502,
+        "timestamp_s": 1.502,
+        "image_height_px": 240,
+        "image_width_px": 1100
+      },
+      "detection": {
+        "object_id": "obj-t3-005-r2",
+        "centroid_x_px": 140.0,
+        "centroid_y_px": 88.0,
+        "classification": "reject",
+        "infection_score_delta": 0.5
+      },
+      "preprocess_metrics": {
+        "preprocess_valid": false,
+        "luma_after": 120.0
+      },
+      "transport_response": {
+        "queue_depth": 0,
+        "scheduler_state": "IDLE",
+        "mode": "AUTO",
+        "queue_cleared": false,
+        "round_trip_ms": 0.0,
+        "ack_code": "ACK"
+      },
+      "expected": {
+        "decision": "unknown",
+        "rejection_reason": "capture_preprocess_invalid",
+        "mode": "AUTO",
+        "queue_depth": 0,
+        "scheduler_state": "SKIPPED",
+        "queue_cleared": false,
+        "scheduler_transition": "ARMED->SKIPPED"
+      }
+    }
+  ]
+}
