@@ -763,32 +763,6 @@ class BenchAppController(QObject):
         return self._request_transition(ControllerState.SAFE, overlay_text=overlay_text)
 
     def _transition_to(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
-        # Legacy transition entrypoint that emits overlay only after state entry
-        # confirmation, preserving deterministic UI event ordering for tests/callers.
-        self._app.processEvents()
-        previous_state = self.runtime_state.controller_state
-        transition_requested = self._state_machine.request(state)
-        if not transition_requested:
-            self._pending_overlay = None
-            self._pending_overlay_state = None
-            LOGGER.debug("ignoring rejected transition requested=%s previous=%s", state.value, previous_state.value)
-            self._emit_runtime_state()
-            return False
-
-        transition_completed = False
-        for _ in range(3):
-            self._app.processEvents()
-            if self.runtime_state.controller_state == state:
-                transition_completed = True
-                break
-        if not transition_completed:
-            self._emit_runtime_state()
-            return False
-
-        if overlay_text is not None:
-            self.window.lane_overlay_label.setText(overlay_text)
-            self.lane_overlay_requested.emit(overlay_text)
-        return True
         # Backward-compatible adapter for legacy callers.
         return self._request_transition(state, overlay_text=overlay_text)
 
