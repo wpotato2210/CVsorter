@@ -701,6 +701,10 @@ class BenchAppController(QObject):
         # trigger signals are evaluated against an active machine.
         self._app.processEvents()
         previous_state = self.runtime_state.controller_state
+        # Invariant: transition requests must never pre-assign runtime state.
+        # _on_controller_state_entered is the sole authority for state/timer/UI
+        # side effects after an entered callback confirms completion.
+        assert previous_state == self.runtime_state.controller_state
         if previous_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
                 self._pending_overlay = None
@@ -708,6 +712,7 @@ class BenchAppController(QObject):
                 self._emit_runtime_state()
                 return False
         transition_requested = self._state_machine.request(state)
+        assert previous_state == self.runtime_state.controller_state
         if not transition_requested:
             self._pending_overlay = None
             self._pending_overlay_state = None
