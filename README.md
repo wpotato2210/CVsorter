@@ -229,6 +229,8 @@ python -m pip install -e .[dev]
 pytest -q
 ```
 
+`run_tests.bat` is a Windows-only harness (`cmd.exe` batch script). On Linux/macOS hosts, do not execute it directly; run `pytest` commands instead to avoid permission/platform mismatch failures.
+
 ### 2a) Phase 3 exit check (required): generate and verify `coverage.xml`
 
 ```bash
