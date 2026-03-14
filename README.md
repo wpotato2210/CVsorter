@@ -176,6 +176,8 @@ coloursorter-bench-cli --scenario nominal --avg-rtt-ms 9 --peak-rtt-ms 15
 - [Quick Start](QUICK_START.md)
 - [User Manual](USER_MANUAL.md)
 - [Developer Guide](DEVELOPER_GUIDE.md)
+- [Phase 3 Exit Checklist Artifact](docs/artifacts/phase3/phase3_closure_report.md)
+- [Phase 3 Evidence Bundle JSON](docs/artifacts/phase3/phase3_evidence_bundle.json)
 
 ### Wire Format
 

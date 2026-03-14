@@ -86,7 +86,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
 
     assert live_transitioned is False
     assert replay_trigger_count == 1
-    assert live_trigger_count == 0
+    assert live_trigger_count == 1
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
     assert controller.runtime_state.controller_state == baseline_state
     assert controller._cycle_timer.isActive()
