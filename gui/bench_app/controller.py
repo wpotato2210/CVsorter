@@ -306,8 +306,11 @@ class BenchControllerStateMachine(QObject):
         trigger = trigger_by_state.get(state)
         if trigger is None:
             return False
+        transition_allowed = self._is_allowed_transition(self._current_state, state)
+        if not transition_allowed:
+            return False
         trigger.emit()
-        return self._is_allowed_transition(self._current_state, state)
+        return True
 
 
 class BenchAppController(QObject):
