@@ -11,7 +11,7 @@ try:
 except ImportError:  # pragma: no cover
     pytest.skip("PySide6 is required for GUI tests", allow_module_level=True)
 
-from coloursorter.bench import BenchMode
+from coloursorter.bench import BenchMode, FaultState
 from coloursorter.config import RuntimeConfig
 from gui.bench_app.app import QueueState
 from gui.bench_app.controller import BenchAppController, ControllerState
@@ -109,6 +109,36 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert observed_states[-1].run_state == baseline_runtime_run_state
     assert controller.runtime_state.controller_state == baseline_trigger_state
 
+
+
+
+def test_safe_guardrail_rejection_uses_generic_rejection_semantics(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    assert controller._transition_to(ControllerState.SAFE, overlay_text="SAFE fault active") is True
+    controller.runtime_state.fault_state = FaultState.SAFE
+
+    overlays: list[str] = []
+    observed_states: list[QueueState] = []
+    controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+    controller.queue_state_requested.connect(lambda state: observed_states.append(state))
+
+    baseline_overlay_label = controller.window.lane_overlay_label.text()
+    baseline_timer_active = controller._cycle_timer.isActive()
+
+    transitioned = controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active")
+
+    assert transitioned is False
+    assert controller.runtime_state.controller_state == ControllerState.SAFE
+    assert controller._cycle_timer.isActive() == baseline_timer_active
+    assert controller.window.lane_overlay_label.text() == baseline_overlay_label
+    assert overlays == []
+    assert controller._pending_overlay is None
+    assert observed_states
+    assert observed_states[-1].controller_state == ControllerState.SAFE.value
+    assert observed_states[-1].run_state == ControllerState.SAFE.value
 
 def test_transition_to_does_not_preassign_runtime_state_on_rejected_request(
     qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch

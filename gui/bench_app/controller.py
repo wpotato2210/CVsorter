@@ -703,17 +703,18 @@ class BenchAppController(QObject):
         previous_state = self.runtime_state.controller_state
         if previous_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
-                self._pending_overlay = None
-                self._pending_overlay_state = None
-                self._emit_runtime_state()
-                return False
+                return self._reject_transition_request(
+                    requested_state=state,
+                    previous_state=previous_state,
+                    reason="safe_guardrail_rejection",
+                )
         transition_requested = self._state_machine.request(state)
         if not transition_requested:
-            self._pending_overlay = None
-            self._pending_overlay_state = None
-            LOGGER.debug("ignoring rejected transition requested=%s previous=%s", state.value, previous_state.value)
-            self._emit_runtime_state()
-            return False
+            return self._reject_transition_request(
+                requested_state=state,
+                previous_state=previous_state,
+                reason="state_machine_rejection",
+            )
         self._pending_overlay = overlay_text
         self._pending_overlay_state = state if overlay_text is not None else None
         transition_completed = False
@@ -723,17 +724,31 @@ class BenchAppController(QObject):
                 transition_completed = True
                 break
         if not transition_completed:
-            self._pending_overlay = None
-            self._pending_overlay_state = None
-            LOGGER.debug(
-                "transition did not complete requested=%s previous=%s current=%s",
-                state.value,
-                previous_state.value,
-                self.runtime_state.controller_state.value,
+            return self._reject_transition_request(
+                requested_state=state,
+                previous_state=previous_state,
+                reason="transition_not_completed",
             )
-            self._emit_runtime_state()
-            return False
         return True
+
+    def _reject_transition_request(
+        self,
+        *,
+        requested_state: ControllerState,
+        previous_state: ControllerState,
+        reason: str,
+    ) -> bool:
+        self._pending_overlay = None
+        self._pending_overlay_state = None
+        LOGGER.debug(
+            "transition rejected reason=%s requested=%s previous=%s current=%s",
+            reason,
+            requested_state.value,
+            previous_state.value,
+            self.runtime_state.controller_state.value,
+        )
+        self._emit_runtime_state()
+        return False
 
     def request_idle(self, *, overlay_text: str | None = None) -> bool:
         return self._request_transition(ControllerState.IDLE, overlay_text=overlay_text)
