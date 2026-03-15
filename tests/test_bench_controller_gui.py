@@ -154,7 +154,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     )
     assert transitioned is False
     assert replay_trigger_count == 1
-    assert live_trigger_count == 1
+    assert live_trigger_count == 0
 
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
     assert controller.runtime_state.controller_state == baseline_state
@@ -178,7 +178,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     assert controller.runtime_state.controller_state == entered_states[-1]
     assert observed[-1].controller_state == baseline_queue_state
     assert observed[-1].run_state == baseline_run_state
-    assert len(observed) == baseline_queue_event_count + 1
+    assert len(observed) == baseline_queue_event_count
 
 
 
