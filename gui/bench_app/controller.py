@@ -731,7 +731,7 @@ class BenchAppController(QObject):
         # Drain any pending startup/queued events before we evaluate the
         # transition request against current state.
         previous_state = self.runtime_state.controller_state
-        self._drain_events_until_state(previous_state, max_iterations=1)
+        self._drain_events_until_state(previous_state, max_iterations=self._TRANSITION_EVENT_DRAIN_ITERATIONS)
         previous_state = self.runtime_state.controller_state
         # Invariant: transition requests must never pre-assign runtime state.
         # _on_controller_state_entered is the sole authority for state/timer/UI
