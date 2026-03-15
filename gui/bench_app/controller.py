@@ -589,11 +589,11 @@ class BenchAppController(QObject):
 
         self._update_buttons_for_controller_state(state)
         self._update_buttons_for_mode(self.runtime_state.operator_mode)
+        self._emit_runtime_state()
         if self._pending_overlay is not None and self._pending_overlay_state == state:
             self.lane_overlay_requested.emit(self._pending_overlay)
             self._pending_overlay = None
             self._pending_overlay_state = None
-        self._emit_runtime_state()
 
     def _on_state_entered(self, state: ControllerState) -> None:
         self._on_controller_state_entered(state)
