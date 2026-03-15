@@ -119,4 +119,4 @@ jobs:
         run: python -c "import PySide6; print(PySide6.__version__)"
 
       - name: Run GUI replay→live illegal transition invariants
-        run: PYTHONPATH=src python -m pytest -q -m gui_transition_gate tests/test_bench_controller.py tests/test_bench_controller_gui.py
+        run: python -m pytest tests -q -m gui_transition_gate
