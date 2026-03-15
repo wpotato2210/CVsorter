@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
+import os
 from pathlib import Path
 import logging
 import threading
@@ -11,7 +12,7 @@ from typing import Any, Callable
 
 import cv2
 import numpy as np
-from PySide6.QtCore import QObject, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QEventLoop, QTimer, Signal, Slot
 from PySide6.QtStateMachine import QState, QStateMachine
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -273,6 +274,20 @@ class BenchControllerStateMachine(QObject):
         self._machine.start()
         self._current_state = ControllerState.IDLE
         self.entered.connect(self._on_entered)
+        self._allowed_transitions: dict[ControllerState, frozenset[ControllerState]] = {
+            ControllerState.IDLE: frozenset(
+                {
+                    ControllerState.REPLAY_RUNNING,
+                    ControllerState.LIVE_RUNNING,
+                    ControllerState.FAULTED,
+                    ControllerState.SAFE,
+                }
+            ),
+            ControllerState.REPLAY_RUNNING: frozenset({ControllerState.IDLE, ControllerState.FAULTED, ControllerState.SAFE}),
+            ControllerState.LIVE_RUNNING: frozenset({ControllerState.IDLE, ControllerState.FAULTED, ControllerState.SAFE}),
+            ControllerState.FAULTED: frozenset({ControllerState.IDLE, ControllerState.SAFE}),
+            ControllerState.SAFE: frozenset({ControllerState.IDLE}),
+        }
 
     @Slot(object)
     def _on_entered(self, state: ControllerState) -> None:
@@ -280,6 +295,10 @@ class BenchControllerStateMachine(QObject):
 
     def request(self, state: ControllerState) -> bool:
         if state == self._current_state:
+            return False
+        allowed_targets = self._allowed_transitions.get(self._current_state, frozenset())
+        # Audit P0.1: reject illegal edges without emitting triggers.
+        if state not in allowed_targets:
             return False
         trigger_by_state: dict[ControllerState, Signal] = {
             ControllerState.REPLAY_RUNNING: self.start_replay,
@@ -296,7 +315,7 @@ class BenchControllerStateMachine(QObject):
 
 
 class BenchAppController(QObject):
-    _TRANSITION_EVENT_DRAIN_ITERATIONS = 3
+    _TRANSITION_TIMEOUT_MS = 120
 
     frame_preview_requested = Signal(bytes, int, int)
     lane_overlay_requested = Signal(str)
@@ -340,6 +359,14 @@ class BenchAppController(QObject):
         )
         self._pending_overlay: str | None = None
         self._pending_overlay_state: ControllerState | None = None
+        # Audit P1.4: transition token for pending overlay lifecycle; invalidated
+        # on every request so delayed singleShot emissions cannot leak.
+        self._pending_overlay_token = 0
+        self._transition_request_token = 0
+        self._transition_in_progress = False
+        self._last_transition_diagnostics: dict[str, object] = {}
+        # Audit P2.7: gate modal live prompt in automation/non-interactive runs.
+        self._allow_blocking_live_prompt = os.environ.get("CVSORTER_ALLOW_BLOCKING_PROMPTS", "0") == "1"
         self.cycle_config = BenchCycleConfig(
             period_ms=runtime_config.cycle_timing.period_ms,
             queue_consumption_policy=QueueConsumptionPolicy(runtime_config.cycle_timing.queue_consumption_policy),
@@ -446,7 +473,6 @@ class BenchAppController(QObject):
         self.mode_changed.connect(self._on_mode_changed)
         self.transport_response_received.connect(self._on_transport_response_received)
         self._set_serial_status(self._serial_connected)
-        self._on_controller_state_entered(ControllerState.IDLE)
 
     @Slot()
     def shutdown(self) -> None:
@@ -592,8 +618,11 @@ class BenchAppController(QObject):
         self._update_buttons_for_mode(self.runtime_state.operator_mode)
         if self._pending_overlay is not None and self._pending_overlay_state == state:
             pending_overlay = self._pending_overlay
+            pending_token = self._pending_overlay_token
 
             def _emit_pending_overlay() -> None:
+                if pending_token != self._pending_overlay_token:
+                    return
                 self.lane_overlay_requested.emit(pending_overlay)
                 self._pending_overlay = None
                 self._pending_overlay_state = None
@@ -703,55 +732,111 @@ class BenchAppController(QObject):
             self.runtime_state.scheduler_state = "IDLE"
         self._emit_runtime_state()
 
-    def _drain_events_until_state(
+    def _set_transition_diagnostics(
         self,
-        target_state: ControllerState,
         *,
-        max_iterations: int = _TRANSITION_EVENT_DRAIN_ITERATIONS,
-    ) -> bool:
-        for _ in range(max_iterations):
-            self._app.processEvents()
-            if self.runtime_state.controller_state == target_state:
-                return True
-        return self.runtime_state.controller_state == target_state
+        requested_state: ControllerState,
+        previous_state: ControllerState,
+        result: str,
+        reason: str,
+        token: int,
+    ) -> None:
+        self._last_transition_diagnostics = {
+            "requested": requested_state.value,
+            "previous": previous_state.value,
+            "current": self.runtime_state.controller_state.value,
+            "result": result,
+            "reason": reason,
+            "token": token,
+        }
+
+    def _wait_for_target_state(self, target_state: ControllerState, *, timeout_ms: int = _TRANSITION_TIMEOUT_MS) -> bool:
+        # Audit P0.2: bounded target-state latch (no broad processEvents drains).
+        if self.runtime_state.controller_state == target_state:
+            return True
+        loop = QEventLoop(self)
+        completed = {"done": False}
+
+        def _on_entered(state: ControllerState) -> None:
+            if state == target_state:
+                completed["done"] = True
+                loop.quit()
+
+        timeout_timer = QTimer(self)
+        timeout_timer.setSingleShot(True)
+        timeout_timer.timeout.connect(loop.quit)
+        self._state_machine.entered.connect(_on_entered)
+        timeout_timer.start(timeout_ms)
+        loop.exec()
+        self._state_machine.entered.disconnect(_on_entered)
+        timeout_timer.stop()
+        timeout_timer.deleteLater()
+        return completed["done"] and self.runtime_state.controller_state == target_state
 
     def _request_transition(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
-        def _reject_transition(reason: str) -> bool:
-            self._pending_overlay = None
-            self._pending_overlay_state = None
-            LOGGER.debug(
-                "transition rejected reason=%s requested=%s current=%s",
-                reason,
-                state.value,
-                self.runtime_state.controller_state.value,
-            )
-            self._emit_runtime_state()
-            return False
-
-        # Drain any pending startup/queued events before we evaluate the
-        # transition request against current state.
-        previous_state = self.runtime_state.controller_state
-        self._drain_events_until_state(previous_state, max_iterations=self._TRANSITION_EVENT_DRAIN_ITERATIONS)
+        self._transition_request_token += 1
+        request_token = self._transition_request_token
+        # Invalidate any delayed overlay from earlier requests before this one.
+        self._pending_overlay_token = request_token
+        self._pending_overlay = None
+        self._pending_overlay_state = None
         previous_state = self.runtime_state.controller_state
         # Invariant: transition requests must never pre-assign runtime state.
         # _on_controller_state_entered is the sole authority for state/timer/UI
         # side effects after an entered callback confirms completion.
         if previous_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
-                return _reject_transition("safe_fault_gate")
+                return self._reject_transition_request(
+                    requested_state=state,
+                    previous_state=previous_state,
+                    reason="safe_fault_gate",
+                    token=request_token,
+                )
 
         self._pending_overlay = overlay_text
         self._pending_overlay_state = state if overlay_text is not None else None
+        self._pending_overlay_token = request_token
+        # Audit P1.5: isolate transition confirmation from cycle-timer churn.
+        restart_cycle_timer = self._cycle_timer.isActive()
+        if restart_cycle_timer:
+            self._cycle_timer.stop()
+        self._transition_in_progress = True
         transition_requested = self._state_machine.request(state)
         if not transition_requested:
             LOGGER.debug("ignoring rejected transition requested=%s previous=%s", state.value, previous_state.value)
-            return _reject_transition("graph_rejected")
-        if not self._drain_events_until_state(state):
+            self._transition_in_progress = False
+            if restart_cycle_timer and self.runtime_state.controller_state in {
+                ControllerState.REPLAY_RUNNING,
+                ControllerState.LIVE_RUNNING,
+            }:
+                self._cycle_timer.start()
+            return self._reject_transition_request(
+                requested_state=state,
+                previous_state=previous_state,
+                reason="graph_rejected",
+                token=request_token,
+            )
+        completed = self._wait_for_target_state(state)
+        self._transition_in_progress = False
+        if restart_cycle_timer and self.runtime_state.controller_state in {
+            ControllerState.REPLAY_RUNNING,
+            ControllerState.LIVE_RUNNING,
+        }:
+            self._cycle_timer.start()
+        if not completed:
             return self._reject_transition_request(
                 requested_state=state,
                 previous_state=previous_state,
                 reason="transition_not_completed",
+                token=request_token,
             )
+        self._set_transition_diagnostics(
+            requested_state=state,
+            previous_state=previous_state,
+            result="accepted",
+            reason="completed",
+            token=request_token,
+        )
         return True
 
     def _reject_transition_request(
@@ -760,15 +845,25 @@ class BenchAppController(QObject):
         requested_state: ControllerState,
         previous_state: ControllerState,
         reason: str,
+        token: int,
     ) -> bool:
         self._pending_overlay = None
         self._pending_overlay_state = None
+        self._pending_overlay_token = self._transition_request_token
+        self._set_transition_diagnostics(
+            requested_state=requested_state,
+            previous_state=previous_state,
+            result="rejected",
+            reason=reason,
+            token=token,
+        )
         LOGGER.debug(
-            "transition rejected reason=%s requested=%s previous=%s current=%s",
+            "transition rejected reason=%s requested=%s previous=%s current=%s diagnostics=%s",
             reason,
             requested_state.value,
             previous_state.value,
             self.runtime_state.controller_state.value,
+            self._last_transition_diagnostics,
         )
         self._emit_runtime_state()
         return False
@@ -794,6 +889,8 @@ class BenchAppController(QObject):
 
     @Slot()
     def _on_cycle_tick(self) -> None:
+        if self._transition_in_progress:
+            return
         if self.runtime_state.controller_state != ControllerState.REPLAY_RUNNING:
             return
         self._acquire_requests.put({"requested_at": time.monotonic()})
@@ -1041,6 +1138,12 @@ class BenchAppController(QObject):
         return True
 
     def _operator_acknowledges_simulated_feed(self, detail: str) -> bool:
+        if not self._allow_blocking_live_prompt:
+            LOGGER.info(
+                "non-blocking live startup prompt gate active; simulated feed not auto-acknowledged detail=%s",
+                detail,
+            )
+            return False
         response = QMessageBox.question(
             self.window,
             "Acknowledge simulated feed",
