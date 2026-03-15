@@ -723,24 +723,24 @@ class BenchAppController(QObject):
             self._emit_runtime_state()
             return False
 
-        previous_state = self.runtime_state.controller_state
         # Drain any pending startup/queued events before we evaluate the
         # transition request against current state.
+        previous_state = self.runtime_state.controller_state
         self._drain_events_until_state(previous_state, max_iterations=1)
+        previous_state = self.runtime_state.controller_state
         # Invariant: transition requests must never pre-assign runtime state.
         # _on_controller_state_entered is the sole authority for state/timer/UI
         # side effects after an entered callback confirms completion.
-        assert previous_state == self.runtime_state.controller_state
         if previous_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
                 return _reject_transition("safe_fault_gate")
+
+        self._pending_overlay = overlay_text
+        self._pending_overlay_state = state if overlay_text is not None else None
         transition_requested = self._state_machine.request(state)
-        assert previous_state == self.runtime_state.controller_state
         if not transition_requested:
             LOGGER.debug("ignoring rejected transition requested=%s previous=%s", state.value, previous_state.value)
             return _reject_transition("graph_rejected")
-        self._pending_overlay = overlay_text
-        self._pending_overlay_state = state if overlay_text is not None else None
         if not self._drain_events_until_state(state):
             return self._reject_transition_request(
                 requested_state=state,
