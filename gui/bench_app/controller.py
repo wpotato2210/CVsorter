@@ -579,6 +579,7 @@ class BenchAppController(QObject):
 
     def _on_controller_state_entered(self, state: ControllerState) -> None:
         self.runtime_state._set_controller_state(state)
+        self._emit_runtime_state()
         if state == ControllerState.SAFE and self.runtime_state.operator_mode != OperatorMode.SAFE:
             self._set_protocol_mode(OperatorMode.SAFE)
         running = state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}
@@ -589,11 +590,15 @@ class BenchAppController(QObject):
 
         self._update_buttons_for_controller_state(state)
         self._update_buttons_for_mode(self.runtime_state.operator_mode)
-        self._emit_runtime_state()
         if self._pending_overlay is not None and self._pending_overlay_state == state:
-            self.lane_overlay_requested.emit(self._pending_overlay)
-            self._pending_overlay = None
-            self._pending_overlay_state = None
+            pending_overlay = self._pending_overlay
+
+            def _emit_pending_overlay() -> None:
+                self.lane_overlay_requested.emit(pending_overlay)
+                self._pending_overlay = None
+                self._pending_overlay_state = None
+
+            QTimer.singleShot(0, _emit_pending_overlay)
 
     def _on_state_entered(self, state: ControllerState) -> None:
         self._on_controller_state_entered(state)
