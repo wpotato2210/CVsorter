@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover
 from coloursorter.bench import BenchMode, FaultState
 from coloursorter.config import RuntimeConfig
 from gui.bench_app.app import QueueState
-from gui.bench_app.controller import BenchAppController, ControllerState
+from gui.bench_app.controller import BenchAppController, BenchControllerStateMachine, ControllerState
 
 
 @pytest.fixture(scope="module")
@@ -86,7 +86,7 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
 
     assert live_transitioned is False
     assert replay_trigger_count == 1
-    assert live_trigger_count == 1
+    assert live_trigger_count == 0
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
     assert controller.runtime_state.controller_state == baseline_state
     assert controller._cycle_timer.isActive()
@@ -192,7 +192,7 @@ def test_transition_to_rejected_request_keeps_runtime_and_ui_consistent_when_tri
     transitioned = controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
 
     assert transitioned is False
-    assert live_trigger_count == 1
+    assert live_trigger_count == 0
     assert entered_states == []
     assert controller.runtime_state.controller_state == baseline_state
     assert controller._cycle_timer.isActive() == baseline_timer_active
@@ -200,6 +200,47 @@ def test_transition_to_rejected_request_keeps_runtime_and_ui_consistent_when_tri
     assert overlays == []
     assert controller._pending_overlay is None
     assert controller._pending_overlay_state is None
+
+
+def test_illegal_edge_request_emits_no_trigger(qapp: QApplication) -> None:
+    machine = BenchControllerStateMachine()
+    trigger_count = 0
+
+    def _on_start_live() -> None:
+        nonlocal trigger_count
+        trigger_count += 1
+
+    machine.start_live.connect(_on_start_live)
+    assert machine.request(ControllerState.REPLAY_RUNNING) is True
+    qapp.processEvents()
+
+    # Illegal edge: REPLAY_RUNNING -> LIVE_RUNNING has no graph edge and must
+    # not emit start_live.
+    assert machine.request(ControllerState.LIVE_RUNNING) is False
+    qapp.processEvents()
+    assert trigger_count == 0
+
+
+def test_overlay_token_invalidation_on_rapid_back_to_back_requests(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    overlays: list[str] = []
+    controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+
+    # Force first transition to be graph rejected after pending overlay setup.
+    monkeypatch.setattr(controller._state_machine, "request", lambda _state: False)
+    assert controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="stale-overlay") is False
+    first_token = controller._pending_overlay_token
+
+    # Restore state-machine request and issue a valid transition.
+    monkeypatch.undo()
+    assert controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active") is True
+    qapp.processEvents()
+
+    assert first_token != controller._pending_overlay_token
+    assert "stale-overlay" not in overlays
+    assert overlays and overlays[-1] == "Replay mode active"
 
 
 class _StubFrameSource:
