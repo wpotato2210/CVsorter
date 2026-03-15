@@ -296,6 +296,8 @@ class BenchControllerStateMachine(QObject):
 
 
 class BenchAppController(QObject):
+    _TRANSITION_EVENT_DRAIN_ITERATIONS = 3
+
     frame_preview_requested = Signal(bytes, int, int)
     lane_overlay_requested = Signal(str)
     queue_state_requested = Signal(object)
@@ -696,6 +698,18 @@ class BenchAppController(QObject):
             self.runtime_state.scheduler_state = "IDLE"
         self._emit_runtime_state()
 
+    def _drain_events_until_state(
+        self,
+        target_state: ControllerState,
+        *,
+        max_iterations: int = _TRANSITION_EVENT_DRAIN_ITERATIONS,
+    ) -> bool:
+        for _ in range(max_iterations):
+            self._app.processEvents()
+            if self.runtime_state.controller_state == target_state:
+                return True
+        return self.runtime_state.controller_state == target_state
+
     def _request_transition(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
         def _reject_transition(reason: str) -> bool:
             self._pending_overlay = None
@@ -709,10 +723,10 @@ class BenchAppController(QObject):
             self._emit_runtime_state()
             return False
 
-        # Drain any pending Qt state-machine startup events so transition
-        # trigger signals are evaluated against an active machine.
-        self._app.processEvents()
         previous_state = self.runtime_state.controller_state
+        # Drain any pending startup/queued events before we evaluate the
+        # transition request against current state.
+        self._drain_events_until_state(previous_state, max_iterations=1)
         # Invariant: transition requests must never pre-assign runtime state.
         # _on_controller_state_entered is the sole authority for state/timer/UI
         # side effects after an entered callback confirms completion.
@@ -727,13 +741,7 @@ class BenchAppController(QObject):
             return _reject_transition("graph_rejected")
         self._pending_overlay = overlay_text
         self._pending_overlay_state = state if overlay_text is not None else None
-        transition_completed = False
-        for _ in range(3):
-            self._app.processEvents()
-            if self.runtime_state.controller_state == state:
-                transition_completed = True
-                break
-        if not transition_completed:
+        if not self._drain_events_until_state(state):
             return self._reject_transition_request(
                 requested_state=state,
                 previous_state=previous_state,
