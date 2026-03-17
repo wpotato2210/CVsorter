@@ -1,44 +1,51 @@
-# T3-003 Trigger Correlation Test Design (Informational, Non-Release Gating)
+# T3-003 Trigger Correlation Contract (Release Gating)
 
 ## Scope
 
-This note defines a deterministic placeholder test design for correlating:
+T3-003 is a **strict deterministic release-gating task** for trigger correlation.
 
-1. accepted protocol command (`ACK`), and
-2. terminal status evidence (`transport_acknowledged`, `actuator_command_issued`, `scheduler_window_missed`).
+It validates that each accepted `SCHED` command maps to exactly one terminal status record in trace artifacts.
 
-This artifact is intentionally **informational** and **non-release gating** until end-to-end runtime correlation IDs are finalized.
-
-## Deterministic correlation contract (draft)
+## Deterministic correlation contract
 
 Correlation key (ordered fields):
 
 - `msg_id` (string)
-- `command` (string)
-- `lane` (int)
+- `command` (string, must be `SCHED`)
+- `lane` / `lane_index` (int)
 
-For identical inputs, expected terminal status mapping must be identical and stable.
+Required behavior:
 
-## Candidate status classes
+1. accepted `SCHED` command -> exactly one terminal status
+2. duplicate terminal status for same correlation key -> hard failure
+3. missing terminal status for any accepted `SCHED` key -> hard failure
+4. identical fixture inputs -> identical reconciliation outputs
+
+## Terminal status classes
 
 - `terminal_acknowledged`: command accepted and transport+actuation completed.
 - `terminal_missed_window`: command accepted but scheduler window missed.
 - `terminal_not_observed`: command accepted but no terminal status observed in bounded window.
 
-## Placeholder vector pack
+## Deterministic vector pack
 
 Vectors are stored in:
 
 - `tests/fixtures/trigger_correlation_t3_003.json`
 
-Vector ordering is fixed and must not be randomized.
+Vector ordering is fixed and must remain deterministic.
 
-## Proposed executable checks (draft)
+## Executable gating checks
 
-- Fixture schema/order validation (gating-safe).
-- Deterministic key uniqueness validation (gating-safe).
-- Runtime correlation reconciler behavior (future, currently informational/non-gating).
+- `tests/test_phase3_t3_003_trigger_correlation.py`
+  - strict 1:1 mapping for accepted `SCHED` commands
+  - duplicate-key rejection
+  - missing-terminal-status detection
+- `tests/test_phase3_t3_003_trigger_reconciliation_start.py`
+  - artifact reconciliation determinism across repeated runs
+- `tests/test_phase3_t3_003_trigger_reconciliation_gate.py`
+  - per-key terminal status uniqueness and completeness on artifact outputs
 
-## Non-gating policy
+## Verification command
 
-Until Phase 3.3 implementation is complete, unresolved runtime reconciliation behavior is tracked by placeholder xfail tests and must not block release gating.
+- `pytest tests/ -k "t3_003 and trigger and correlation"`
