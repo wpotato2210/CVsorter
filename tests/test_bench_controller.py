@@ -202,6 +202,41 @@ def test_transition_to_rejected_request_keeps_runtime_and_ui_consistent_when_tri
     assert controller._pending_overlay_state is None
 
 
+def test_live_click_rejected_request_does_not_preassign_runtime_mode(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    baseline_mode = controller.runtime_state.mode
+
+    monkeypatch.setattr(controller, "_activate_frame_source", lambda mode: True)
+    monkeypatch.setattr(controller, "_release_frame_source", lambda: None)
+    monkeypatch.setattr(controller, "request_live_mode", lambda: False)
+
+    controller.on_live_clicked()
+
+    assert controller.runtime_state.mode == baseline_mode
+    assert controller.runtime_state.controller_state == ControllerState.IDLE
+
+
+def test_home_rejected_request_does_not_reset_runtime_state(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    assert controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active") is True
+    controller.runtime_state.previous_timestamp_s = 12.5
+    controller.runtime_state.fault_state = FaultState.NORMAL
+    controller.runtime_state.scheduler_state = "ACTIVE"
+
+    monkeypatch.setattr(controller, "request_idle", lambda **_kwargs: False)
+
+    controller.on_home_clicked()
+
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+    assert controller.runtime_state.previous_timestamp_s == 12.5
+    assert controller.runtime_state.fault_state == FaultState.NORMAL
+    assert controller.runtime_state.scheduler_state == "ACTIVE"
+
+
 def test_illegal_edge_request_emits_no_trigger(qapp: QApplication) -> None:
     machine = BenchControllerStateMachine()
     trigger_count = 0

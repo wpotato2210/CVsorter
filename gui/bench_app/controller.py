@@ -1315,8 +1315,16 @@ class BenchAppController(QObject):
         if ack is None:
             self._audit_operator_command("recover_safe_to_manual", outcome="nack", before_mode=before_mode, queue_before=queue_before)
             return False
+        if not self.request_idle(overlay_text="SAFE cleared; MANUAL mode"):
+            self._audit_operator_command(
+                "recover_safe_to_manual",
+                outcome="rejected_transition",
+                before_mode=before_mode,
+                queue_before=queue_before,
+            )
+            return False
         self.runtime_state.fault_state = FaultState.NORMAL
-        self.request_idle(overlay_text="SAFE cleared; MANUAL mode")
+        self._emit_runtime_state()
         self.log_entry_requested.emit(
             BenchLogEntry(
                 frame_timestamp_s=self.runtime_state.previous_timestamp_s,
@@ -1345,8 +1353,16 @@ class BenchAppController(QObject):
         if ack is None:
             self._audit_operator_command("recover_to_auto", outcome="nack", before_mode=before_mode, queue_before=queue_before)
             return False
+        if not self.request_idle(overlay_text="AUTO mode active"):
+            self._audit_operator_command(
+                "recover_to_auto",
+                outcome="rejected_transition",
+                before_mode=before_mode,
+                queue_before=queue_before,
+            )
+            return False
         self.runtime_state.fault_state = FaultState.NORMAL
-        self.request_idle(overlay_text="AUTO mode active")
+        self._emit_runtime_state()
         self.log_entry_requested.emit(
             BenchLogEntry(
                 frame_timestamp_s=self.runtime_state.previous_timestamp_s,
@@ -1396,13 +1412,17 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state != ControllerState.IDLE:
             self._audit_operator_command("replay", outcome="ignored_non_idle", before_mode=before_mode, queue_before=queue_before)
             return
-        self.runtime_state.mode = BenchMode.REPLAY
         self._session_logs.clear()
         self._clear_worker_backlog()
         if not self._activate_frame_source(BenchMode.REPLAY):
             self._audit_operator_command("replay", outcome="source_activation_failed", before_mode=before_mode, queue_before=queue_before)
             return
-        self.request_replay_mode()
+        if not self.request_replay_mode():
+            self._release_frame_source()
+            self._audit_operator_command("replay", outcome="transition_rejected", before_mode=before_mode, queue_before=queue_before)
+            return
+        self.runtime_state.mode = BenchMode.REPLAY
+        self._emit_runtime_state()
         self._audit_operator_command("replay", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
@@ -1412,13 +1432,17 @@ class BenchAppController(QObject):
         if self.runtime_state.controller_state != ControllerState.IDLE:
             self._audit_operator_command("live", outcome="ignored_non_idle", before_mode=before_mode, queue_before=queue_before)
             return
-        self.runtime_state.mode = BenchMode.LIVE
         self._session_logs.clear()
         self._clear_worker_backlog()
         if not self._activate_frame_source(BenchMode.LIVE):
             self._audit_operator_command("live", outcome="source_activation_failed", before_mode=before_mode, queue_before=queue_before)
             return
-        self.request_live_mode()
+        if not self.request_live_mode():
+            self._release_frame_source()
+            self._audit_operator_command("live", outcome="transition_rejected", before_mode=before_mode, queue_before=queue_before)
+            return
+        self.runtime_state.mode = BenchMode.LIVE
+        self._emit_runtime_state()
         self._audit_operator_command("live", outcome="processed", before_mode=before_mode, queue_before=queue_before)
 
     @Slot()
@@ -1431,14 +1455,16 @@ class BenchAppController(QObject):
             return
         if self.runtime_state.controller_state in {ControllerState.REPLAY_RUNNING, ControllerState.LIVE_RUNNING}:
             self._publish_session_evaluation()
-        self._cycle_timer.stop()
+        if not self.request_idle(overlay_text="Homing complete"):
+            self._audit_operator_command("home", outcome="rejected_transition", before_mode=before_mode, queue_before=queue_before)
+            return
         self._clear_worker_backlog()
         self._reset_protocol_queue()
         self._release_frame_source()
         self.runtime_state.previous_timestamp_s = 0.0
         self.runtime_state.fault_state = FaultState.NORMAL
         self.runtime_state.scheduler_state = "IDLE"
-        self.request_idle(overlay_text="Homing complete")
+        self._emit_runtime_state()
         self.log_entry_requested.emit(
             BenchLogEntry(
                 frame_timestamp_s=0.0,
