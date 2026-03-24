@@ -211,6 +211,40 @@ def test_transition_request_does_not_preassign_runtime_state_before_entered_call
 
 
 @pytest.mark.gui_transition_gate
+def test_phase8_task_003_illegal_replay_to_live_transition_preserves_state_machine_truth_source(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    assert controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active") is True
+
+    entered_states: list[ControllerState] = []
+    overlays: list[str] = []
+    queue_states: list[QueueState] = []
+    controller._state_machine.entered.connect(lambda state: entered_states.append(state))
+    controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+    controller.queue_state_requested.connect(lambda state: queue_states.append(state))
+
+    baseline_state = controller.runtime_state.controller_state
+    baseline_timer_active = controller._cycle_timer.isActive()
+    baseline_overlay_label = controller.window.lane_overlay_label.text()
+    baseline_queue_state = controller._capture_queue_state()
+
+    transitioned = controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+
+    assert transitioned is False
+    assert entered_states == []
+    assert overlays == []
+    assert controller.runtime_state.controller_state == baseline_state
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+    assert controller._cycle_timer.isActive() == baseline_timer_active
+    assert controller.window.lane_overlay_label.text() == baseline_overlay_label
+    assert controller._capture_queue_state() == baseline_queue_state
+    assert queue_states
+    assert queue_states[-1].controller_state == ControllerState.REPLAY_RUNNING.value
+    assert queue_states[-1].run_state == ControllerState.REPLAY_RUNNING.value
+
+
+@pytest.mark.gui_transition_gate
 def test_phase8_replay_to_live_illegal_transition_preserves_runtime_overlay_timer_and_diagnostics(
     qapp: QApplication, runtime_config: RuntimeConfig
 ) -> None:
