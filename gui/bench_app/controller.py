@@ -773,6 +773,12 @@ class BenchAppController(QObject):
         timeout_timer.deleteLater()
         return completed["done"] and self.runtime_state.controller_state == target_state
 
+    def _is_transition_allowed(self, previous_state: ControllerState, requested_state: ControllerState) -> bool:
+        if requested_state == previous_state:
+            return False
+        allowed_targets = self._state_machine._allowed_transitions.get(previous_state, frozenset())
+        return requested_state in allowed_targets
+
     def _request_transition(self, state: ControllerState, *, overlay_text: str | None = None) -> bool:
         self._transition_request_token += 1
         request_token = self._transition_request_token
@@ -784,6 +790,13 @@ class BenchAppController(QObject):
         # Invariant: transition requests must never pre-assign runtime state.
         # _on_controller_state_entered is the sole authority for state/timer/UI
         # side effects after an entered callback confirms completion.
+        if not self._is_transition_allowed(previous_state, state):
+            return self._reject_transition_request(
+                requested_state=state,
+                previous_state=previous_state,
+                reason="graph_rejected",
+                token=request_token,
+            )
         if previous_state == ControllerState.SAFE and state != ControllerState.SAFE:
             if self.runtime_state.fault_state == FaultState.SAFE and state != ControllerState.IDLE:
                 return self._reject_transition_request(

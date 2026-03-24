@@ -113,6 +113,42 @@ def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
 
 
 
+def test_illegal_replay_to_live_transition_skips_state_machine_request_side_effects(
+    qapp: QApplication, runtime_config: RuntimeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+    assert controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active") is True
+
+    state_machine_request_calls = 0
+    wait_for_target_state_calls = 0
+
+    original_request = controller._state_machine.request
+
+    def _counted_request(state: ControllerState) -> bool:
+        nonlocal state_machine_request_calls
+        state_machine_request_calls += 1
+        return original_request(state)
+
+    def _counted_wait(_state: ControllerState, *, timeout_ms: int = 0) -> bool:
+        nonlocal wait_for_target_state_calls
+        wait_for_target_state_calls += 1
+        return False
+
+    monkeypatch.setattr(controller._state_machine, "request", _counted_request)
+    monkeypatch.setattr(controller, "_wait_for_target_state", _counted_wait)
+
+    baseline_overlay = controller.window.lane_overlay_label.text()
+    baseline_state = controller.runtime_state.controller_state
+    baseline_timer_active = controller._cycle_timer.isActive()
+
+    transitioned = controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+
+    assert transitioned is False
+    assert state_machine_request_calls == 0
+    assert wait_for_target_state_calls == 0
+    assert controller.runtime_state.controller_state == baseline_state
+    assert controller._cycle_timer.isActive() == baseline_timer_active
+    assert controller.window.lane_overlay_label.text() == baseline_overlay
 
 def test_safe_guardrail_rejection_uses_generic_rejection_semantics(
     qapp: QApplication, runtime_config: RuntimeConfig
