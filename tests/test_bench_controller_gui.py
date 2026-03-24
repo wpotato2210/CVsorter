@@ -101,7 +101,6 @@ def test_transition_overlay_emits_only_after_confirmed_enter_callback(
     assert event_order == ["entered:replay_running", "overlay:Replay mode active"]
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
 
-
 @pytest.mark.gui_transition_gate
 def test_illegal_replay_to_live_transition_keeps_runtime_ui_timer_consistent(
     qapp: QApplication, runtime_config: RuntimeConfig
@@ -209,6 +208,37 @@ def test_transition_request_does_not_preassign_runtime_state_before_entered_call
     assert live_transitioned is False
     assert live_trigger_observed_state == [ControllerState.REPLAY_RUNNING]
     assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+
+
+@pytest.mark.gui_transition_gate
+def test_phase8_replay_to_live_illegal_transition_preserves_runtime_overlay_timer_and_diagnostics(
+    qapp: QApplication, runtime_config: RuntimeConfig
+) -> None:
+    controller = BenchAppController(qapp, runtime_config)
+
+    assert controller._transition_to(ControllerState.REPLAY_RUNNING, overlay_text="Replay mode active") is True
+
+    baseline_state = controller.runtime_state.controller_state
+    baseline_timer_active = controller._cycle_timer.isActive()
+    baseline_overlay_label = controller.window.lane_overlay_label.text()
+
+    overlays: list[str] = []
+    controller.lane_overlay_requested.connect(lambda text: overlays.append(text))
+
+    transitioned = controller._transition_to(ControllerState.LIVE_RUNNING, overlay_text="Live mode active")
+
+    assert transitioned is False
+    assert controller.runtime_state.controller_state == baseline_state
+    assert controller.runtime_state.controller_state == ControllerState.REPLAY_RUNNING
+    assert controller._cycle_timer.isActive() == baseline_timer_active
+    assert controller.window.lane_overlay_label.text() == baseline_overlay_label
+    assert overlays == []
+    assert controller._pending_overlay is None
+    assert controller._pending_overlay_state is None
+    assert controller._last_transition_diagnostics["result"] == "rejected"
+    assert controller._last_transition_diagnostics["reason"] == "graph_rejected"
+    assert controller._last_transition_diagnostics["previous"] == ControllerState.REPLAY_RUNNING.value
+    assert controller._last_transition_diagnostics["current"] == ControllerState.REPLAY_RUNNING.value
 
 def test_on_controller_state_entered_centralizes_runtime_timer_and_button_updates(
     qapp: QApplication, runtime_config: RuntimeConfig
