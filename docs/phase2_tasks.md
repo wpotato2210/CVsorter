@@ -36,32 +36,7 @@ flowchart LR
 | deploy | `decision`, timing metadata | scheduled command payload | scheduler + transport interface | per frame |
 
 ## Phase 2 Tasks
-| ID | Module | Task | Deterministic acceptance check |
-|---|---|---|---|
-| p2_preprocess_01 | preprocess | Freeze lane-boundary ordering and add explicit boundary invariants (`monotonic`, `fixed lane count`). | identical boundaries across repeated runs for fixed input and config. |
-| p2_preprocess_02 | preprocess | Add explicit normalization contract docs (`range=[0,1]`, color format=BGR, device=cpu). | contract fields present and validated at runtime boundary. |
-| p2_model_01 | model | Lock model input/output tensor metadata in typed interface. | shape mismatch fails fast with deterministic error text. |
-| p2_model_02 | model | Add deterministic post-processing order for class tie handling. | tied logits always resolve to same `class_id`. |
-| p2_train_01 | train | Enforce seeded pipeline for split/shuffle/augmentation. | identical seed yields identical artifact checksum. |
-| p2_train_02 | train | Emit immutable training manifest (`seed`, dataset hash, config hash). | manifest hash stable for same run inputs. |
-| p2_eval_01 | eval | Codify reject rule precedence and threshold binding order. | same inputs always produce identical `decision` and `reason_code`. |
-| p2_eval_02 | eval | Add explicit unknown-class policy (`reject` vs `pass`) in profile. | profile validation rejects ambiguous policy. |
-| p2_deploy_01 | deploy | Pin scheduler payload schema and field ordering. | payload serialization byte-stable for same decision input. |
-| p2_deploy_02 | deploy | Add bounded-latency guardrails for command enqueue path. | enqueue path remains within configured deterministic limit. |
 
-## Execution Order
-1. `p2_preprocess_01`
-2. `p2_preprocess_02`
-3. `p2_model_01`
-4. `p2_model_02`
-5. `p2_train_01`
-6. `p2_train_02`
-7. `p2_eval_01`
-8. `p2_eval_02`
-9. `p2_deploy_01`
-10. `p2_deploy_02`
+Phase 2 actionable tasks were consolidated into the repository-wide canonical task list: [`TASKS.md`](../TASKS.md).
 
-## Exit Criteria
-- All five modules expose explicit I/O contracts.
-- Deterministic checks pass for repeated-input runs.
-- Deploy payload and timing behavior remain byte-stable and bounded.
+Use this document for Phase 2 scope context (module contracts and pipeline intent), and use `TASKS.md` for execution tracking and completion state.
